@@ -49,6 +49,28 @@ const E_SHAPES: Record<string, (f: number) => ChordFrets> = {
   maj7: (f) => [f, f + 2, f + 1, f + 1, f, f],
 };
 
+/** Безопасно разбирает JSON кастомных аппликатур с песни. */
+export function parseChordDefs(json: string | null | undefined): Record<string, ChordFrets> {
+  if (!json) return {};
+  try {
+    const obj: unknown = JSON.parse(json);
+    if (!obj || typeof obj !== 'object') return {};
+    const out: Record<string, ChordFrets> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (
+        Array.isArray(v) &&
+        v.length === 6 &&
+        v.every((n) => Number.isInteger(n) && (n as number) >= -1 && (n as number) <= 24)
+      ) {
+        out[k] = v as ChordFrets;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** Разбирает ручной ввод: «x32010», «x 3 2 0 1 0», «-1 3 2 0 1 0». Иначе null. */
 export function parseFrets(input: string): ChordFrets | null {
   const s = input.trim();
@@ -69,6 +91,23 @@ export function parseFrets(input: string): ChordFrets | null {
 }
 
 /**
+ * Квинты (power chords) в нотации «лад + В/Н»:
+ *   NВ — верхняя квинта, корень на 6-й струне: [N, N+2, N+2, x, x, x];
+ *   NН — нижняя квинта, та же форма на струну тоньше (5/4/3): [x, N, N+2, N+2, x, x].
+ * Принимаем кириллицу (В/Н) и латинские двойники (B/H), любой регистр.
+ */
+function parsePowerFifth(name: string): ChordFrets | null {
+  const m = /^(\d{1,2})([ВНвнBHbh])$/.exec(name);
+  if (!m) return null;
+  const fret = Number(m[1]);
+  if (fret < 1 || fret > 22) return null;
+  const upper = /[ВвBb]/.test(m[2]);
+  return upper
+    ? [fret, fret + 2, fret + 2, -1, -1, -1]
+    : [-1, fret, fret + 2, fret + 2, -1, -1];
+}
+
+/**
  * Аппликатура по имени аккорда. customDefs (с песни) имеют приоритет.
  * Возвращает null, если формы нет (нужно задать вручную).
  */
@@ -82,6 +121,10 @@ export function getChordShape(
 
   const base = trimmed.split('/')[0]; // бас в slash-аккорде для диаграммы игнорируем
   if (customDefs && customDefs[base]) return customDefs[base];
+
+  const power = parsePowerFifth(base);
+  if (power) return power;
+
   if (OPEN_SHAPES[base]) return OPEN_SHAPES[base];
 
   const m = /^([A-G][#b]*)(.*)$/.exec(base);

@@ -6,8 +6,10 @@ import { ChordSheet } from './ChordSheet';
 import { ChordPalette } from './ChordPalette';
 import { CoverInput } from './CoverInput';
 import { VisibilitySelect } from './VisibilitySelect';
+import { ChordDefsEditor } from './ChordDefsEditor';
 import { parseSong } from '@/lib/chordpro/parse';
 import { chordsInOrder } from '@/lib/chordpro/usedChords';
+import { parseChordDefs } from '@/lib/chords/diagrams';
 import type { SongFormState } from '@/app/(site)/songs/actions';
 
 type Action = (prev: SongFormState, formData: FormData) => Promise<SongFormState>;
@@ -22,6 +24,7 @@ export interface EditorInitial {
   body?: string;
   note?: string | null;
   coverUrl?: string | null;
+  chordDefs?: string | null;
   visibility?: string;
 }
 
@@ -47,6 +50,7 @@ export function SongEditor({
 
   // Уникальные аккорды, уже встречающиеся в тексте — для быстрого повтора.
   const usedChords = useMemo(() => chordsInOrder(body), [body]);
+  const initialDefs = useMemo(() => parseChordDefs(initial?.chordDefs), [initial?.chordDefs]);
 
   // Вставка [Аккорд] строго в позицию курсора. setRangeText читает живое
   // выделение и двигает курсор в конец вставки; controlled-значение затем
@@ -149,6 +153,12 @@ export function SongEditor({
             <ChordSheet song={preview} />
           </div>
         </div>
+      </div>
+
+      {/* Аппликатуры аккордов (нестандартные — задаются вручную) */}
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-muted">Аппликатуры аккордов</span>
+        <ChordDefsEditor chords={usedChords} initial={initialDefs} />
       </div>
 
       {state.error ? (

@@ -33,6 +33,7 @@ function parseForm(formData: FormData): SongInput | { error: string } {
     body: String(formData.get('body') ?? ''),
     note: String(formData.get('note') ?? ''),
     coverUrl: coverUrl.startsWith('data:image/') ? coverUrl : null,
+    chordDefs: String(formData.get('chordDefs') ?? '') || null,
     visibility,
   };
 }

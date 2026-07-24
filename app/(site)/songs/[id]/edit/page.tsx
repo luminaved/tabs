@@ -35,6 +35,7 @@ export default async function EditSongPage({ params }: { params: Promise<{ id: s
           body: song.body,
           note: song.note,
           coverUrl: song.coverUrl,
+          chordDefs: song.chordDefs,
           visibility: song.visibility,
         }}
       />

@@ -405,6 +405,127 @@
     color: var(--color-muted);
   }
 
+  /* Панель аккордов над текстом: крупные диаграммы, показаны сразу */
+  .chord-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.35rem;
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-fg);
+  }
+  .chord-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .chord-card-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+  .chord-card-empty {
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--color-line);
+    border-radius: 0.5rem;
+    color: var(--color-faint);
+    font-size: 0.85rem;
+  }
+
+  /* Аккорд в тексте с всплывающей аппликатурой */
+  .inline-chord {
+    position: relative;
+    cursor: pointer;
+  }
+  .inline-chord:hover {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+
+  .chord-pop {
+    position: absolute;
+    bottom: calc(100% + 0.35rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.6rem;
+    background: var(--color-raised);
+    color: var(--color-fg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+  }
+  .chord-pop-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+
+  /* Интерактивный гриф (редактор аппликатуры) */
+  .fb {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .fb-basectl {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .fb-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 2rem);
+    gap: 3px;
+  }
+  .fb-head {
+    height: 1.4rem;
+    display: grid;
+    place-items: center;
+    color: var(--color-muted);
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .fb-grid--nut .fb-cell:nth-child(n + 7):nth-child(-n + 12) {
+    border-top-width: 3px;
+    border-top-color: var(--color-fg);
+  }
+  .fb-cell {
+    height: 2rem;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--color-line);
+    border-radius: 0.4rem;
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color 0.12s ease;
+  }
+  .fb-cell:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+  }
+  .fb-cell--on {
+    border-color: var(--color-accent);
+  }
+  .fb-dot {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: var(--color-accent);
+  }
+  .fb-label {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--color-faint);
+  }
+
   /* Квадратная иконочная кнопка (± и т.п.) */
   .icon-btn {
     display: inline-flex;

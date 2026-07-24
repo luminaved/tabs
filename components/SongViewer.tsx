@@ -3,7 +3,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { ChordSheet } from './ChordSheet';
+import { ChordCard } from './ChordCard';
+import { InlineChord } from './InlineChord';
 import { AnnotationForm } from './AnnotationForm';
+import { chordsFromSong } from '@/lib/chordpro/usedChords';
+import type { ChordFrets } from '@/lib/chords/diagrams';
 import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
 import { toggleFavoriteAction, toggleLikeAction } from '@/app/(site)/songs/engagement-actions';
 import type { SongEngagement } from '@/lib/engagement';
@@ -32,6 +36,7 @@ export function SongViewer({
   coverUrl,
   note,
   createdAt,
+  chordDefs,
   engagement,
   annotations = [],
   canAnnotate = false,
@@ -42,6 +47,7 @@ export function SongViewer({
   coverUrl?: string | null;
   note?: string | null;
   createdAt?: Date;
+  chordDefs?: Record<string, ChordFrets>;
   engagement?: SongEngagement;
   annotations?: AnnotationView[];
   canAnnotate?: boolean;
@@ -91,6 +97,7 @@ export function SongViewer({
   );
   const realKey = base.meta.key ? transposeKey(base.meta.key, transpose) : null;
   const shapeKey = base.meta.key ? transposeKey(base.meta.key, transpose - capo) : null;
+  const usedChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
 
   const offsetLabel = transpose > 0 ? `+${transpose}` : transpose < 0 ? `${transpose}` : '±0';
 
@@ -368,6 +375,14 @@ export function SongViewer({
         ) : null}
       </div>
 
+      {usedChords.length > 0 ? (
+        <div className="chord-bar print-hide">
+          {usedChords.map((c) => (
+            <ChordCard key={c} name={c} customDefs={chordDefs} />
+          ))}
+        </div>
+      ) : null}
+
       {note ? (
         <div className="song-note">
           <span className="song-note-label">От автора</span>
@@ -390,6 +405,7 @@ export function SongViewer({
         <ChordSheet
           song={shapeSong}
           showChords={showChords}
+          renderChord={(c) => <InlineChord name={c} customDefs={chordDefs} />}
           interaction={
             interactive
               ? {

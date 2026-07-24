@@ -12,6 +12,7 @@ export interface SongInput {
   body: string;
   note?: string | null;
   coverUrl?: string | null;
+  chordDefs?: string | null;
   visibility: SongVisibility;
 }
 
@@ -25,6 +26,7 @@ function normalize(input: SongInput) {
     body: input.body,
     note: input.note?.trim() || null,
     coverUrl: input.coverUrl?.trim() || null,
+    chordDefs: input.chordDefs?.trim() || null,
     visibility: input.visibility,
   };
 }

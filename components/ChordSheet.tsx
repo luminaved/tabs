@@ -18,15 +18,18 @@ export function ChordSheet({
   song,
   showChords = true,
   interaction,
+  renderChord,
 }: {
   song: Song;
   showChords?: boolean;
   interaction?: LineInteraction;
+  /** Опц. рендер имени аккорда (напр. с всплывающей аппликатурой). */
+  renderChord?: (chord: string) => React.ReactNode;
 }) {
   return (
     <div className={showChords ? 'chordsheet' : 'chordsheet chordsheet--nochords'}>
       {song.sections.map((section, i) => (
-        <SectionView key={i} section={section} interaction={interaction} />
+        <SectionView key={i} section={section} interaction={interaction} renderChord={renderChord} />
       ))}
     </div>
   );
@@ -40,7 +43,15 @@ const SECTION_CLASS: Record<Section['kind'], string> = {
   none: 'cs-section',
 };
 
-function SectionView({ section, interaction }: { section: Section; interaction?: LineInteraction }) {
+function SectionView({
+  section,
+  interaction,
+  renderChord,
+}: {
+  section: Section;
+  interaction?: LineInteraction;
+  renderChord?: (chord: string) => React.ReactNode;
+}) {
   return (
     <section className={SECTION_CLASS[section.kind]}>
       {section.label ? <div className="cs-label">{section.label}</div> : null}
@@ -53,6 +64,7 @@ function SectionView({ section, interaction }: { section: Section; interaction?:
                 line={line.line}
                 segments={line.segments}
                 interaction={interaction}
+                renderChord={renderChord}
               />
             );
           case 'comment':
@@ -73,10 +85,12 @@ function LyricLineView({
   line,
   segments,
   interaction,
+  renderChord,
 }: {
   line: number;
   segments: Segment[];
   interaction?: LineInteraction;
+  renderChord?: (chord: string) => React.ReactNode;
 }) {
   const columns = lineToColumns(segments);
   const clickable = !!interaction?.onLineClick;
@@ -104,7 +118,9 @@ function LyricLineView({
           <span className="cs-word">
             {word.map((col, ci) => (
               <span key={ci} className="cs-col">
-                <span className="cs-chord">{col.chord ?? ''}</span>
+                <span className="cs-chord">
+                  {col.chord ? (renderChord ? renderChord(col.chord) : col.chord) : ''}
+                </span>
                 <span className={col.muted ? 'cs-lyric cs-muted' : 'cs-lyric'}>
                   {col.text || ' '}
                 </span>

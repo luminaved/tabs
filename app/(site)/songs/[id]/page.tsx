@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth';
 import { getSongForViewer } from '@/lib/songs';
 import { listBySong } from '@/lib/annotations';
 import { getSongEngagement } from '@/lib/engagement';
+import { parseChordDefs } from '@/lib/chords/diagrams';
 import { SongViewer } from '@/components/SongViewer';
 
 // Личный песенник и шаринг по ссылке — не публичная библиотека чужих текстов.
@@ -41,6 +42,7 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
         coverUrl={song.coverUrl}
         note={song.note}
         createdAt={song.createdAt}
+        chordDefs={parseChordDefs(song.chordDefs)}
         engagement={engagement}
         editHref={isOwner ? `/songs/${song.id}/edit` : undefined}
         annotations={annotations}
