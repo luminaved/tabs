@@ -1,0 +1,748 @@
+@import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Тема: «тёплый песенник под лампой». Тёмная тёплая база, один акцент —
+   ламповый янтарь. Много воздуха, крупная типографика (читается с расстояния
+   вытянутой руки при плохом свете).
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-bg: #0e0d0b;
+  --color-surface: #17150f;
+  --color-raised: #1e1b15;
+  --color-fg: #ece8e0;
+  --color-muted: #968f81;
+  --color-faint: #5f594e;
+  --color-line: #2a271f;
+  --color-accent: #e6a23c;
+  --color-accent-fg: #1a1408;
+
+  --font-sans: var(--font-golos), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-spectral), ui-serif, Georgia, serif;
+
+  --w-app: 48rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    background: var(--color-bg);
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Атмосфера: мягкое ламповое свечение сверху + едва заметное зерно.
+     Всё позади контента (z-index 0), поэтому не влияет на читаемость. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(115% 55% at 50% -12%, rgba(230, 162, 60, 0.08), transparent 62%);
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 32%, transparent);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-accent) 70%, transparent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input[type='range'] {
+    width: 100%;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+  }
+}
+
+/* ─── Печать / PDF: без разрыва куплетов, чёрным по белому ─────────────────── */
+@media print {
+  body {
+    background: #fff;
+    color: #111;
+  }
+  body::before,
+  body::after {
+    display: none !important;
+  }
+  .site-header,
+  .print-hide {
+    display: none !important;
+  }
+  .container-app {
+    max-width: none;
+    padding-inline: 0;
+  }
+  .cs-chord {
+    color: #000;
+  }
+  .cs-section--chorus {
+    border-left-color: #888;
+  }
+  /* Куплет/припев/строка не рвутся между страницами */
+  .cs-section,
+  .cs-line {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Форма добавления и hover-подсказка не нужны на печати; заметки — печатаем */
+  .cs-note-form {
+    display: none !important;
+  }
+  .cs-line--interactive::after {
+    display: none;
+  }
+  .cs-note {
+    border-left-color: #888;
+  }
+  .cs-note-type {
+    color: #555;
+  }
+}
+
+@layer components {
+  /* ─── Раскладка ───────────────────────────────────────────────────────── */
+  .container-app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: var(--w-app);
+    margin-inline: auto;
+    padding-inline: clamp(1.15rem, 4vw, 2rem);
+  }
+
+  /* ─── Шапка сайта ─────────────────────────────────────────────────────── */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid transparent;
+    background: color-mix(in oklab, var(--color-bg) 72%, transparent);
+    backdrop-filter: blur(12px) saturate(1.1);
+    transition: border-color 0.2s ease;
+  }
+  .site-header--bordered {
+    border-bottom-color: var(--color-line);
+  }
+
+  .wordmark {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--color-fg);
+    transition: color 0.18s ease;
+  }
+  .wordmark:hover {
+    color: var(--color-accent);
+  }
+  .wordmark-dot {
+    color: var(--color-accent);
+  }
+
+  /* Растянутая ссылка: делает всю карточку кликабельной (переход на песню),
+     при этом отдельные ссылки внутри (ник автора) с `relative z-[1]` кликаются. */
+  .stretched-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  /* Аватар */
+  .avatar {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+  }
+  .avatar-fallback {
+    font-weight: 600;
+    color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface));
+    line-height: 1;
+  }
+
+  /* Загрузка аватара: карандаш/крестик поверх при наведении */
+  .avatar-edit {
+    position: relative;
+    display: inline-block;
+    border-radius: 50%;
+  }
+  .avatar-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .avatar-edit:hover .avatar-overlay,
+  .avatar-edit:focus-within .avatar-overlay {
+    opacity: 1;
+  }
+  .avatar-overlay-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .avatar-overlay-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Вкладки (кабинет) */
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    height: 2.5rem;
+    padding-inline: 0.85rem;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--color-muted);
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .tab:hover {
+    color: var(--color-fg);
+  }
+  .tab--on {
+    color: var(--color-fg);
+    border-bottom-color: var(--color-accent);
+  }
+
+  /* Пункт навигации в шапке */
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2.25rem;
+    padding-inline: 0.6rem;
+    border-radius: 0.55rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .nav-link:hover {
+    color: var(--color-fg);
+    background: color-mix(in oklab, var(--color-fg) 6%, transparent);
+  }
+
+  /* ─── Кнопки ──────────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.75rem;
+    padding-inline: 1.15rem;
+    border: 1px solid transparent;
+    border-radius: 0.7rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease,
+      filter 0.18s ease,
+      transform 0.05s ease;
+  }
+  .btn:active {
+    transform: translateY(0.5px);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.07);
+  }
+  .btn-outline {
+    border-color: var(--color-line);
+    color: var(--color-fg);
+  }
+  .btn-outline:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+  .btn-ghost {
+    color: var(--color-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--color-fg);
+  }
+
+  /* Карточка выбора видимости (радио с иконкой) */
+  .vis-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    background: var(--color-surface);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .vis-card:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+  }
+  .vis-card--on {
+    border-color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+  .vis-card-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+  .vis-card--on .vis-card-label {
+    color: var(--color-accent);
+  }
+  .vis-card-desc {
+    font-size: 0.78rem;
+    color: var(--color-muted);
+  }
+
+  /* Чип аккорда в палитре быстрой вставки */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 2rem;
+    padding-inline: 0.6rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .chip:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+
+  /* Маленький чип аккорда для строк списка */
+  .chip-sm {
+    display: inline-flex;
+    align-items: center;
+    height: 1.4rem;
+    padding-inline: 0.4rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.35rem;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .chip-sm--more {
+    color: var(--color-muted);
+  }
+
+  /* Квадратная иконочная кнопка (± и т.п.) */
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.65rem;
+    color: var(--color-fg);
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease;
+  }
+  .icon-btn:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  /* ─── Поля ввода ──────────────────────────────────────────────────────── */
+  .field {
+    width: 100%;
+    height: 2.9rem;
+    padding-inline: 0.9rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-size: 1rem;
+    font-family: inherit;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .field::placeholder {
+    color: var(--color-faint);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 20%, transparent);
+  }
+
+  /* ─── Поверхности и мелочи ────────────────────────────────────────────── */
+  .card {
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background: color-mix(in oklab, var(--color-surface) 65%, transparent);
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+  }
+
+  /* Панель управления страницы песни */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.9rem;
+    background: color-mix(in oklab, var(--color-raised) 82%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  .key-readout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.5rem;
+    padding-inline: 0.25rem;
+    line-height: 1;
+  }
+  .key-readout b {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+  .key-readout span {
+    margin-top: 0.15rem;
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted);
+  }
+
+  /* ─── Рендер аккордов над слогами ─────────────────────────────────────────
+     Каждая колонка = inline-block (аккорд сверху, слог снизу). Перенос строки —
+     между колонками по пробелам, поэтому аккорды держатся над своими слогами и
+     на узком экране ничего не разъезжается. Без моноширинного выравнивания. */
+  .chordsheet {
+    /* Дефолт отзывчивый: на телефоне чуть меньше, на десктопе крупнее.
+       Кнопки A−/A+ на странице песни задают точный размер через переменную. */
+    font-size: var(--sheet-font-size, clamp(1rem, 0.9rem + 0.55vw, 1.15rem));
+    line-height: 1.18;
+    letter-spacing: 0.01em;
+  }
+
+  /* Заметка от автора над текстом песни (видна всем, печатается) */
+  .song-note {
+    margin-bottom: 1.5rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--color-line);
+    border-left: 2px solid var(--color-accent);
+    border-radius: 0 0.7rem 0.7rem 0;
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  }
+  .song-note-label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .song-note-text {
+    white-space: pre-wrap;
+    color: var(--color-fg);
+  }
+
+  .cs-section {
+    margin: 1.6rem 0;
+  }
+  .cs-section:first-child {
+    margin-top: 0;
+  }
+  .cs-section--chorus {
+    border-left: 2px solid var(--color-accent);
+    padding-left: 1rem;
+  }
+  .cs-section--bridge {
+    border-left: 2px solid var(--color-line);
+    padding-left: 1rem;
+  }
+
+  .cs-label {
+    margin-bottom: 0.6rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .cs-comment {
+    margin: 0.55rem 0;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 0.95em;
+    color: var(--color-muted);
+  }
+
+  .cs-empty {
+    height: 0.75em;
+  }
+
+  .cs-line {
+    margin: 0.2em 0;
+  }
+
+  /* Слово (возможно разбитое аккордом) не переносится внутри себя */
+  .cs-word {
+    display: inline-block;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  .cs-col {
+    display: inline-block;
+    vertical-align: bottom;
+  }
+
+  .cs-chord {
+    display: block;
+    height: 1.5em;
+    line-height: 1.5;
+    font-size: 0.64em;
+    font-weight: 600;
+    color: var(--color-accent);
+    white-space: pre;
+    padding-right: 0.28em;
+  }
+
+  .cs-lyric {
+    display: block;
+    white-space: pre;
+  }
+
+  .chordsheet--nochords .cs-chord {
+    display: none;
+  }
+
+  /* ─── Аннотации ───────────────────────────────────────────────────────── */
+  .cs-line--interactive {
+    cursor: pointer;
+    border-radius: 7px;
+    margin-inline: -0.45rem;
+    padding-inline: 0.45rem;
+    transition: background 0.15s ease;
+  }
+  .cs-line--interactive:hover {
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+  .cs-line--interactive::after {
+    content: '+';
+    margin-left: 0.5rem;
+    font-size: 0.7em;
+    color: var(--color-faint);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .cs-line--interactive:hover::after,
+  .cs-line--active::after {
+    opacity: 1;
+  }
+  .cs-line--active {
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  }
+
+  .cs-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin: 0.4rem 0 0.9rem;
+    font-size: 0.92rem;
+    line-height: 1.4;
+  }
+  .cs-note {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    padding: 0.4rem 0.6rem;
+    border-left: 2px solid var(--color-line);
+    background: color-mix(in oklab, var(--color-surface) 45%, transparent);
+    border-radius: 0 0.5rem 0.5rem 0;
+  }
+  .cs-note-type {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+    transform: translateY(-1px);
+  }
+  .cs-note-text {
+    color: var(--color-muted);
+  }
+
+  /* Инлайн-серый текст в песне: %…% */
+  .cs-muted {
+    color: var(--color-muted);
+  }
+
+  /* ─── Обложки ─────────────────────────────────────────────────────────── */
+  .cover {
+    display: block;
+    flex-shrink: 0;
+    object-fit: cover;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.65rem;
+  }
+  .cover-sm {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.5rem;
+  }
+  .cover-lg {
+    width: 5.5rem;
+    height: 5.5rem;
+  }
+  /* Обложка на странице песни — заполняет высоту шапки (до кнопок лайка).
+     Обёртка-div сама по себе высоты не имеет, поэтому высоту задаёт колонка с
+     текстом (title + исполнитель + кнопки), а картинка заполняет обёртку. */
+  .cover-fill {
+    position: relative;
+    flex-shrink: 0;
+    align-self: flex-start;
+    width: clamp(5.5rem, 24vw, 8.5rem);
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.65rem;
+    background: var(--color-surface);
+  }
+  .cover-fill-img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .cover-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-faint);
+  }
+  .cs-note-del {
+    flex-shrink: 0;
+    color: var(--color-faint);
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+  .cs-note-del:hover {
+    color: var(--color-fg);
+  }
+  .cs-note-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.2rem;
+  }
+}
