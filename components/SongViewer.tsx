@@ -7,7 +7,7 @@ import { ChordCard } from './ChordCard';
 import { InlineChord } from './InlineChord';
 import { AnnotationForm } from './AnnotationForm';
 import { chordsFromSong } from '@/lib/chordpro/usedChords';
-import type { ChordFrets } from '@/lib/chords/diagrams';
+import type { ChordShape } from '@/lib/chords/diagrams';
 import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
 import { toggleFavoriteAction, toggleLikeAction } from '@/app/(site)/songs/engagement-actions';
 import type { SongEngagement } from '@/lib/engagement';
@@ -47,7 +47,7 @@ export function SongViewer({
   coverUrl?: string | null;
   note?: string | null;
   createdAt?: Date;
-  chordDefs?: Record<string, ChordFrets>;
+  chordDefs?: Record<string, ChordShape>;
   engagement?: SongEngagement;
   annotations?: AnnotationView[];
   canAnnotate?: boolean;
@@ -156,18 +156,44 @@ export function SongViewer({
 
   return (
     <div>
-      <header className="mb-6 flex items-start gap-4">
-        {coverUrl ? (
-          <div className="cover-fill">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={coverUrl} alt="" className="cover-fill-img" />
+      <header className="mb-6">
+        {/* Верхний ряд: обложка слева, крупный заголовок рядом (заполняет место
+            справа от обложки), кнопка редактирования — в правом верхнем углу. */}
+        <div className="flex gap-4">
+          {coverUrl ? (
+            <div className="cover-fill">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={coverUrl} alt="" className="cover-fill-img" />
+            </div>
+          ) : null}
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="min-w-0 flex-1 self-center">
+              <h1 className="display text-4xl font-medium sm:text-5xl">
+                {base.meta.title ?? 'Без названия'}
+              </h1>
+              {base.meta.artist ? (
+                <p className="mt-1.5 text-lg text-muted">{base.meta.artist}</p>
+              ) : null}
+            </div>
+            {editHref ? (
+              <Link
+                href={editHref}
+                className="btn btn-outline h-11 w-11 shrink-0 px-0 text-sm print-hide sm:w-auto sm:px-4"
+                title="Редактировать"
+                aria-label="Редактировать"
+              >
+                <PencilIcon />
+                <span className="hidden sm:inline">Редактировать</span>
+              </Link>
+            ) : null}
           </div>
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <h1 className="display text-4xl font-medium sm:text-5xl">{base.meta.title ?? 'Без названия'}</h1>
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
+        </div>
+
+        {/* Ниже, во всю ширину: bpm · дата, затем лайк/избранное.
+            Исполнитель теперь под названием (рядом с обложкой). */}
+        {base.meta.tempo || createdLabel ? (
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
             {[
-              base.meta.artist,
               base.meta.tempo ? `${base.meta.tempo} bpm` : null,
               createdLabel ? `добавлено ${createdLabel}` : null,
             ]
@@ -179,47 +205,36 @@ export function SongViewer({
                 </Fragment>
               ))}
           </p>
+        ) : null}
 
-          {engagement && songId ? (
-            <div className="print-hide mt-3 flex flex-wrap items-center gap-2">
-              <form action={toggleLikeAction}>
-                <input type="hidden" name="songId" value={songId} />
-                <button
-                  type="submit"
-                  className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.liked ? 'btn-primary' : 'btn-outline'}`}
-                  aria-pressed={engagement.liked}
-                  title={engagement.liked ? 'Убрать лайк' : 'Лайк'}
-                >
-                  <HeartIcon filled={engagement.liked} />
-                  {engagement.likeCount}
-                </button>
-              </form>
-              <form action={toggleFavoriteAction}>
-                <input type="hidden" name="songId" value={songId} />
-                <button
-                  type="submit"
-                  className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.favorited ? 'btn-primary' : 'btn-outline'}`}
-                  aria-pressed={engagement.favorited}
-                >
-                  <BookmarkIcon filled={engagement.favorited} />
-                  <span className="hidden sm:inline">
-                    {engagement.favorited ? 'В избранном' : 'В избранное'}
-                  </span>
-                </button>
-              </form>
-            </div>
-          ) : null}
-        </div>
-        {editHref ? (
-          <Link
-            href={editHref}
-            className="btn btn-outline h-9 shrink-0 self-start gap-2 px-3 text-sm print-hide"
-            title="Редактировать"
-            aria-label="Редактировать"
-          >
-            <PencilIcon />
-            <span className="hidden sm:inline">Редактировать</span>
-          </Link>
+        {engagement && songId ? (
+          <div className="print-hide mt-3 flex flex-wrap items-center gap-2">
+            <form action={toggleLikeAction}>
+              <input type="hidden" name="songId" value={songId} />
+              <button
+                type="submit"
+                className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.liked ? 'btn-primary' : 'btn-outline'}`}
+                aria-pressed={engagement.liked}
+                title={engagement.liked ? 'Убрать лайк' : 'Лайк'}
+              >
+                <HeartIcon filled={engagement.liked} />
+                {engagement.likeCount}
+              </button>
+            </form>
+            <form action={toggleFavoriteAction}>
+              <input type="hidden" name="songId" value={songId} />
+              <button
+                type="submit"
+                className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.favorited ? 'btn-primary' : 'btn-outline'}`}
+                aria-pressed={engagement.favorited}
+              >
+                <BookmarkIcon filled={engagement.favorited} />
+                <span className="hidden sm:inline">
+                  {engagement.favorited ? 'В избранном' : 'В избранное'}
+                </span>
+              </button>
+            </form>
+          </div>
         ) : null}
       </header>
 
@@ -471,7 +486,7 @@ function EyeIcon({ off }: { off: boolean }) {
 }
 function PencilIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </svg>

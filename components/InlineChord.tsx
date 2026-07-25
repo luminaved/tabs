@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChordDiagram } from './ChordDiagram';
-import { getChordShape, type ChordFrets } from '@/lib/chords/diagrams';
+import { getChordShape, type ChordShape } from '@/lib/chords/diagrams';
 
 /** Аккорд в тексте: при наведении/тапе всплывает аппликатура. */
 export function InlineChord({
@@ -10,7 +10,7 @@ export function InlineChord({
   customDefs,
 }: {
   name: string;
-  customDefs?: Record<string, ChordFrets>;
+  customDefs?: Record<string, ChordShape>;
 }) {
   const [open, setOpen] = useState(false);
   const shape = getChordShape(name, customDefs);
@@ -25,7 +25,7 @@ export function InlineChord({
       {name}
       {open && shape ? (
         <span className="chord-pop">
-          <ChordDiagram frets={shape} name={name} size={84} />
+          <ChordDiagram frets={shape.frets} barres={shape.barres} name={name} size={84} />
           <span className="chord-pop-name">{name}</span>
         </span>
       ) : null}

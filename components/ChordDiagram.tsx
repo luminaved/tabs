@@ -1,15 +1,18 @@
-import type { ChordFrets } from '@/lib/chords/diagrams';
+import type { Barre, ChordFrets } from '@/lib/chords/diagrams';
 
 /**
  * Диаграмма аккорда: 6 струн × 4-5 ладов. Точки — прижатые струны,
- * o/x сверху — открытая/заглушённая. Если аккорд высоко на грифе — подпись лада.
+ * o/x сверху — открытая/заглушённая, палка — баррэ. Если аккорд высоко на
+ * грифе — подпись лада.
  */
 export function ChordDiagram({
   frets,
+  barres = [],
   name,
   size = 62,
 }: {
   frets: ChordFrets;
+  barres?: Barre[];
   name?: string;
   size?: number;
 }) {
@@ -55,6 +58,25 @@ export function ChordDiagram({
       {Array.from({ length: 6 }).map((_, s) => (
         <line key={`s${s}`} x1={x(s)} y1={top} x2={x(s)} y2={bottom} stroke="currentColor" strokeWidth={0.8} opacity="0.35" />
       ))}
+
+      {/* Баррэ — палка (под точками) */}
+      {barres.map((b, i) => {
+        const pos = b.fret - base + 1; // 1..FRETS
+        if (pos < 1 || pos > FRETS) return null;
+        const cy = y(pos) - fretGap / 2;
+        const r = 3.4;
+        return (
+          <rect
+            key={`b${i}`}
+            x={x(b.from) - r}
+            y={cy - r}
+            width={x(b.to) - x(b.from) + 2 * r}
+            height={2 * r}
+            rx={r}
+            fill="var(--color-accent)"
+          />
+        );
+      })}
 
       {frets.map((f, s) => {
         if (f === -1) {

@@ -481,9 +481,12 @@
     gap: 0.4rem;
   }
   .fb-grid {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(6, 2rem);
     gap: 3px;
+    user-select: none;
+    -webkit-user-select: none;
   }
   .fb-head {
     height: 1.4rem;
@@ -519,6 +522,17 @@
     height: 1rem;
     border-radius: 50%;
     background: var(--color-accent);
+  }
+  /* Баррэ — палка поверх точек (клики проходят к ячейкам под ней) */
+  .fb-barre {
+    position: absolute;
+    height: 1rem;
+    border-radius: 0.5rem;
+    background: var(--color-accent);
+    pointer-events: none;
+  }
+  .fb-barre--pending {
+    background: color-mix(in oklab, var(--color-accent) 45%, transparent);
   }
   .fb-label {
     text-align: center;
@@ -576,6 +590,101 @@
     outline: none;
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 20%, transparent);
+  }
+
+  /* ─── Редактор ChordPro с подсветкой ──────────────────────────────────── */
+  /* Подложка и textarea делят одну коробку — метрики обязаны совпадать. */
+  .cp-input {
+    position: relative;
+    display: block;
+  }
+  .cp-hl,
+  .cp-ta {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    /* Метрика ОБЯЗАНА совпадать у слоёв, иначе подсветка «разъезжается». */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    letter-spacing: 0;
+    word-spacing: 0;
+    /* Перенос строк (без горизонтального скролла); одинаковый резерв под
+       вертикальный скроллбар держит ширину строки равной у textarea и подложки. */
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    tab-size: 2;
+    scrollbar-gutter: stable;
+  }
+  .cp-hl {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--color-fg);
+    background: var(--color-surface);
+  }
+  .cp-ta {
+    position: relative;
+    z-index: 1;
+    display: block;
+    overflow: auto;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--color-fg);
+    resize: vertical;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .cp-ta:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 20%, transparent);
+  }
+  .cp-chord {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+  .cp-b {
+    color: color-mix(in oklab, var(--color-accent) 50%, var(--color-muted));
+  }
+  .cp-dir {
+    color: #82aaff;
+  }
+  .cp-muted {
+    color: var(--color-muted);
+  }
+  .cp-pct {
+    color: var(--color-faint);
+  }
+
+  /* ─── Модалка ─────────────────────────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+    overflow-y: auto;
+    background: color-mix(in oklab, #000 62%, transparent);
+    backdrop-filter: blur(2px);
+  }
+  .modal-panel {
+    width: 100%;
+    max-width: 58rem;
+    margin: 2.5rem auto;
+    padding: 1.25rem 1.25rem 1rem;
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background: var(--color-surface);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   }
 
   /* ─── Поверхности и мелочи ────────────────────────────────────────────── */
@@ -820,14 +929,15 @@
     width: 5.5rem;
     height: 5.5rem;
   }
-  /* Обложка на странице песни — заполняет высоту шапки (до кнопок лайка).
-     Обёртка-div сама по себе высоты не имеет, поэтому высоту задаёт колонка с
-     текстом (title + исполнитель + кнопки), а картинка заполняет обёртку. */
+  /* Обложка на странице песни — квадрат фиксированного размера. На узких
+     экранах шапка складывается в колонку (обложка сверху, под ней — заголовок,
+     дата, кнопки во всю ширину), поэтому здесь обложку делаем крупнее; на
+     десктопе она стоит слева в ряд с текстом (капается на 8.5rem). */
   .cover-fill {
     position: relative;
     flex-shrink: 0;
     align-self: flex-start;
-    width: clamp(5.5rem, 24vw, 8.5rem);
+    width: clamp(7.5rem, 32vw, 8.5rem);
     aspect-ratio: 1 / 1;
     overflow: hidden;
     border: 1px solid var(--color-line);

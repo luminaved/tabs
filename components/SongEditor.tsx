@@ -1,9 +1,11 @@
 'use client';
 
-import { useActionState, useMemo, useRef, useState } from 'react';
+import { useActionState, useMemo, useRef, useState, type CSSProperties, type UIEvent } from 'react';
 import Link from 'next/link';
 import { ChordSheet } from './ChordSheet';
+import { ChordProInput } from './ChordProInput';
 import { ChordPalette } from './ChordPalette';
+import { ImportTextDialog } from './ImportTextDialog';
 import { CoverInput } from './CoverInput';
 import { VisibilitySelect } from './VisibilitySelect';
 import { ChordDefsEditor } from './ChordDefsEditor';
@@ -47,6 +49,26 @@ export function SongEditor({
   const [songKey, setSongKey] = useState(initial?.key ?? '');
   const preview = useMemo(() => parseSong(body), [body]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // ── Синхронный скролл редактор ↔ превью ──────────────────────────────────
+  // Пропорционально (по доле прокрутки), поэтому разные размеры шрифта и высота
+  // строк из-за аккордов над текстом не мешают. Замок на пару кадров гасит эхо
+  // от программного scrollTop, чтобы панели не «дёргали» друг друга.
+  const lockRef = useRef(false);
+  const syncScroll = (src: HTMLElement | null, dst: HTMLElement | null) => {
+    if (!src || !dst || lockRef.current) return;
+    const srcRange = src.scrollHeight - src.clientHeight;
+    const dstRange = dst.scrollHeight - dst.clientHeight;
+    if (srcRange <= 0 || dstRange <= 0) return;
+    lockRef.current = true;
+    dst.scrollTop = (src.scrollTop / srcRange) * dstRange;
+    requestAnimationFrame(() => requestAnimationFrame(() => (lockRef.current = false)));
+  };
+  const onEditorScroll = (e: UIEvent<HTMLTextAreaElement>) =>
+    syncScroll(e.currentTarget, previewRef.current);
+  const onPreviewScroll = (e: UIEvent<HTMLDivElement>) =>
+    syncScroll(e.currentTarget, textareaRef.current);
 
   // Уникальные аккорды, уже встречающиеся в тексте — для быстрого повтора.
   const usedChords = useMemo(() => chordsInOrder(body), [body]);
@@ -65,6 +87,21 @@ export function SongEditor({
     const start = ta.selectionStart ?? ta.value.length;
     const end = ta.selectionEnd ?? start;
     ta.setRangeText(token, start, end, 'end');
+    setBody(ta.value);
+    ta.focus();
+  };
+
+  // Импорт «аккордов над текстом»: если поле пустое или это шаблон — заменяем
+  // целиком, иначе вставляем в позицию курсора (не затираем набранное).
+  const importText = (chordpro: string) => {
+    const ta = textareaRef.current;
+    if (!ta || body.trim() === '' || body === TEMPLATE) {
+      setBody(chordpro);
+      return;
+    }
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? start;
+    ta.setRangeText(chordpro, start, end, 'end');
     setBody(ta.value);
     ta.focus();
   };
@@ -127,18 +164,26 @@ export function SongEditor({
         />
       </label>
 
-      {/* Редактор + живое превью */}
+      {/* Палитра быстрой вставки — на всю ширину контейнера */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm text-muted">Быстрая вставка аккордов</span>
+        <ChordPalette songKey={songKey} used={usedChords} onInsert={insertChord} />
+      </div>
+
+      {/* Редактор + живое превью (верх textarea и превью на одном уровне) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted">Текст (ChordPro)</span>
-          <ChordPalette songKey={songKey} used={usedChords} onInsert={insertChord} />
-          <textarea
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-muted">Текст (ChordPro)</span>
+            <ImportTextDialog onImport={importText} />
+          </div>
+          <ChordProInput
             ref={textareaRef}
             name="body"
             value={body}
-            onChange={(e) => setBody(e.target.value)}
-            spellCheck={false}
-            className="field min-h-[24rem] resize-y py-3 font-mono text-sm leading-relaxed"
+            onChange={setBody}
+            onScroll={onEditorScroll}
+            className="min-h-[24rem] lg:h-[34rem] lg:min-h-0 lg:resize-none"
           />
           <span className="text-xs text-faint">
             Аккорды в квадратных скобках: <code>[Am]сло[C]во</code>. Серый текст:{' '}
@@ -149,7 +194,12 @@ export function SongEditor({
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm text-muted">Превью</span>
-          <div className="card min-h-[24rem] px-5 py-5">
+          <div
+            ref={previewRef}
+            onScroll={onPreviewScroll}
+            style={{ '--sheet-font-size': '0.9rem' } as CSSProperties}
+            className="card min-h-[24rem] px-5 py-5 lg:h-[34rem] lg:min-h-0 lg:overflow-auto"
+          >
             <ChordSheet song={preview} />
           </div>
         </div>

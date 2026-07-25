@@ -13,6 +13,23 @@ import { mod12, noteToPc } from './pitch';
 
 export type ChordFrets = number[]; // длина 6
 
+/** Баррэ: горизонтальная палка на ладу `fret` через струны from..to (0=6-я). */
+export interface Barre {
+  fret: number; // абсолютный лад (>= 1)
+  from: number; // индекс струны 0..5 (0 = 6-я/толстая), from < to
+  to: number;
+}
+
+/**
+ * Аппликатура: лады по струнам + опциональные баррэ (для рендера палки).
+ * Кастомные формы на песне могут задавать баррэ; сгенерированные/встроенные —
+ * пока рисуются точками (barres не задаётся).
+ */
+export interface ChordShape {
+  frets: ChordFrets;
+  barres?: Barre[];
+}
+
 // Ходовые открытые аккорды (от 6-й струны к 1-й).
 const OPEN_SHAPES: Record<string, ChordFrets> = {
   C: [-1, 3, 2, 0, 1, 0],
@@ -49,21 +66,53 @@ const E_SHAPES: Record<string, (f: number) => ChordFrets> = {
   maj7: (f) => [f, f + 2, f + 1, f + 1, f, f],
 };
 
+function isValidFrets(v: unknown): v is ChordFrets {
+  return (
+    Array.isArray(v) &&
+    v.length === 6 &&
+    v.every((n) => Number.isInteger(n) && (n as number) >= -1 && (n as number) <= 24)
+  );
+}
+
+/** Нормализует баррэ из JSON (валидирует лад/струны, сортирует from<to). */
+function parseBarres(v: unknown): Barre[] {
+  if (!Array.isArray(v)) return [];
+  const out: Barre[] = [];
+  for (const b of v) {
+    if (!b || typeof b !== 'object') continue;
+    const { fret, from, to } = b as Record<string, unknown>;
+    if (![fret, from, to].every((n) => Number.isInteger(n))) continue;
+    const f = fret as number;
+    const lo = Math.min(from as number, to as number);
+    const hi = Math.max(from as number, to as number);
+    if (f < 1 || f > 24 || lo < 0 || hi > 5 || lo === hi) continue;
+    out.push({ fret: f, from: lo, to: hi });
+  }
+  return out;
+}
+
+/** Приводит значение аппликатуры: легаси-массив либо объект {frets, barres}. */
+function coerceShape(v: unknown): ChordShape | null {
+  if (isValidFrets(v)) return { frets: v };
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const f = (v as Record<string, unknown>).frets;
+    if (!isValidFrets(f)) return null;
+    const barres = parseBarres((v as Record<string, unknown>).barres);
+    return barres.length ? { frets: f, barres } : { frets: f };
+  }
+  return null;
+}
+
 /** Безопасно разбирает JSON кастомных аппликатур с песни. */
-export function parseChordDefs(json: string | null | undefined): Record<string, ChordFrets> {
+export function parseChordDefs(json: string | null | undefined): Record<string, ChordShape> {
   if (!json) return {};
   try {
     const obj: unknown = JSON.parse(json);
     if (!obj || typeof obj !== 'object') return {};
-    const out: Record<string, ChordFrets> = {};
+    const out: Record<string, ChordShape> = {};
     for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      if (
-        Array.isArray(v) &&
-        v.length === 6 &&
-        v.every((n) => Number.isInteger(n) && (n as number) >= -1 && (n as number) <= 24)
-      ) {
-        out[k] = v as ChordFrets;
-      }
+      const shape = coerceShape(v);
+      if (shape) out[k] = shape;
     }
     return out;
   } catch {
@@ -113,8 +162,8 @@ function parsePowerFifth(name: string): ChordFrets | null {
  */
 export function getChordShape(
   name: string,
-  customDefs?: Record<string, ChordFrets>,
-): ChordFrets | null {
+  customDefs?: Record<string, ChordShape>,
+): ChordShape | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
   if (customDefs && customDefs[trimmed]) return customDefs[trimmed];
@@ -123,9 +172,9 @@ export function getChordShape(
   if (customDefs && customDefs[base]) return customDefs[base];
 
   const power = parsePowerFifth(base);
-  if (power) return power;
+  if (power) return { frets: power };
 
-  if (OPEN_SHAPES[base]) return OPEN_SHAPES[base];
+  if (OPEN_SHAPES[base]) return { frets: OPEN_SHAPES[base] };
 
   const m = /^([A-G][#b]*)(.*)$/.exec(base);
   if (!m) return null;
@@ -135,5 +184,5 @@ export function getChordShape(
   if (!gen) return null;
 
   const f = mod12(rootPc - 4); // лад барре на 6-й струне
-  return gen(f);
+  return { frets: gen(f) };
 }
