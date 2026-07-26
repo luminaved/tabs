@@ -21,7 +21,6 @@ export interface EditorInitial {
   title?: string;
   artist?: string | null;
   key?: string | null;
-  capo?: number;
   tempo?: number | null;
   body?: string;
   note?: string | null;
@@ -140,16 +139,10 @@ export function SongEditor({
             placeholder="напр. Am, Bb"
           />
         </label>
-        <div className="grid grid-cols-2 gap-4">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted">Капо</span>
-            <input name="capo" type="number" min={0} max={11} defaultValue={initial?.capo ?? 0} className="field" />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted">Темп</span>
-            <input name="tempo" type="number" min={0} defaultValue={initial?.tempo ?? ''} className="field" placeholder="bpm" />
-          </label>
-        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm text-muted">Темп</span>
+          <input name="tempo" type="number" min={0} defaultValue={initial?.tempo ?? ''} className="field" placeholder="bpm" />
+        </label>
       </div>
 
       {/* Заметка от автора — показывается над текстом, видна всем */}

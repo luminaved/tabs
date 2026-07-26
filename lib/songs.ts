@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import type { Prisma } from '@prisma/client';
 import { prisma } from './db';
 
@@ -7,7 +8,6 @@ export interface SongInput {
   title: string;
   artist?: string | null;
   key?: string | null;
-  capo?: number;
   tempo?: number | null;
   body: string;
   note?: string | null;
@@ -17,15 +17,16 @@ export interface SongInput {
 }
 
 function normalize(input: SongInput) {
+  const coverUrl = input.coverUrl?.trim() || null;
   return {
     title: input.title.trim(),
     artist: input.artist?.trim() || null,
     key: input.key?.trim() || null,
-    capo: input.capo ?? 0,
     tempo: input.tempo ?? null,
     body: input.body,
     note: input.note?.trim() || null,
-    coverUrl: input.coverUrl?.trim() || null,
+    coverUrl,
+    hasCover: !!coverUrl, // держим флаг в согласии с картинкой
     chordDefs: input.chordDefs?.trim() || null,
     visibility: input.visibility,
   };
@@ -45,9 +46,67 @@ export async function listSongs(viewerId: string, filters: { query?: string }) {
       artist: true,
       key: true,
       body: true,
-      coverUrl: true,
+      hasCover: true,
       visibility: true,
       updatedAt: true,
+      viewCount: true,
+      _count: { select: { likes: true } },
+    },
+  });
+
+  const q = filters.query?.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(
+    (r) => r.title.toLowerCase().includes(q) || (r.artist ?? '').toLowerCase().includes(q),
+  );
+}
+
+/** Сколько разборов отдаём в каталог за раз. */
+const CATALOG_LIMIT = 60;
+
+/** Порядок в каталоге: новые / популярные (просмотры) / любимые (лайки). */
+export type SongSort = 'new' | 'views' | 'likes';
+
+const SORT_ORDER: Record<SongSort, Prisma.SongOrderByWithRelationInput[]> = {
+  new: [{ createdAt: 'desc' }],
+  views: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
+  likes: [{ likes: { _count: 'desc' } }, { createdAt: 'desc' }],
+};
+
+/** Приводит значение из query-параметра к допустимой сортировке. */
+export function parseSort(value: string | undefined): SongSort {
+  return value === 'views' || value === 'likes' ? value : 'new';
+}
+
+/**
+ * Публичный каталог: только песни с visibility "public" (со всех аккаунтов).
+ * Приватные и «по ссылке» сюда не попадают. Поиск — на стороне JS.
+ */
+export async function listPublicSongs(filters: {
+  query?: string;
+  key?: string;
+  sort?: SongSort;
+}) {
+  const where: Prisma.SongWhereInput = {
+    visibility: 'public',
+    ...(filters.key ? { key: filters.key } : {}),
+  };
+
+  const rows = await prisma.song.findMany({
+    where,
+    orderBy: SORT_ORDER[filters.sort ?? 'new'],
+    // Потолок выдачи: каталог не должен расти линейно вместе с базой.
+    take: CATALOG_LIMIT,
+    select: {
+      id: true,
+      title: true,
+      artist: true,
+      key: true,
+      body: true,
+      hasCover: true,
+      updatedAt: true,
+      viewCount: true,
+      user: { select: { id: true, name: true } },
       _count: { select: { likes: true } },
     },
   });
@@ -60,36 +119,49 @@ export async function listSongs(viewerId: string, filters: { query?: string }) {
 }
 
 /**
- * Публичный каталог: только песни с visibility "public" (со всех аккаунтов).
- * Приватные и «по ссылке» сюда не попадают. Поиск — на стороне JS.
+ * Публичные разборы одного исполнителя. Исполнитель — свободное текстовое поле
+ * на песне (отдельной модели нет), поэтому сравниваем без учёта регистра.
  */
-export async function listPublicSongs(filters: { query?: string; key?: string }) {
-  const where: Prisma.SongWhereInput = {
-    visibility: 'public',
-    ...(filters.key ? { key: filters.key } : {}),
-  };
-
-  const rows = await prisma.song.findMany({
-    where,
-    orderBy: { updatedAt: 'desc' },
+export const listSongsByArtist = cache(async function listSongsByArtist(artist: string) {
+  const name = artist.trim();
+  if (!name) return [];
+  return prisma.song.findMany({
+    where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
+    orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
+    take: CATALOG_LIMIT,
     select: {
       id: true,
       title: true,
       artist: true,
       key: true,
       body: true,
-      coverUrl: true,
+      hasCover: true,
       updatedAt: true,
-      user: { select: { id: true, name: true } },
+      viewCount: true,
       _count: { select: { likes: true } },
     },
   });
+});
 
-  const q = filters.query?.trim().toLowerCase();
-  if (!q) return rows;
-  return rows.filter(
-    (r) => r.title.toLowerCase().includes(q) || (r.artist ?? '').toLowerCase().includes(q),
-  );
+/** Точное написание имени исполнителя, как оно хранится (для заголовка). */
+export const findArtistName = cache(async function findArtistName(artist: string) {
+  const name = artist.trim();
+  if (!name) return null;
+  const row = await prisma.song.findFirst({
+    where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
+    select: { artist: true },
+  });
+  return row?.artist ?? null;
+});
+
+/** Все исполнители с публичными разборами — для карты сайта. */
+export async function listPublicArtists(): Promise<string[]> {
+  const rows = await prisma.song.findMany({
+    where: { visibility: 'public', artist: { not: null } },
+    select: { artist: true },
+    distinct: ['artist'],
+  });
+  return rows.map((r) => r.artist).filter((a): a is string => !!a?.trim());
 }
 
 /** Тональности публичных песен — для фильтра каталога. */
@@ -118,13 +190,40 @@ export async function listKeys(viewerId: string): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b));
 }
 
-/** Просмотр с учётом видимости: private — только владельцу. */
-export async function getSongForViewer(id: string, viewerId?: string) {
-  const song = await prisma.song.findUnique({ where: { id } });
+/**
+ * Просмотр с учётом видимости: private — только владельцу.
+ * coverUrl (тяжёлый base64) не выбираем — картинку отдаёт /covers/[id].
+ *
+ * Обёрнуто в cache(): страница и generateMetadata запрашивают одну и ту же
+ * песню, без дедупликации это лишний поход в БД на каждую загрузку.
+ */
+export const getSongForViewer = cache(async function getSongForViewer(
+  id: string,
+  viewerId?: string,
+) {
+  const song = await prisma.song.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      artist: true,
+      key: true,
+      tempo: true,
+      body: true,
+      note: true,
+      chordDefs: true,
+      hasCover: true,
+      visibility: true,
+      viewCount: true,
+      userId: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
   if (!song) return null;
   if (song.visibility === 'private' && song.userId !== viewerId) return null;
   return song;
-}
+});
 
 /** Строго своя песня (для редактирования). */
 export async function getOwnedSong(id: string, userId: string) {

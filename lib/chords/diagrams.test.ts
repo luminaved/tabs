@@ -7,11 +7,32 @@ describe('getChordShape', () => {
     expect(getChordShape('Am')).toEqual({ frets: [-1, 0, 2, 2, 1, 0] });
   });
 
-  it('генерирует барре-форму для нестандартных корней', () => {
+  it('генерирует барре-форму для нестандартных корней (с палкой баррэ)', () => {
     // F#m — E-форма минора, барре на 2 ладу (F# = pc6, 6-4=2)
-    expect(getChordShape('F#m')).toEqual({ frets: [2, 4, 4, 2, 2, 2] });
+    expect(getChordShape('F#m')).toEqual({
+      frets: [2, 4, 4, 2, 2, 2],
+      barres: [{ fret: 2, from: 0, to: 5 }],
+    });
     // G#m — барре на 4 ладу
-    expect(getChordShape('G#m')).toEqual({ frets: [4, 6, 6, 4, 4, 4] });
+    expect(getChordShape('G#m')).toEqual({
+      frets: [4, 6, 6, 4, 4, 4],
+      barres: [{ fret: 4, from: 0, to: 5 }],
+    });
+  });
+
+  it('встроенные барре-аккорды рисуются палкой', () => {
+    // F — баррэ на 1 ладу через все шесть струн
+    expect(getChordShape('F')?.barres).toEqual([{ fret: 1, from: 0, to: 5 }]);
+    // Bm — баррэ на 2 ладу, 6-я струна заглушена → струны 1..5
+    expect(getChordShape('Bm')?.barres).toEqual([{ fret: 2, from: 1, to: 5 }]);
+  });
+
+  it('аккорды с открытыми струнами и квинты — без баррэ (точками)', () => {
+    expect(getChordShape('C')?.barres).toBeUndefined();
+    expect(getChordShape('Am')?.barres).toBeUndefined();
+    expect(getChordShape('G')?.barres).toBeUndefined();
+    expect(getChordShape('8В')?.barres).toBeUndefined();
+    expect(getChordShape('3Н')?.barres).toBeUndefined();
   });
 
   it('бас в slash-аккорде игнорируется', () => {

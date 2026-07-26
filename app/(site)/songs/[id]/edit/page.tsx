@@ -30,7 +30,6 @@ export default async function EditSongPage({ params }: { params: Promise<{ id: s
           title: song.title,
           artist: song.artist,
           key: song.key,
-          capo: song.capo,
           tempo: song.tempo,
           body: song.body,
           note: song.note,

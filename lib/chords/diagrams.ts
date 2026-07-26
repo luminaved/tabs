@@ -66,6 +66,34 @@ const E_SHAPES: Record<string, (f: number) => ChordFrets> = {
   maj7: (f) => [f, f + 2, f + 1, f + 1, f, f],
 };
 
+/**
+ * Выводит баррэ из формы: указательный палец лежит на минимальном ладу и
+ * прижимает крайние звучащие струны. Признак — минимальный лад стоит и на
+ * первой, и на последней звучащей струне; открытых струн в форме нет.
+ * Так F, Bm и все генерируемые E-формы рисуются палкой, а C/G/Am (с открытыми)
+ * и квинты — точками. Применяется только к встроенным формам: у своих
+ * аппликатур баррэ задаёт пользователь.
+ */
+export function deriveBarres(frets: ChordFrets): Barre[] {
+  const sounding = frets
+    .map((f, i) => ({ f, i }))
+    .filter(({ f }) => f >= 0);
+  if (sounding.length < 2) return [];
+  if (sounding.some(({ f }) => f === 0)) return []; // открытые струны — не баррэ
+
+  const first = sounding[0];
+  const last = sounding[sounding.length - 1];
+  const min = Math.min(...sounding.map(({ f }) => f));
+  if (first.f !== min || last.f !== min) return [];
+  return [{ fret: min, from: first.i, to: last.i }];
+}
+
+/** Встроенная форма → ChordShape с автоматически выведенным баррэ. */
+function builtin(frets: ChordFrets): ChordShape {
+  const barres = deriveBarres(frets);
+  return barres.length ? { frets, barres } : { frets };
+}
+
 function isValidFrets(v: unknown): v is ChordFrets {
   return (
     Array.isArray(v) &&
@@ -172,9 +200,9 @@ export function getChordShape(
   if (customDefs && customDefs[base]) return customDefs[base];
 
   const power = parsePowerFifth(base);
-  if (power) return { frets: power };
+  if (power) return builtin(power);
 
-  if (OPEN_SHAPES[base]) return { frets: OPEN_SHAPES[base] };
+  if (OPEN_SHAPES[base]) return builtin(OPEN_SHAPES[base]);
 
   const m = /^([A-G][#b]*)(.*)$/.exec(base);
   if (!m) return null;
@@ -184,5 +212,5 @@ export function getChordShape(
   if (!gen) return null;
 
   const f = mod12(rootPc - 4); // лад барре на 6-й струне
-  return { frets: gen(f) };
+  return builtin(gen(f));
 }

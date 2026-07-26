@@ -2,13 +2,17 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 
 // Поля песни для строки списка (каталог/кабинет).
+// Внимание: coverUrl (тяжёлый base64) здесь НЕ выбирается — списки берут только
+// флаг hasCover, а картинка приходит отдельным кэшируемым запросом /covers/[id].
 const cardSelect = {
   id: true,
   title: true,
   artist: true,
   key: true,
-  coverUrl: true,
+  hasCover: true,
+  updatedAt: true,
   body: true,
+  viewCount: true,
   _count: { select: { likes: true } },
 } satisfies Prisma.SongSelect;
 
@@ -86,21 +90,68 @@ export async function toggleFavorite(userId: string, songId: string): Promise<bo
 
 export interface SongEngagement {
   likeCount: number;
+  viewCount: number;
   liked: boolean;
   favorited: boolean;
 }
 
-/** Кол-во лайков + отметки текущего пользователя (если он есть). */
+/**
+ * Кол-во лайков/просмотров + отметки текущего пользователя — ОДНИМ запросом.
+ * Отметки берём фильтрованными связями (при БД в другом регионе каждый лишний
+ * round-trip — это десятки миллисекунд к загрузке страницы).
+ */
 export async function getSongEngagement(
   songId: string,
   userId?: string,
 ): Promise<SongEngagement> {
-  const likeCount = await prisma.like.count({ where: { songId } });
-  if (!userId) return { likeCount, liked: false, favorited: false };
+  const song = await prisma.song.findUnique({
+    where: { id: songId },
+    select: {
+      viewCount: true,
+      _count: { select: { likes: true } },
+      ...(userId
+        ? {
+            likes: { where: { userId }, select: { id: true }, take: 1 },
+            favorites: { where: { userId }, select: { id: true }, take: 1 },
+          }
+        : {}),
+    },
+  });
 
-  const [like, favorite] = await Promise.all([
-    prisma.like.findUnique({ where: { userId_songId: { userId, songId } } }),
-    prisma.favorite.findUnique({ where: { userId_songId: { userId, songId } } }),
-  ]);
-  return { likeCount, liked: !!like, favorited: !!favorite };
+  if (!song) return { likeCount: 0, viewCount: 0, liked: false, favorited: false };
+  return {
+    likeCount: song._count.likes,
+    viewCount: song.viewCount,
+    liked: !!('likes' in song && song.likes?.length),
+    favorited: !!('favorites' in song && song.favorites?.length),
+  };
+}
+
+// Окно дедупликации просмотров: повторные открытия с того же аккаунта в
+// пределах 12 часов не засчитываются.
+const VIEW_WINDOW_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Засчитывает просмотр разбора: не чаще раза в 12 часов с одного аккаунта.
+ * Возвращает true, если просмотр был засчитан. Анонимы не учитываются
+ * (нужен аккаунт, иначе счётчик легко накрутить).
+ */
+export async function recordView(songId: string, userId: string): Promise<boolean> {
+  const cutoff = new Date(Date.now() - VIEW_WINDOW_MS);
+
+  // Одним запросом: вставить отметку или обновить её, только если прошло окно.
+  // ON CONFLICT ... WHERE не даёт засчитать повторный просмотр, а RETURNING
+  // сообщает, было ли что-то записано (иначе понадобился бы отдельный SELECT).
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    INSERT INTO "View" ("id", "userId", "songId", "viewedAt")
+    VALUES (${crypto.randomUUID()}, ${userId}, ${songId}, NOW())
+    ON CONFLICT ("userId", "songId")
+      DO UPDATE SET "viewedAt" = NOW()
+      WHERE "View"."viewedAt" < ${cutoff}
+    RETURNING "id"
+  `;
+
+  if (rows.length === 0) return false; // просмотр уже был засчитан в окне
+  await prisma.song.update({ where: { id: songId }, data: { viewCount: { increment: 1 } } });
+  return true;
 }

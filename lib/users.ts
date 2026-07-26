@@ -1,19 +1,28 @@
+import { cache } from 'react';
 import { prisma } from './db';
 
-export function getUserProfile(userId: string) {
+/**
+ * Профиль для кабинета. cache(): страница кабинета и шапка спрашивают одного
+ * и того же пользователя — без дедупликации это лишний поход в БД.
+ */
+export const getUserProfile = cache(function getUserProfile(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
     select: { name: true, email: true, image: true, createdAt: true },
   });
-}
+});
 
-/** Публичные данные пользователя (для страницы автора). */
-export function getPublicUser(userId: string) {
+/**
+ * Публичные данные пользователя (для страницы автора и шапки).
+ * cache(): шапка есть на каждой странице, а /u/[id] спрашивает автора дважды
+ * (в generateMetadata и в самой странице).
+ */
+export const getPublicUser = cache(function getPublicUser(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
     select: { name: true, image: true },
   });
-}
+});
 
 export async function updateUserProfile(
   userId: string,

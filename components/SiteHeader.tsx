@@ -34,6 +34,7 @@ export async function SiteHeader() {
                   name={displayName}
                   email={session.user.email}
                   size={24}
+                  userId={session.user.id}
                 />
                 <span className="hidden max-w-[9rem] truncate md:inline">
                   {displayName ?? session.user.email}

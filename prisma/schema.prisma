@@ -31,6 +31,7 @@ model User {
   setlists  Setlist[]
   likes     Like[]
   favorites Favorite[]
+  views     View[]
 }
 
 model Account {
@@ -80,9 +81,15 @@ model Song {
   body       String // текст в формате ChordPro, хранится как есть
   note       String? // заметка от автора, показывается над текстом (видна всем)
   coverUrl   String? // обложка: data URL (загружается и сжимается на клиенте)
+  // Флаг «обложка есть» — чтобы списки не тянули из БД тяжёлый base64
+  // (сама картинка отдаётся отдельным кэшируемым маршрутом /covers/[id]).
+  hasCover   Boolean  @default(false)
   chordDefs  String? // JSON: кастомные аппликатуры { "имя": [лады по струнам] }
   // "private" | "unlisted" | "public" (по умолчанию — приватная)
   visibility String   @default("private")
+  // Денормализованный счётчик просмотров (растёт вместе с записями View) —
+  // чтобы каталог мог сортировать по популярности без агрегации.
+  viewCount  Int      @default(0)
   userId     String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -92,9 +99,11 @@ model Song {
   setlistItems SetlistItem[]
   likes        Like[]
   favorites    Favorite[]
+  views        View[]
 
   @@index([userId])
   @@index([visibility])
+  @@index([viewCount])
 }
 
 model Annotation {
@@ -146,6 +155,21 @@ model Like {
   userId    String
   songId    String
   createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, songId])
+  @@index([songId])
+}
+
+// Просмотр разбора. Одна запись на пару пользователь+песня; `viewedAt`
+// обновляется, когда засчитывается новый просмотр (не чаще раза в 12 часов).
+model View {
+  id       String   @id @default(cuid())
+  userId   String
+  songId   String
+  viewedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   song Song @relation(fields: [songId], references: [id], onDelete: Cascade)

@@ -6,6 +6,7 @@ import { ChordSheet } from './ChordSheet';
 import { ChordCard } from './ChordCard';
 import { InlineChord } from './InlineChord';
 import { AnnotationForm } from './AnnotationForm';
+import { ShareButton } from './ShareButton';
 import { chordsFromSong } from '@/lib/chordpro/usedChords';
 import type { ChordShape } from '@/lib/chords/diagrams';
 import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
@@ -40,6 +41,8 @@ export function SongViewer({
   engagement,
   annotations = [],
   canAnnotate = false,
+  shareUrl,
+  shareTitle,
 }: {
   record: SongRecordLike;
   editHref?: string;
@@ -51,6 +54,9 @@ export function SongViewer({
   engagement?: SongEngagement;
   annotations?: AnnotationView[];
   canAnnotate?: boolean;
+  /** Абсолютная ссылка для кнопки «Поделиться». */
+  shareUrl?: string;
+  shareTitle?: string;
 }) {
   const createdLabel = createdAt?.toLocaleDateString('ru-RU', {
     day: 'numeric',
@@ -60,7 +66,6 @@ export function SongViewer({
   const base = useMemo(() => songFromRecord(record), [record]);
 
   const [transpose, setTranspose] = useState(0);
-  const [capo, setCapo] = useState(record.capo ?? 0);
   const [showChords, setShowChords] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scrolling, setScrolling] = useState(false);
@@ -88,15 +93,8 @@ export function SongViewer({
   const wakeSupported =
     typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 
-  // Аппликатуры (формы) = реальное транспонирование минус лад капо. Капо не
-  // меняет звучание — только показываемые формы, спелленные по «форменной»
-  // тональности. Реальная (звучащая) тональность считается отдельно.
-  const shapeSong = useMemo(
-    () => transposeSong(base, transpose - capo),
-    [base, transpose, capo],
-  );
+  const shapeSong = useMemo(() => transposeSong(base, transpose), [base, transpose]);
   const realKey = base.meta.key ? transposeKey(base.meta.key, transpose) : null;
-  const shapeKey = base.meta.key ? transposeKey(base.meta.key, transpose - capo) : null;
   const usedChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
 
   const offsetLabel = transpose > 0 ? `+${transpose}` : transpose < 0 ? `${transpose}` : '±0';
@@ -163,7 +161,7 @@ export function SongViewer({
           {coverUrl ? (
             <div className="cover-fill">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverUrl} alt="" className="cover-fill-img" />
+              <img src={coverUrl} alt="" className="cover-fill-img" decoding="async" />
             </div>
           ) : null}
           <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -172,7 +170,15 @@ export function SongViewer({
                 {base.meta.title ?? 'Без названия'}
               </h1>
               {base.meta.artist ? (
-                <p className="mt-1.5 text-lg text-muted">{base.meta.artist}</p>
+                <p className="mt-1.5 text-lg text-muted">
+                  {/* Клик по исполнителю — все его разборы */}
+                  <Link
+                    href={`/artist/${encodeURIComponent(base.meta.artist)}`}
+                    className="hover:text-fg hover:underline"
+                  >
+                    {base.meta.artist}
+                  </Link>
+                </p>
               ) : null}
             </div>
             {editHref ? (
@@ -189,53 +195,67 @@ export function SongViewer({
           </div>
         </div>
 
-        {/* Ниже, во всю ширину: bpm · дата, затем лайк/избранное.
-            Исполнитель теперь под названием (рядом с обложкой). */}
-        {base.meta.tempo || createdLabel ? (
-          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
-            {[
-              base.meta.tempo ? `${base.meta.tempo} bpm` : null,
-              createdLabel ? `добавлено ${createdLabel}` : null,
-            ]
-              .filter(Boolean)
-              .map((item, i) => (
-                <Fragment key={i}>
-                  {i > 0 ? <span className="text-faint">·</span> : null}
-                  <span>{item}</span>
-                </Fragment>
-              ))}
-          </p>
-        ) : null}
+        {/* Ниже, во всю ширину: подпись · тональность · bpm · дата.
+            Исполнитель — под названием (рядом с обложкой).
+            «Аккорды для гитары» здесь не только подпись, но и то, как эту
+            страницу ищут в поисковике — поэтому текст видимый, а не только в мете. */}
+        <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
+          {[
+            'Аккорды для гитары',
+            base.meta.key ? `тональность ${base.meta.key}` : null,
+            base.meta.tempo ? `${base.meta.tempo} bpm` : null,
+            createdLabel ? `добавлено ${createdLabel}` : null,
+          ]
+            .filter(Boolean)
+            .map((item, i) => (
+              <Fragment key={i}>
+                {i > 0 ? <span className="text-faint">·</span> : null}
+                <span>{item}</span>
+              </Fragment>
+            ))}
+        </p>
 
-        {engagement && songId ? (
-          <div className="print-hide mt-3 flex flex-wrap items-center gap-2">
-            <form action={toggleLikeAction}>
-              <input type="hidden" name="songId" value={songId} />
-              <button
-                type="submit"
-                className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.liked ? 'btn-primary' : 'btn-outline'}`}
-                aria-pressed={engagement.liked}
-                title={engagement.liked ? 'Убрать лайк' : 'Лайк'}
-              >
-                <HeartIcon filled={engagement.liked} />
-                {engagement.likeCount}
-              </button>
-            </form>
-            <form action={toggleFavoriteAction}>
-              <input type="hidden" name="songId" value={songId} />
-              <button
-                type="submit"
-                className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.favorited ? 'btn-primary' : 'btn-outline'}`}
-                aria-pressed={engagement.favorited}
-              >
-                <BookmarkIcon filled={engagement.favorited} />
-                <span className="hidden sm:inline">
-                  {engagement.favorited ? 'В избранном' : 'В избранное'}
-                </span>
-              </button>
-            </form>
-          </div>
-        ) : null}
+        {/* «Поделиться» доступна всем, лайк/избранное — только со входом. */}
+        <div className="print-hide mt-3 flex flex-wrap items-center gap-2">
+          {engagement && songId ? (
+            <>
+              <form action={toggleLikeAction}>
+                <input type="hidden" name="songId" value={songId} />
+                <button
+                  type="submit"
+                  className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.liked ? 'btn-primary' : 'btn-outline'}`}
+                  aria-pressed={engagement.liked}
+                  title={engagement.liked ? 'Убрать лайк' : 'Лайк'}
+                >
+                  <HeartIcon filled={engagement.liked} />
+                  {engagement.likeCount}
+                </button>
+              </form>
+              <form action={toggleFavoriteAction}>
+                <input type="hidden" name="songId" value={songId} />
+                <button
+                  type="submit"
+                  className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.favorited ? 'btn-primary' : 'btn-outline'}`}
+                  aria-pressed={engagement.favorited}
+                >
+                  <BookmarkIcon filled={engagement.favorited} />
+                  <span className="hidden sm:inline">
+                    {engagement.favorited ? 'В избранном' : 'В избранное'}
+                  </span>
+                </button>
+              </form>
+            </>
+          ) : null}
+
+          {shareUrl ? <ShareButton url={shareUrl} title={shareTitle ?? ''} /> : null}
+
+          {engagement ? (
+            <span className="ml-1 flex items-center gap-1.5 text-sm text-muted" title="Просмотры">
+              <ViewsIcon />
+              {engagement.viewCount}
+            </span>
+          ) : null}
+        </div>
       </header>
 
       {/* Панель управления */}
@@ -251,7 +271,7 @@ export function SongViewer({
           </button>
           <div className="key-readout">
             <b>{realKey ?? offsetLabel}</b>
-            <span>{capo > 0 ? `${offsetLabel} · капо ${capo}` : offsetLabel}</span>
+            <span>{offsetLabel}</span>
           </div>
           <button
             type="button"
@@ -329,22 +349,6 @@ export function SongViewer({
 
             <label className="flex flex-col gap-2">
               <span className="flex items-center justify-between text-sm">
-                <span className="text-muted">Каподастр</span>
-                <span className="tabular-nums">
-                  {capo > 0 ? `${capo} лад${shapeKey ? ` · формы ${shapeKey}` : ''}` : 'без капо'}
-                </span>
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={11}
-                value={capo}
-                onChange={(e) => setCapo(Number(e.target.value))}
-              />
-            </label>
-
-            <label className="flex flex-col gap-2">
-              <span className="flex items-center justify-between text-sm">
                 <span className="text-muted">Скорость автоскролла</span>
                 <span className="tabular-nums">{speed}</span>
               </span>
@@ -373,13 +377,10 @@ export function SongViewer({
                 Печать / PDF
               </button>
 
-              {(transpose !== 0 || capo !== (record.capo ?? 0)) ? (
+              {transpose !== 0 ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    setTranspose(0);
-                    setCapo(record.capo ?? 0);
-                  }}
+                  onClick={() => setTranspose(0)}
                   className="btn btn-ghost h-9 px-2 text-sm"
                 >
                   Сбросить
@@ -503,6 +504,14 @@ function HeartIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  );
+}
+function ViewsIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }

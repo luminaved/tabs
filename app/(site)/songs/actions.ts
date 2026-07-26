@@ -18,7 +18,6 @@ function parseForm(formData: FormData): SongInput | { error: string } {
   const v = String(formData.get('visibility') ?? 'private');
   const visibility = (VISIBILITIES as string[]).includes(v) ? (v as SongVisibility) : 'private';
 
-  const capo = Math.min(11, Math.max(0, Number(formData.get('capo') ?? 0) || 0));
   const tempoRaw = String(formData.get('tempo') ?? '').trim();
   const tempoNum = tempoRaw ? Number(tempoRaw) : NaN;
 
@@ -28,7 +27,6 @@ function parseForm(formData: FormData): SongInput | { error: string } {
     title,
     artist: String(formData.get('artist') ?? ''),
     key: String(formData.get('key') ?? ''),
-    capo,
     tempo: Number.isFinite(tempoNum) && tempoNum > 0 ? tempoNum : null,
     body: String(formData.get('body') ?? ''),
     note: String(formData.get('note') ?? ''),

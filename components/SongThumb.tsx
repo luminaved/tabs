@@ -1,8 +1,31 @@
-/** Маленькая обложка для строк списка (или заглушка с нотой). */
-export function SongThumb({ src }: { src?: string | null }) {
-  if (src) {
+import { coverSrc } from '@/lib/coverUrl';
+
+/**
+ * Маленькая обложка для строк списка (или заглушка с нотой).
+ * Картинка грузится отдельным кэшируемым запросом, а не инлайном в HTML.
+ */
+export function SongThumb({
+  songId,
+  hasCover,
+  updatedAt,
+}: {
+  songId: string;
+  hasCover?: boolean;
+  updatedAt?: Date | string | number;
+}) {
+  if (hasCover && updatedAt) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt="" className="cover cover-sm" />;
+    return (
+      <img
+        src={coverSrc(songId, updatedAt, 'sm')}
+        alt=""
+        width={56}
+        height={56}
+        loading="lazy"
+        decoding="async"
+        className="cover cover-sm"
+      />
+    );
   }
   return (
     <div className="cover cover-sm cover-empty" aria-hidden>
