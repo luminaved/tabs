@@ -25,6 +25,24 @@ export interface Column {
   spaceAfter: boolean;
 }
 
+/**
+ * Строка как есть — для секций табулатуры (`{start_of_tab}`).
+ *
+ * В табах значение имеет каждый пробел: `e|--3--5--|` держится только на
+ * выравнивании, поэтому колоночная раскладка (она режет строку по словам и
+ * рисует пропорциональным шрифтом) для них не годится. Здесь текст сегментов
+ * склеивается обратно, аккорды возвращаются в квадратных скобках, а `%`
+ * остаются символами — в табах это не разметка серого текста.
+ */
+export function lineToPlainText(segments: Segment[]): string {
+  let out = '';
+  for (const seg of segments) {
+    if (seg.chord !== undefined) out += `[${seg.chord}]`;
+    out += seg.text ?? '';
+  }
+  return out;
+}
+
 export function lineToColumns(segments: Segment[]): Column[] {
   const cols: Column[] = [];
   let muted = false;

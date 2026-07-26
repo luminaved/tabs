@@ -1,9 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { lineToColumns } from './columns';
+import { lineToColumns, lineToPlainText } from './columns';
 import { parseLyricLine } from './parse';
 
 // Удобная обёртка: из сырой строки ChordPro сразу в колонки.
 const cols = (raw: string) => lineToColumns(parseLyricLine(raw));
+
+describe('lineToPlainText', () => {
+  // Строка табулатуры должна вернуться символ в символ: в табах выравнивание
+  // пробелами — это и есть содержание.
+  it('строка табулатуры сохраняется побайтово, включая пробелы', () => {
+    const raw = 'e|--3--5--7--|  ';
+    expect(lineToPlainText(parseLyricLine(raw))).toBe(raw);
+  });
+
+  it('процент в табах — обычный символ, а не разметка серого', () => {
+    expect(lineToPlainText(parseLyricLine('B|--5--% 2'))).toBe('B|--5--% 2');
+  });
+
+  it('аккорды возвращаются в скобках', () => {
+    expect(lineToPlainText(parseLyricLine('[Am]тек[C]ст'))).toBe('[Am]тек[C]ст');
+  });
+
+  it('пустая строка остаётся пустой', () => {
+    expect(lineToPlainText([])).toBe('');
+  });
+});
 
 describe('lineToColumns', () => {
   it('аккорд достаётся первому слову, пробелы — точки переноса', () => {

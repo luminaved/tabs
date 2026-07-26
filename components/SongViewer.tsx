@@ -1,6 +1,15 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from 'react';
 import Link from 'next/link';
 import { ChordSheet } from './ChordSheet';
 import { ChordCard } from './ChordCard';
@@ -9,10 +18,20 @@ import { AnnotationForm } from './AnnotationForm';
 import { ShareButton } from './ShareButton';
 import { chordsFromSong } from '@/lib/chordpro/usedChords';
 import type { ChordShape } from '@/lib/chords/diagrams';
+import { getInstrument, type InstrumentId } from '@/lib/chords/instruments';
 import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
 import { toggleFavoriteAction, toggleLikeAction } from '@/app/(site)/songs/engagement-actions';
+import { toggleVerifiedAction } from '@/app/(site)/songs/verify-actions';
+import { VerifiedBadge, VERIFIED_TITLE } from './VerifiedBadge';
 import type { SongEngagement } from '@/lib/engagement';
 import type { AnnotationView } from '@/lib/annotations';
+import {
+  readBoolPref,
+  readIntPref,
+  readNumberPref,
+  viewerKeys,
+  writePref,
+} from '@/lib/viewerPrefs';
 import { songFromRecord, type SongRecordLike } from '@/lib/chordpro/fromRecord';
 import { transposeSong } from '@/lib/chordpro/transform';
 import { transposeKey } from '@/lib/chords/key';
@@ -37,6 +56,9 @@ export function SongViewer({
   coverUrl,
   note,
   createdAt,
+  instrument,
+  verified = false,
+  canVerify = false,
   chordDefs,
   engagement,
   annotations = [],
@@ -50,6 +72,12 @@ export function SongViewer({
   coverUrl?: string | null;
   note?: string | null;
   createdAt?: Date;
+  /** Инструмент разбора — от него зависят все аппликатуры на странице. */
+  instrument?: InstrumentId | null;
+  /** Разбор подтверждён модератором. */
+  verified?: boolean;
+  /** Показывать ли кнопку подтверждения (только администратору). */
+  canVerify?: boolean;
   chordDefs?: Record<string, ChordShape>;
   engagement?: SongEngagement;
   annotations?: AnnotationView[];
@@ -64,6 +92,7 @@ export function SongViewer({
     year: 'numeric',
   });
   const base = useMemo(() => songFromRecord(record), [record]);
+  const inst = getInstrument(instrument);
 
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);
@@ -73,8 +102,124 @@ export function SongViewer({
   const [wakeOn, setWakeOn] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
   const [fontSize, setFontSize] = useState<number | null>(null);
+  // Закреплённая панель аккордов остаётся на виду при прокрутке.
+  const [pinChords, setPinChords] = useState(false);
 
   const clampFont = (v: number) => Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(v * 100) / 100));
+
+  // ── Настройки читалки: восстановление и сохранение ────────────────────────
+  // Читаем после монтирования, а не при инициализации состояния: на сервере
+  // localStorage нет, и разошедшаяся разметка ломала бы гидратацию.
+  //
+  // Пишем — прямо в обработчиках (см. change*), а НЕ отдельными эффектами на
+  // изменение состояния: такой эффект срабатывает и на первом рендере, когда
+  // восстановленное значение ещё не применилось, и успевает затереть хранилище
+  // значением по умолчанию. Настройки меняются только действием пользователя,
+  // поэтому сохранять их в месте изменения и проще, и надёжнее.
+  useEffect(() => {
+    const font = readNumberPref(viewerKeys.fontSize, FONT_MIN, FONT_MAX);
+    if (font !== null) setFontSize(font);
+
+    const sp = readIntPref(viewerKeys.speed, 1, 8);
+    if (sp !== null) setSpeed(sp);
+
+    const chords = readBoolPref(viewerKeys.showChords);
+    if (chords !== null) setShowChords(chords);
+
+    const pinned = readBoolPref(viewerKeys.pinChords);
+    if (pinned !== null) setPinChords(pinned);
+
+    if (songId) {
+      const t = readIntPref(viewerKeys.transpose(songId), -11, 11);
+      if (t !== null) setTranspose(t);
+    }
+  }, [songId]);
+
+  /** Транспонирование: у каждой песни своё, ноль — это «как записано». */
+  const changeTranspose = (next: number) => {
+    const value = Math.max(-11, Math.min(11, next));
+    setTranspose(value);
+    if (songId) writePref(viewerKeys.transpose(songId), value === 0 ? null : value);
+  };
+
+  const changeFontSize = (next: number | null) => {
+    setFontSize(next);
+    writePref(viewerKeys.fontSize, next);
+  };
+
+  const changeSpeed = (next: number) => {
+    setSpeed(next);
+    writePref(viewerKeys.speed, next);
+  };
+
+  const changeShowChords = (next: boolean) => {
+    setShowChords(next);
+    writePref(viewerKeys.showChords, next);
+  };
+
+  const changePinChords = (next: boolean) => {
+    setPinChords(next);
+    writePref(viewerKeys.pinChords, next);
+  };
+
+  // ── Лайк и избранное без перезагрузки страницы ────────────────────────────
+  // Экшены больше не ревалидируют маршрут (это и сбрасывало транспонирование,
+  // шрифт и прокрутку), поэтому актуальное состояние держим здесь: сначала
+  // показываем оптимистично, затем заменяем ответом сервера.
+  const [eng, setEng] = useState(engagement);
+  useEffect(() => setEng(engagement), [engagement]);
+
+  const [optimisticEng, applyOptimistic] = useOptimistic(
+    eng,
+    (state: SongEngagement | undefined, action: 'like' | 'favorite') => {
+      if (!state) return state;
+      if (action === 'like') {
+        return {
+          ...state,
+          liked: !state.liked,
+          likeCount: Math.max(0, state.likeCount + (state.liked ? -1 : 1)),
+        };
+      }
+      return { ...state, favorited: !state.favorited };
+    },
+  );
+  const [, startEngagement] = useTransition();
+
+  const onToggleLike = () => {
+    if (!songId) return;
+    startEngagement(async () => {
+      applyOptimistic('like');
+      const next = await toggleLikeAction(songId);
+      setEng((cur) => (cur ? { ...cur, ...next } : cur));
+    });
+  };
+
+  const onToggleFavorite = () => {
+    if (!songId) return;
+    startEngagement(async () => {
+      applyOptimistic('favorite');
+      const next = await toggleFavoriteAction(songId);
+      setEng((cur) => (cur ? { ...cur, ...next } : cur));
+    });
+  };
+
+  // ── Подтверждение модератора ──────────────────────────────────────────────
+  const [isVerified, setIsVerified] = useState(verified);
+  useEffect(() => setIsVerified(verified), [verified]);
+  const [optimisticVerified, applyVerified] = useOptimistic(
+    isVerified,
+    (_state: boolean, next: boolean) => next,
+  );
+  const [, startVerify] = useTransition();
+
+  const onToggleVerified = () => {
+    if (!songId) return;
+    startVerify(async () => {
+      applyVerified(!isVerified);
+      const next = await toggleVerifiedAction(songId);
+      setIsVerified(next.verified);
+    });
+  };
 
   const byLine = useMemo(() => {
     const map = new Map<number, AnnotationView[]>();
@@ -98,6 +243,37 @@ export function SongViewer({
   const usedChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
 
   const offsetLabel = transpose > 0 ? `+${transpose}` : transpose < 0 ? `${transpose}` : '±0';
+
+  // Панель аккордов. Когда закреплена — рендерится ВНУТРИ липкого блока с
+  // тулбаром, а не отдельно: так она всегда встаёт ровно под ним, без подбора
+  // смещения (а тулбар на узком экране может переноситься и менять высоту).
+  const chordBar = (
+    <div className={pinChords ? 'chord-bar chord-bar--pinned print-hide' : 'chord-bar print-hide'}>
+      {/* Закреплённые аккорды не переносятся на вторую строку, а едут
+          горизонтально: иначе на телефоне они съели бы пол-экрана. */}
+      <div className="chord-bar-strip">
+        {usedChords.map((c) => (
+          <ChordCard
+            key={c}
+            name={c}
+            instrument={inst}
+            customDefs={chordDefs}
+            size={pinChords ? 62 : 96}
+          />
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => changePinChords(!pinChords)}
+        className={pinChords ? 'chord-pin chord-pin--on' : 'chord-pin'}
+        aria-pressed={pinChords}
+        title={pinChords ? 'Открепить аккорды' : 'Закрепить аккорды сверху'}
+        aria-label={pinChords ? 'Открепить аккорды' : 'Закрепить аккорды сверху'}
+      >
+        <PinIcon />
+      </button>
+    </div>
+  );
 
   // ── Автоскролл ────────────────────────────────────────────────────────────
   const rafRef = useRef<number | null>(null);
@@ -166,8 +342,18 @@ export function SongViewer({
           ) : null}
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <div className="min-w-0 flex-1 self-center">
+              {/* Галочка идёт прямо в потоке текста, а не отдельной колонкой
+                  flex: так она встаёт в конец названия (за последним словом,
+                  даже когда оно перенеслось), как и в каталоге. Неразрывный
+                  пробел не даёт ей оторваться от слова. */}
               <h1 className="display text-4xl font-medium sm:text-5xl">
                 {base.meta.title ?? 'Без названия'}
+                {optimisticVerified ? (
+                  <>
+                    {' '}
+                    <VerifiedBadge size={30} />
+                  </>
+                ) : null}
               </h1>
               {base.meta.artist ? (
                 <p className="mt-1.5 text-lg text-muted">
@@ -201,7 +387,7 @@ export function SongViewer({
             страницу ищут в поисковике — поэтому текст видимый, а не только в мете. */}
         <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
           {[
-            'Аккорды для гитары',
+            `Аккорды для ${inst.forName}`,
             base.meta.key ? `тональность ${base.meta.key}` : null,
             base.meta.tempo ? `${base.meta.tempo} bpm` : null,
             createdLabel ? `добавлено ${createdLabel}` : null,
@@ -217,42 +403,58 @@ export function SongViewer({
 
         {/* «Поделиться» доступна всем, лайк/избранное — только со входом. */}
         <div className="print-hide mt-3 flex flex-wrap items-center gap-2">
-          {engagement && songId ? (
+          {optimisticEng && songId ? (
             <>
-              <form action={toggleLikeAction}>
-                <input type="hidden" name="songId" value={songId} />
-                <button
-                  type="submit"
-                  className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.liked ? 'btn-primary' : 'btn-outline'}`}
-                  aria-pressed={engagement.liked}
-                  title={engagement.liked ? 'Убрать лайк' : 'Лайк'}
-                >
-                  <HeartIcon filled={engagement.liked} />
-                  {engagement.likeCount}
-                </button>
-              </form>
-              <form action={toggleFavoriteAction}>
-                <input type="hidden" name="songId" value={songId} />
-                <button
-                  type="submit"
-                  className={`btn h-9 gap-1.5 px-3 text-sm ${engagement.favorited ? 'btn-primary' : 'btn-outline'}`}
-                  aria-pressed={engagement.favorited}
-                >
-                  <BookmarkIcon filled={engagement.favorited} />
-                  <span className="hidden sm:inline">
-                    {engagement.favorited ? 'В избранном' : 'В избранное'}
-                  </span>
-                </button>
-              </form>
+              <button
+                type="button"
+                onClick={onToggleLike}
+                className={`btn h-9 gap-1.5 px-3 text-sm ${optimisticEng.liked ? 'btn-primary' : 'btn-outline'}`}
+                aria-pressed={optimisticEng.liked}
+                title={optimisticEng.liked ? 'Убрать лайк' : 'Лайк'}
+              >
+                <HeartIcon filled={optimisticEng.liked} />
+                {optimisticEng.likeCount}
+              </button>
+              <button
+                type="button"
+                onClick={onToggleFavorite}
+                className={`btn h-9 gap-1.5 px-3 text-sm ${optimisticEng.favorited ? 'btn-primary' : 'btn-outline'}`}
+                aria-pressed={optimisticEng.favorited}
+              >
+                <BookmarkIcon filled={optimisticEng.favorited} />
+                <span className="hidden sm:inline">
+                  {optimisticEng.favorited ? 'В избранном' : 'В избранное'}
+                </span>
+              </button>
             </>
           ) : null}
 
           {shareUrl ? <ShareButton url={shareUrl} title={shareTitle ?? ''} /> : null}
 
-          {engagement ? (
+          {/* Подтверждение разбора — только у модератора */}
+          {canVerify && songId ? (
+            <button
+              type="button"
+              onClick={onToggleVerified}
+              className={`btn h-9 gap-1.5 px-3 text-sm ${optimisticVerified ? 'btn-verified' : 'btn-outline'}`}
+              aria-pressed={optimisticVerified}
+              title={
+                optimisticVerified
+                  ? `Снять подтверждение · ${VERIFIED_TITLE}`
+                  : 'Подтвердить: аккорды верны'
+              }
+            >
+              <CheckIcon />
+              <span className="hidden sm:inline">
+                {optimisticVerified ? 'Подтверждено' : 'Подтвердить'}
+              </span>
+            </button>
+          ) : null}
+
+          {optimisticEng ? (
             <span className="ml-1 flex items-center gap-1.5 text-sm text-muted" title="Просмотры">
               <ViewsIcon />
-              {engagement.viewCount}
+              {optimisticEng.viewCount}
             </span>
           ) : null}
         </div>
@@ -263,7 +465,7 @@ export function SongViewer({
         <div className="toolbar">
           <button
             type="button"
-            onClick={() => setTranspose((s) => Math.max(-11, s - 1))}
+            onClick={() => changeTranspose(transpose - 1)}
             className="icon-btn"
             aria-label="Понизить на полутон"
           >
@@ -275,7 +477,7 @@ export function SongViewer({
           </div>
           <button
             type="button"
-            onClick={() => setTranspose((s) => Math.min(11, s + 1))}
+            onClick={() => changeTranspose(transpose + 1)}
             className="icon-btn"
             aria-label="Повысить на полутон"
           >
@@ -284,7 +486,7 @@ export function SongViewer({
 
           <button
             type="button"
-            onClick={() => setShowChords((v) => !v)}
+            onClick={() => changeShowChords(!showChords)}
             className="btn btn-outline h-10 gap-2 px-3"
             aria-pressed={showChords}
             title={showChords ? 'Скрыть аккорды' : 'Показать аккорды'}
@@ -321,7 +523,7 @@ export function SongViewer({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setFontSize((f) => clampFont((f ?? FONT_DEFAULT) - FONT_STEP))}
+                  onClick={() => changeFontSize(clampFont((fontSize ?? FONT_DEFAULT) - FONT_STEP))}
                   className="icon-btn h-9 w-9 text-sm"
                   aria-label="Меньше"
                 >
@@ -330,7 +532,7 @@ export function SongViewer({
                 {fontSize !== null ? (
                   <button
                     type="button"
-                    onClick={() => setFontSize(null)}
+                    onClick={() => changeFontSize(null)}
                     className="btn btn-ghost h-9 px-2 text-xs"
                   >
                     сброс
@@ -338,7 +540,7 @@ export function SongViewer({
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => setFontSize((f) => clampFont((f ?? FONT_DEFAULT) + FONT_STEP))}
+                  onClick={() => changeFontSize(clampFont((fontSize ?? FONT_DEFAULT) + FONT_STEP))}
                   className="icon-btn h-9 w-9 text-lg"
                   aria-label="Больше"
                 >
@@ -357,7 +559,7 @@ export function SongViewer({
                 min={1}
                 max={8}
                 value={speed}
-                onChange={(e) => setSpeed(Number(e.target.value))}
+                onChange={(e) => changeSpeed(Number(e.target.value))}
               />
             </label>
 
@@ -380,7 +582,7 @@ export function SongViewer({
               {transpose !== 0 ? (
                 <button
                   type="button"
-                  onClick={() => setTranspose(0)}
+                  onClick={() => changeTranspose(0)}
                   className="btn btn-ghost h-9 px-2 text-sm"
                 >
                   Сбросить
@@ -389,15 +591,13 @@ export function SongViewer({
             </div>
           </div>
         ) : null}
+
+        {usedChords.length > 0 && pinChords ? chordBar : null}
       </div>
 
-      {usedChords.length > 0 ? (
-        <div className="chord-bar print-hide">
-          {usedChords.map((c) => (
-            <ChordCard key={c} name={c} customDefs={chordDefs} />
-          ))}
-        </div>
-      ) : null}
+      {/* Открепленная панель стоит на своём месте в потоке страницы;
+          закреплённая отрисована выше, внутри липкого блока с тулбаром. */}
+      {usedChords.length > 0 && !pinChords ? chordBar : null}
 
       {note ? (
         <div className="song-note">
@@ -421,7 +621,9 @@ export function SongViewer({
         <ChordSheet
           song={shapeSong}
           showChords={showChords}
-          renderChord={(c) => <InlineChord name={c} customDefs={chordDefs} />}
+          renderChord={(c) => (
+            <InlineChord name={c} instrument={inst.id} customDefs={chordDefs} />
+          )}
           interaction={
             interactive
               ? {
@@ -519,6 +721,22 @@ function BookmarkIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+function PinIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {/* Канцелярская кнопка (📌): шляпка, ножка и остриё вниз — «воткнули» */}
+      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.76V6h1a2 2 0 1 0 0-4H8a2 2 0 1 0 0 4h1v4.76a2 2 0 0 1-1.11 1.8l-1.78.89A2 2 0 0 0 5 15.24Z" />
+      <path d="M12 17v5" />
+    </svg>
+  );
+}
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="m20 6-11 11-5-5" />
     </svg>
   );
 }

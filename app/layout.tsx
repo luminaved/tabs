@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Spectral, Golos_Text } from 'next/font/google';
-import { SITE_NAME, SITE_URL } from '@/lib/site';
+import { SITE_NAME, SITE_TITLE, SITE_URL } from '@/lib/site';
 import './globals.css';
 
 // Антиква для заголовков + гротеск Golos (заточен под кириллицу) для интерфейса.
@@ -22,9 +22,9 @@ const golos = Golos_Text({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'tabs — аккорды и разборы песен на гитаре',
-    // Страницы задают свой заголовок; сюда подставляется хвост с брендом.
-    template: '%s | tabs',
+    default: SITE_TITLE,
+    // Страницы задают свой заголовок БЕЗ бренда — хвост подставляется здесь.
+    template: `%s | ${SITE_NAME}`,
   },
   description:
     'Аккорды песен на гитару: текст с аккордами над словами, аппликатуры, ' +
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     locale: 'ru_RU',
     url: '/',
-    title: 'tabs — аккорды и разборы песен на гитаре',
+    title: SITE_TITLE,
     description:
       'Аккорды песен на гитару: текст с аккордами над словами, аппликатуры и транспонирование.',
   },

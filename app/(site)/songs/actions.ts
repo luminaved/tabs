@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/session';
 import { createSong, deleteSong, updateSong, type SongInput, type SongVisibility } from '@/lib/songs';
+import { parseInstrumentId } from '@/lib/chords/instruments';
 
 export interface SongFormState {
   error?: string;
@@ -33,6 +34,7 @@ function parseForm(formData: FormData): SongInput | { error: string } {
     coverUrl: coverUrl.startsWith('data:image/') ? coverUrl : null,
     chordDefs: String(formData.get('chordDefs') ?? '') || null,
     visibility,
+    instrument: parseInstrumentId(String(formData.get('instrument') ?? '')),
   };
 }
 

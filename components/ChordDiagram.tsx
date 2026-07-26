@@ -1,42 +1,77 @@
 import type { Barre, ChordFrets } from '@/lib/chords/diagrams';
 
+// Единицы viewBox: шаг между струнами и поля по краям.
+const STRING_GAP = 8.8;
+const EDGE = 9;
+/** Ширина шестиструнной диаграммы — эталон, к которому приводится `size`. */
+const REFERENCE_W = EDGE * 2 + 5 * STRING_GAP;
+
+/** Внутренняя ширина холста для N струн. */
+function canvasWidth(strings: number): number {
+  return EDGE * 2 + (strings - 1) * STRING_GAP;
+}
+
 /**
- * Диаграмма аккорда: 6 струн × 4-5 ладов. Точки — прижатые струны,
- * o/x сверху — открытая/заглушённая, палка — баррэ. Если аккорд высоко на
- * грифе — подпись лада.
+ * Ширина картинки в пикселях: `size` задаёт размер ШЕСТИСТРУННОЙ диаграммы,
+ * а диаграмма с другим числом струн масштабируется пропорционально — чтобы шаг
+ * между струнами был одинаковым у гитары и укулеле, а не растягивался.
+ */
+export function diagramWidth(strings: number, size: number): number {
+  return (size * canvasWidth(strings)) / REFERENCE_W;
+}
+
+/** Высота картинки для заданной ширины (пропорции холста постоянны). */
+export function diagramHeight(strings: number, size: number): number {
+  return (diagramWidth(strings, size) * 74) / canvasWidth(strings);
+}
+
+/**
+ * Диаграмма аккорда: N струн × 4 лада. Точки — прижатые струны, ○/× сверху —
+ * открытая/заглушённая, палка — баррэ. Если аккорд высоко на грифе — подпись
+ * начального лада.
+ *
+ * Число струн берётся из самой формы, поэтому один компонент рисует и гитару
+ * (6), и укулеле (4). Ширина картинки подстраивается под число струн, чтобы
+ * промежуток между ними оставался одинаковым на всех инструментах.
  */
 export function ChordDiagram({
   frets,
   barres = [],
   name,
-  size = 62,
+  size,
 }: {
   frets: ChordFrets;
   barres?: Barre[];
   name?: string;
+  /** Размер в пикселях по мерке шестиструнной диаграммы (см. `diagramWidth`). */
   size?: number;
 }) {
   const FRETS = 4;
+  const strings = Math.max(frets.length, 2);
+
   const positives = frets.filter((f) => f > 0);
   const maxFret = positives.length ? Math.max(...positives) : 0;
   const minFret = positives.length ? Math.min(...positives) : 0;
   const base = maxFret > FRETS ? minFret : 1; // окно грифа
 
-  const W = 62;
-  const H = 74;
-  const left = 9;
-  const right = 53;
+  // Геометрия в единицах viewBox: шаг между струнами фиксирован, ширина
+  // холста растёт от числа струн (у укулеле диаграмма уже гитарной).
+  const left = EDGE;
+  const right = left + (strings - 1) * STRING_GAP;
   const top = 16;
   const bottom = 66;
-  const stringGap = (right - left) / 5;
+  const W = canvasWidth(strings);
+  const H = 74;
   const fretGap = (bottom - top) / FRETS;
-  const x = (s: number) => left + s * stringGap; // s: 0..5 (6-я→1-я струна)
+  const x = (s: number) => left + s * STRING_GAP;
   const y = (f: number) => top + f * fretGap;
+
+  const width = diagramWidth(strings, size ?? REFERENCE_W);
 
   return (
     <svg
-      width={size}
-      height={(size * H) / W}
+      width={width}
+      height={(width * H) / W}
       viewBox={`0 0 ${W} ${H}`}
       role="img"
       aria-label={name ? `Аккорд ${name}` : 'Аккорд'}
@@ -55,7 +90,7 @@ export function ChordDiagram({
         <line key={`f${i}`} x1={left} y1={y(i)} x2={right} y2={y(i)} stroke="currentColor" strokeWidth={0.8} opacity="0.35" />
       ))}
       {/* Струны */}
-      {Array.from({ length: 6 }).map((_, s) => (
+      {Array.from({ length: strings }).map((_, s) => (
         <line key={`s${s}`} x1={x(s)} y1={top} x2={x(s)} y2={bottom} stroke="currentColor" strokeWidth={0.8} opacity="0.35" />
       ))}
 

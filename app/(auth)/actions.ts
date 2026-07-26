@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { AuthError } from 'next-auth';
+import { Prisma } from '@prisma/client';
 import { googleEnabled, signIn } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/password';
@@ -55,7 +56,17 @@ export async function registerAction(
   if (existing) return { error: 'Пользователь с таким email уже существует' };
 
   const passwordHash = await hashPassword(password);
-  await prisma.user.create({ data: { email, name, passwordHash } });
+  try {
+    await prisma.user.create({ data: { email, name, passwordHash } });
+  } catch (error) {
+    // Между проверкой выше и вставкой адрес мог занять параллельный запрос
+    // (две отправки формы подряд — обычное дело). Уникальный индекс отработает,
+    // но без этой ветки пользователь получил бы 500 вместо понятного текста.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return { error: 'Пользователь с таким email уже существует' };
+    }
+    throw error;
+  }
 
   try {
     await signIn('credentials', { email, password, redirectTo: '/' });

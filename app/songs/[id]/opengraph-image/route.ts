@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { prisma } from '@/lib/db';
+import { getInstrument } from '@/lib/chords/instruments';
 
 /**
  * Картинка для превью ссылки (Telegram/VK/WhatsApp/Twitter) — 1200×630.
@@ -24,19 +25,31 @@ const ACCENT = '#e6a23c';
 const CACHE_LIMIT = 60;
 const cache = new Map<string, Buffer>();
 
-// Вордмарк и нотный значок — латиница/примитивы, поэтому рисуются одинаково
-// на любой системе (кириллицу в картинку принципиально не выводим).
+// Вордмарк — латиница, поэтому рисуется одинаково на любой системе (кириллицу
+// в картинку принципиально не выводим). Разбивка «Raw» акцентом + «Chords»
+// основным цветом повторяет шапку сайта: превью ссылки в мессенджере должно
+// узнаваться как та же марка.
 const wordmark = Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}">
      <text x="60" y="90" font-family="Georgia, 'Times New Roman', serif" font-size="46"
-           font-weight="600" fill="#f5efe6">tabs<tspan fill="${ACCENT}">.</tspan></text>
+           font-weight="600" fill="#f5efe6"><tspan fill="${ACCENT}">Raw</tspan>Chords</text>
      <text x="60" y="570" font-family="Arial, Helvetica, sans-serif" font-size="28"
            fill="${ACCENT}" opacity="0.95">chords &amp; tabs</text>
    </svg>`,
 );
 
-/** Заглушка для разборов без обложки: фирменный фон + грифовый мотив. */
-function placeholder(): Buffer {
+/**
+ * Заглушка для разборов без обложки: фирменный фон + грифовый мотив.
+ * Число струн — по инструменту (у укулеле их четыре), мотив центрируется.
+ */
+function placeholder(strings = 6): Buffer {
+  const gap = 50;
+  const top = 315 - ((strings - 1) * gap) / 2;
+  const dots = [0.25, 0.55, 0.4].map((k, i) => ({
+    cx: 520 + i * 60,
+    cy: top + Math.round((strings - 1) * gap * k),
+  }));
+
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}">
        <defs>
@@ -47,11 +60,10 @@ function placeholder(): Buffer {
        </defs>
        <rect width="100%" height="100%" fill="url(#g)"/>
        <g stroke="${ACCENT}" stroke-width="4" stroke-linecap="round" opacity="0.30">
-         ${[0, 1, 2, 3, 4, 5].map((i) => `<path d="M420 ${190 + i * 50}h360"/>`).join('')}
+         ${Array.from({ length: strings }, (_, i) => `<path d="M420 ${top + i * gap}h360"/>`).join('')}
        </g>
        <g fill="${ACCENT}">
-         <circle cx="520" cy="240" r="14"/><circle cx="640" cy="340" r="14"/>
-         <circle cx="560" cy="440" r="14"/>
+         ${dots.map((d) => `<circle cx="${d.cx}" cy="${d.cy}" r="14"/>`).join('')}
        </g>
      </svg>`,
   );
@@ -62,9 +74,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const song = await prisma.song.findUnique({
     where: { id },
-    select: { coverUrl: true, visibility: true, updatedAt: true },
+    select: { coverUrl: true, visibility: true, updatedAt: true, instrument: true },
   });
   if (!song || song.visibility === 'private') return new Response(null, { status: 404 });
+
+  const strings = getInstrument(song.instrument).strings;
 
   const key = `${id}:${song.updatedAt.getTime()}`;
   const hit = cache.get(key);
@@ -97,13 +111,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer();
     } else {
-      out = await sharp(placeholder())
+      out = await sharp(placeholder(strings))
         .composite([{ input: wordmark, top: 0, left: 0 }])
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer();
     }
   } catch {
-    out = await sharp(placeholder()).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+    out = await sharp(placeholder(strings)).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
   }
 
   if (cache.size >= CACHE_LIMIT) {

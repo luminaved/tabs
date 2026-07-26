@@ -1,8 +1,8 @@
 {
-  "name": "tabs",
+  "name": "rawchords",
   "version": "0.1.0",
   "private": true,
-  "description": "Личный песенник: тексты с аккордами (ChordPro), транспонирование, капо, аннотации, сетлисты",
+  "description": "RawChords — аккорды и разборы песен: тексты с аккордами (ChordPro), аппликатуры, транспонирование, капо, аннотации",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -25,7 +25,8 @@
     "next": "^15.1.6",
     "next-auth": "^5.0.0-beta.25",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

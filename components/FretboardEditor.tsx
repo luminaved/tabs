@@ -1,22 +1,33 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { Barre, ChordFrets, ChordShape } from '@/lib/chords/diagrams';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import type { ChordFrets, ChordShape } from '@/lib/chords/diagrams';
+import { getInstrument, type Instrument, type InstrumentId } from '@/lib/chords/instruments';
 
-// Струны от 6-й (толстой) к 1-й, стандартный строй.
-const STRING_LABELS = ['E', 'A', 'D', 'G', 'B', 'e'];
 const ROWS = 5;
-const EMPTY_FRETS: ChordFrets = [-1, -1, -1, -1, -1, -1];
 
-/** Интерактивный гриф: выбор начального лада + клик по струнам + баррэ. */
+/**
+ * Интерактивный гриф: выбор начального лада + клик по струнам + баррэ.
+ * Число струн и их подписи берутся из инструмента (6 у гитары, 4 у укулеле).
+ */
 export function FretboardEditor({
   value,
   onChange,
+  instrument,
 }: {
   value: ChordShape;
   onChange: (v: ChordShape) => void;
+  instrument?: Instrument | InstrumentId | null;
 }) {
-  const frets = value.frets ?? EMPTY_FRETS;
+  const inst =
+    typeof instrument === 'object' && instrument ? instrument : getInstrument(instrument);
+  const labels = inst.labels;
+  const emptyFrets = useMemo<ChordFrets>(
+    () => Array.from({ length: inst.strings }, () => -1),
+    [inst.strings],
+  );
+
+  const frets = value.frets ?? emptyFrets;
   const barres = value.barres ?? [];
   const positives = frets.filter((f) => f > 0);
   const suggested = positives.length && Math.max(...positives) > ROWS ? Math.min(...positives) : 1;
@@ -85,7 +96,7 @@ export function FretboardEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag, frets, barres, base]);
 
-  // Геометрия сетки для абсолютной палки: 6 колонок по 2rem, gap 3px; строка
+  // Геометрия сетки для абсолютной палки: колонки по 2rem, gap 3px; строка
   // «головы» 1.4rem, затем ряды ладов по 2rem. Точка 1rem по центру ячейки.
   const barStyle = (fret: number, from: number, to: number) => {
     const row = fret - base;
@@ -114,8 +125,11 @@ export function FretboardEditor({
         </button>
       </div>
 
-      <div className={base === 1 ? 'fb-grid fb-grid--nut' : 'fb-grid'}>
-        {STRING_LABELS.map((_, s) => {
+      <div
+        className={base === 1 ? 'fb-grid fb-grid--nut' : 'fb-grid'}
+        style={{ '--fb-strings': inst.strings } as CSSProperties}
+      >
+        {labels.map((_, s) => {
           const cur = frets[s];
           return (
             <button key={`h${s}`} type="button" className="fb-head" onClick={() => cycleHead(s)}>
@@ -126,18 +140,23 @@ export function FretboardEditor({
 
         {Array.from({ length: ROWS }).map((_, r) => {
           const fret = base + r;
-          return STRING_LABELS.map((_, s) => {
+          return labels.map((_, s) => {
             const on = frets[s] === fret;
+            // Верхний ряд помечаем классом: по нему рисуется порожек, когда
+            // гриф показан от первого лада (nth-child считал бы струны).
+            const cls = ['fb-cell', r === 0 && 'fb-cell--top', on && 'fb-cell--on']
+              .filter(Boolean)
+              .join(' ');
             return (
               <button
                 key={`${r}-${s}`}
                 type="button"
-                className={on ? 'fb-cell fb-cell--on' : 'fb-cell'}
+                className={cls}
                 onPointerDown={() => setDrag({ row: r, from: s, to: s })}
                 onPointerEnter={() =>
                   setDrag((d) => (d && d.row === r ? { ...d, to: s } : d))
                 }
-                aria-label={`струна ${6 - s}, лад ${fret}`}
+                aria-label={`струна ${inst.strings - s}, лад ${fret}`}
               >
                 {on ? <span className="fb-dot" /> : null}
               </button>
@@ -156,7 +175,7 @@ export function FretboardEditor({
           <span className="fb-barre fb-barre--pending" style={barStyle(pending.fret, pending.from, pending.to)} />
         ) : null}
 
-        {STRING_LABELS.map((l, s) => (
+        {labels.map((l, s) => (
           <span key={`l${s}`} className="fb-label">
             {l}
           </span>

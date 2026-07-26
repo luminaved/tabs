@@ -7,7 +7,7 @@ import { DeleteSongForm } from '@/components/DeleteSongForm';
 import { updateSongAction } from '../../actions';
 
 export const metadata: Metadata = {
-  title: 'Редактирование — tabs',
+  title: 'Редактирование',
   robots: { index: false, follow: false },
 };
 
@@ -36,6 +36,7 @@ export default async function EditSongPage({ params }: { params: Promise<{ id: s
           coverUrl: song.coverUrl,
           chordDefs: song.chordDefs,
           visibility: song.visibility,
+          instrument: song.instrument,
         }}
       />
 

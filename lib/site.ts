@@ -12,8 +12,19 @@ export const SITE_URL = (
   'http://localhost:3000'
 ).replace(/\/$/, '');
 
-export const SITE_NAME = 'tabs';
+/**
+ * Имя бренда. Живёт ровно здесь: заголовок вкладки, og:site_name,
+ * applicationName, структурированные данные и картинка превью берут его
+ * отсюда, чтобы переименование не пришлось ловить по файлам.
+ *
+ * Страницы НЕ дописывают бренд в свой `title` — его добавляет шаблон в
+ * корневом layout (`%s | RawChords`). Иначе выходило «Демо — tabs | tabs».
+ */
+export const SITE_NAME = 'RawChords';
 export const SITE_TAGLINE = 'аккорды и разборы песен на гитаре';
+
+/** Заголовок главной и значение по умолчанию для страниц без своего. */
+export const SITE_TITLE = `${SITE_NAME} — ${SITE_TAGLINE}`;
 
 /** Абсолютный URL из пути (`/songs/x` → `https://site/songs/x`). */
 export function absoluteUrl(path: string): string {

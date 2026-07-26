@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getChordShape, parseFrets } from './diagrams';
+import { getChordShape, parseChordDefs, parseFrets } from './diagrams';
 
 describe('getChordShape', () => {
   it('встроенные open-аккорды', () => {
@@ -40,14 +40,14 @@ describe('getChordShape', () => {
   });
 
   it('кастомная аппликатура имеет приоритет', () => {
-    expect(getChordShape('2Н', { '2Н': { frets: [-1, -1, 3, 3, 3, -1] } })).toEqual({
+    expect(getChordShape('2Н', 'guitar', { '2Н': { frets: [-1, -1, 3, 3, 3, -1] } })).toEqual({
       frets: [-1, -1, 3, 3, 3, -1],
     });
   });
 
   it('кастомная аппликатура с баррэ', () => {
     const shape = { frets: [1, 3, 3, 2, 1, 1], barres: [{ fret: 1, from: 0, to: 5 }] };
-    expect(getChordShape('Fbar', { Fbar: shape })).toEqual(shape);
+    expect(getChordShape('Fbar', 'guitar', { Fbar: shape })).toEqual(shape);
   });
 
   it('квинты (power chords) в нотации лад+В/Н', () => {
@@ -65,6 +65,15 @@ describe('getChordShape', () => {
   it('без формы — null', () => {
     expect(getChordShape('Csus4')).toBeNull();
     expect(getChordShape('Xyz')).toBeNull();
+  });
+});
+
+describe('parseChordDefs', () => {
+  it('формы с чужим числом струн отбрасываются', () => {
+    const json = JSON.stringify({ Am: [-1, 0, 2, 2, 1, 0], X: [0, 0, 0, 3] });
+    // Шестиструнная форма подходит гитаре, четырёхструнная — укулеле.
+    expect(Object.keys(parseChordDefs(json, 'guitar'))).toEqual(['Am']);
+    expect(Object.keys(parseChordDefs(json, 'ukulele'))).toEqual(['X']);
   });
 });
 

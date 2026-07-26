@@ -1,6 +1,9 @@
 import { cache } from 'react';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from './db';
+import type { InstrumentId } from './chords/instruments';
+import { buildSearchText, searchQueryForLike } from './chordpro/searchText';
+import { withChordChips } from './chordpro/usedChords';
 
 export type SongVisibility = 'private' | 'unlisted' | 'public';
 
@@ -14,13 +17,17 @@ export interface SongInput {
   coverUrl?: string | null;
   chordDefs?: string | null;
   visibility: SongVisibility;
+  instrument: InstrumentId;
 }
 
 function normalize(input: SongInput) {
   const coverUrl = input.coverUrl?.trim() || null;
+  const title = input.title.trim();
+  const artist = input.artist?.trim() || null;
   return {
-    title: input.title.trim(),
-    artist: input.artist?.trim() || null,
+    title,
+    artist,
+    searchText: buildSearchText({ title, artist, body: input.body }),
     key: input.key?.trim() || null,
     tempo: input.tempo ?? null,
     body: input.body,
@@ -29,16 +36,43 @@ function normalize(input: SongInput) {
     hasCover: !!coverUrl, // держим флаг в согласии с картинкой
     chordDefs: input.chordDefs?.trim() || null,
     visibility: input.visibility,
+    instrument: input.instrument,
   };
 }
 
 /**
- * «Мои песни» — только собственные разборы пользователя (любой видимости).
- * Текстовый поиск по названию/исполнителю — на стороне JS.
+ * Условие текстового поиска — считается в БД.
+ *
+ * Ищем по денормализованной колонке `searchText` (название + исполнитель +
+ * слова песни без разметки), поэтому находится и строчка из середины песни —
+ * а люди помнят именно строчку, а не название. Колонка уже в нижнем регистре,
+ * так что запрос приводим к нему же и обходимся без `mode: 'insensitive'`.
+ *
+ * Раньше поиск фильтровал уже выбранную страницу на стороне JS: выборка
+ * сначала обрезалась потолком, и песня за его пределами не находилась вовсе.
+ * Теперь фильтр уходит в `where` — до `take`, поэтому ищется вся база.
+ *
+ * Маски LIKE в запросе экранируются (см. `searchQueryForLike`).
  */
-export async function listSongs(viewerId: string, filters: { query?: string }) {
+function searchFilter(query?: string): Prisma.SongWhereInput {
+  const q = searchQueryForLike(query);
+  if (!q) return {};
+  return { searchText: { contains: q } };
+}
+
+/**
+ * «Мои песни» — только собственные разборы пользователя (любой видимости).
+ */
+export async function listSongs(
+  viewerId: string,
+  filters: { query?: string; instrument?: InstrumentId },
+) {
   const rows = await prisma.song.findMany({
-    where: { userId: viewerId },
+    where: {
+      userId: viewerId,
+      ...(filters.instrument ? { instrument: filters.instrument } : {}),
+      ...searchFilter(filters.query),
+    },
     orderBy: { updatedAt: 'desc' },
     select: {
       id: true,
@@ -47,22 +81,39 @@ export async function listSongs(viewerId: string, filters: { query?: string }) {
       key: true,
       body: true,
       hasCover: true,
+      instrument: true,
+      verified: true,
       visibility: true,
       updatedAt: true,
       viewCount: true,
       _count: { select: { likes: true } },
     },
   });
+  return rows.map(withChordChips);
+}
 
-  const q = filters.query?.trim().toLowerCase();
-  if (!q) return rows;
-  return rows.filter(
-    (r) => r.title.toLowerCase().includes(q) || (r.artist ?? '').toLowerCase().includes(q),
-  );
+/** Сколько своих разборов у пользователя по каждому инструменту. */
+export async function countOwnByInstrument(
+  viewerId: string,
+): Promise<Record<InstrumentId, number>> {
+  const rows = await prisma.song.groupBy({
+    by: ['instrument'],
+    where: { userId: viewerId },
+    _count: { _all: true },
+  });
+  const out: Record<InstrumentId, number> = { guitar: 0, ukulele: 0 };
+  for (const r of rows) {
+    const id = r.instrument === 'ukulele' ? 'ukulele' : 'guitar';
+    out[id] += r._count._all;
+  }
+  return out;
 }
 
 /** Сколько разборов отдаём в каталог за раз. */
 const CATALOG_LIMIT = 60;
+
+/** Размер одной порции каталога («Показать ещё» подгружает следующую). */
+export const CATALOG_PAGE_SIZE = 24;
 
 /** Порядок в каталоге: новые / популярные (просмотры) / любимые (лайки). */
 export type SongSort = 'new' | 'views' | 'likes';
@@ -78,44 +129,144 @@ export function parseSort(value: string | undefined): SongSort {
   return value === 'views' || value === 'likes' ? value : 'new';
 }
 
+// Поля строки каталога. `body` нужен, чтобы посчитать чипы аккордов, но наружу
+// не отдаётся — см. `withChordChips`. coverUrl (тяжёлый base64) не выбираем:
+// картинку отдаёт отдельный маршрут /covers/[id].
+const catalogSelect = {
+  id: true,
+  title: true,
+  artist: true,
+  key: true,
+  body: true,
+  hasCover: true,
+  instrument: true,
+  verified: true,
+  updatedAt: true,
+  viewCount: true,
+  user: { select: { id: true, name: true } },
+  _count: { select: { likes: true } },
+} satisfies Prisma.SongSelect;
+
+type CatalogRecord = Prisma.SongGetPayload<{ select: typeof catalogSelect }>;
+
+/** Строка каталога, как она уходит в разметку и на клиент: без текста песни. */
+export type CatalogSong = Omit<CatalogRecord, 'body'> & { chords: string[] };
+
+export interface CatalogPage {
+  songs: CatalogSong[];
+  /** Есть ли следующая порция — знаем без COUNT, взяв на одну строку больше. */
+  hasMore: boolean;
+  /** Точных совпадений не нашлось — показаны похожие (вероятно, опечатка). */
+  fuzzy?: boolean;
+}
+
+/**
+ * Порог близости для подбора при опечатке (word_similarity из pg_trgm).
+ * Замерено на живых примерах: «влеченте» → «влечение» даёт 0.667,
+ * «вличение» → 0.500, «маршрудка» → «маршрутка» 0.600. Ниже 0.45 в выдачу
+ * начинает попадать случайное.
+ *
+ * Обычная `similarity` здесь не годится: она нормируется на длину всей строки,
+ * и короткий запрос против текста песни целиком даёт ~0.04. `word_similarity`
+ * сравнивает запрос с самым похожим участком текста — то, что нужно.
+ */
+const FUZZY_THRESHOLD = 0.45;
+
+/** Короче этого подбор не запускаем — см. комментарий у места вызова. */
+const FUZZY_MIN_QUERY = 3;
+
+/**
+ * Похожие разборы при опечатке в запросе. Возвращает id по убыванию близости.
+ * Требует расширения pg_trgm (см. scripts/setup-search.mjs).
+ */
+async function fuzzyMatchIds(
+  query: string,
+  instrument: InstrumentId | undefined,
+  verified: boolean,
+  limit: number,
+): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id"
+    FROM "Song"
+    WHERE "visibility" = 'public'
+      ${instrument ? Prisma.sql`AND "instrument" = ${instrument}` : Prisma.empty}
+      ${verified ? Prisma.sql`AND "verified" = true` : Prisma.empty}
+      AND word_similarity(${query}, "searchText") >= ${FUZZY_THRESHOLD}
+    ORDER BY word_similarity(${query}, "searchText") DESC, "viewCount" DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((r) => r.id);
+}
+
 /**
  * Публичный каталог: только песни с visibility "public" (со всех аккаунтов).
- * Приватные и «по ссылке» сюда не попадают. Поиск — на стороне JS.
+ * Приватные и «по ссылке» сюда не попадают.
+ *
+ * Выдача постраничная: `page` (с нуля) × `CATALOG_PAGE_SIZE`. Поиск считается
+ * в БД (см. `searchFilter`), поэтому находится вся база, а не первая страница.
  */
 export async function listPublicSongs(filters: {
   query?: string;
   key?: string;
   sort?: SongSort;
-}) {
+  page?: number;
+  /** Каталог одного инструмента; без него — разборы для всех инструментов. */
+  instrument?: InstrumentId;
+  /** Только подтверждённые модератором разборы. */
+  verified?: boolean;
+}): Promise<CatalogPage> {
+  const page = Math.max(0, Math.trunc(filters.page ?? 0));
   const where: Prisma.SongWhereInput = {
     visibility: 'public',
+    ...(filters.instrument ? { instrument: filters.instrument } : {}),
+    ...(filters.verified ? { verified: true } : {}),
     ...(filters.key ? { key: filters.key } : {}),
+    ...searchFilter(filters.query),
   };
 
   const rows = await prisma.song.findMany({
     where,
-    orderBy: SORT_ORDER[filters.sort ?? 'new'],
-    // Потолок выдачи: каталог не должен расти линейно вместе с базой.
-    take: CATALOG_LIMIT,
-    select: {
-      id: true,
-      title: true,
-      artist: true,
-      key: true,
-      body: true,
-      hasCover: true,
-      updatedAt: true,
-      viewCount: true,
-      user: { select: { id: true, name: true } },
-      _count: { select: { likes: true } },
-    },
+    // id в хвосте сортировки: без него строки с одинаковым ключом могут
+    // разъезжаться между страницами и дублироваться при подгрузке.
+    orderBy: [...SORT_ORDER[filters.sort ?? 'new'], { id: 'desc' }],
+    skip: page * CATALOG_PAGE_SIZE,
+    // На одну больше запрошенного — так узнаём про следующую порцию.
+    take: CATALOG_PAGE_SIZE + 1,
+    select: catalogSelect,
   });
 
+  if (rows.length > 0) {
+    return {
+      songs: rows.slice(0, CATALOG_PAGE_SIZE).map(withChordChips),
+      hasMore: rows.length > CATALOG_PAGE_SIZE,
+    };
+  }
+
+  // Точных совпадений нет — пробуем понять, что человек имел в виду.
+  // Только для первой страницы: «показаны похожие» — спасательный проход,
+  // листать его незачем.
+  // Короткие запросы в подбор не пускаем: у односимвольного близость к любому
+  // слову с этой буквой равна 1.0, и «похожим» оказывается весь каталог.
   const q = filters.query?.trim().toLowerCase();
-  if (!q) return rows;
-  return rows.filter(
-    (r) => r.title.toLowerCase().includes(q) || (r.artist ?? '').toLowerCase().includes(q),
-  );
+  if (!q || q.length < FUZZY_MIN_QUERY || page > 0) return { songs: [], hasMore: false };
+
+  // Подбор уважает тот же отбор: иначе при включённом «только подтверждённые»
+  // опечатка возвращала бы неподтверждённые разборы.
+  const ids = await fuzzyMatchIds(q, filters.instrument, !!filters.verified, CATALOG_PAGE_SIZE);
+  if (ids.length === 0) return { songs: [], hasMore: false };
+
+  const found = await prisma.song.findMany({
+    where: { id: { in: ids } },
+    select: catalogSelect,
+  });
+  // findMany не сохраняет порядок из `in` — восстанавливаем его по близости.
+  const byId = new Map(found.map((s) => [s.id, s]));
+  const songs = ids
+    .map((id) => byId.get(id))
+    .filter((s): s is CatalogRecord => !!s)
+    .map(withChordChips);
+
+  return { songs, hasMore: false, fuzzy: true };
 }
 
 /**
@@ -125,7 +276,7 @@ export async function listPublicSongs(filters: {
 export const listSongsByArtist = cache(async function listSongsByArtist(artist: string) {
   const name = artist.trim();
   if (!name) return [];
-  return prisma.song.findMany({
+  const rows = await prisma.song.findMany({
     where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
     orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
     take: CATALOG_LIMIT,
@@ -136,11 +287,14 @@ export const listSongsByArtist = cache(async function listSongsByArtist(artist: 
       key: true,
       body: true,
       hasCover: true,
+      instrument: true,
+      verified: true,
       updatedAt: true,
       viewCount: true,
       _count: { select: { likes: true } },
     },
   });
+  return rows.map(withChordChips);
 });
 
 /** Точное написание имени исполнителя, как оно хранится (для заголовка). */
@@ -213,6 +367,8 @@ export const getSongForViewer = cache(async function getSongForViewer(
       note: true,
       chordDefs: true,
       hasCover: true,
+      instrument: true,
+      verified: true,
       visibility: true,
       viewCount: true,
       userId: true,

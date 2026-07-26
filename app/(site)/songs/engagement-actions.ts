@@ -1,22 +1,37 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/session';
+import { prisma } from '@/lib/db';
 import { toggleFavorite, toggleLike } from '@/lib/engagement';
 
-export async function toggleLikeAction(formData: FormData): Promise<void> {
+/**
+ * Переключатели лайка и избранного.
+ *
+ * Намеренно БЕЗ `revalidatePath`: любая ревалидация в серверном экшене
+ * заставляет роутер перерисовать текущий маршрут, а вместе с ним сбрасывались
+ * транспонирование, размер шрифта и позиция прокрутки читалки. Вместо этого
+ * экшен возвращает новое состояние, а страница показывает его оптимистично.
+ *
+ * Каталог от этого не устаревает: он рендерится динамически на каждый запрос,
+ * поэтому кэш маршрута инвалидировать нечего.
+ */
+
+export async function toggleLikeAction(
+  songId: string,
+): Promise<{ liked: boolean; likeCount: number }> {
   const user = await requireUser();
-  const songId = String(formData.get('songId') ?? '');
-  if (!songId) return;
-  await toggleLike(user.id, songId);
-  revalidatePath(`/songs/${songId}`);
-  revalidatePath('/'); // счётчик лайков в каталоге
+  if (!songId) return { liked: false, likeCount: 0 };
+
+  const liked = await toggleLike(user.id, songId);
+  // Счётчик перечитываем, а не считаем на клиенте: лайкать могли параллельно.
+  const likeCount = await prisma.like.count({ where: { songId } });
+  return { liked, likeCount };
 }
 
-export async function toggleFavoriteAction(formData: FormData): Promise<void> {
+export async function toggleFavoriteAction(songId: string): Promise<{ favorited: boolean }> {
   const user = await requireUser();
-  const songId = String(formData.get('songId') ?? '');
-  if (!songId) return;
-  await toggleFavorite(user.id, songId);
-  revalidatePath(`/songs/${songId}`);
+  if (!songId) return { favorited: false };
+
+  const favorited = await toggleFavorite(user.id, songId);
+  return { favorited };
 }

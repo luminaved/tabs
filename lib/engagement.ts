@@ -1,22 +1,32 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from './db';
+import type { InstrumentId } from './chords/instruments';
+import { searchQueryForLike } from './chordpro/searchText';
+import { withChordChips } from './chordpro/usedChords';
 
 // Поля песни для строки списка (каталог/кабинет).
 // Внимание: coverUrl (тяжёлый base64) здесь НЕ выбирается — списки берут только
 // флаг hasCover, а картинка приходит отдельным кэшируемым запросом /covers/[id].
+// `body` нужен только чтобы посчитать чипы аккордов, наружу уходит уже готовый
+// список (см. `withChordChips`).
 const cardSelect = {
   id: true,
   title: true,
   artist: true,
   key: true,
   hasCover: true,
+  instrument: true,
+  verified: true,
   updatedAt: true,
   body: true,
   viewCount: true,
   _count: { select: { likes: true } },
 } satisfies Prisma.SongSelect;
 
-export type SongCard = Prisma.SongGetPayload<{ select: typeof cardSelect }>;
+type SongCardRecord = Prisma.SongGetPayload<{ select: typeof cardSelect }>;
+
+/** Строка списка, как её получает разметка: со списком аккордов вместо текста. */
+export type SongCard = Omit<SongCardRecord, 'body'> & { chords: string[] };
 
 // Только видимые песни: чужие приватные не показываем даже если лайкнуты.
 const visibleToUser = (userId: string): Prisma.SongWhereInput => ({
@@ -30,7 +40,7 @@ export async function listFavoriteSongs(userId: string): Promise<SongCard[]> {
     orderBy: { createdAt: 'desc' },
     select: { song: { select: cardSelect } },
   });
-  return rows.map((r) => r.song);
+  return rows.map((r) => withChordChips(r.song));
 }
 
 /** Лайкнутые песни пользователя. */
@@ -40,26 +50,63 @@ export async function listLikedSongs(userId: string): Promise<SongCard[]> {
     orderBy: { createdAt: 'desc' },
     select: { song: { select: cardSelect } },
   });
-  return rows.map((r) => r.song);
+  return rows.map((r) => withChordChips(r.song));
 }
 
-/** Публичные разборы пользователя (для страницы автора). */
-export function listUserPublicSongs(userId: string): Promise<SongCard[]> {
-  return prisma.song.findMany({
-    where: { userId, visibility: 'public' },
+/**
+ * Публичные разборы пользователя (для страницы автора).
+ * Поиск и фильтр по инструменту считаются в БД, как и в каталоге.
+ */
+export async function listUserPublicSongs(
+  userId: string,
+  filters: { instrument?: InstrumentId; query?: string } = {},
+): Promise<SongCard[]> {
+  // По той же денормализованной колонке, что и каталог, — чтобы у автора
+  // тоже находилась строчка из середины песни (и с тем же экранированием масок).
+  const q = searchQueryForLike(filters.query);
+  const rows = await prisma.song.findMany({
+    where: {
+      userId,
+      visibility: 'public',
+      ...(filters.instrument ? { instrument: filters.instrument } : {}),
+      ...(q ? { searchText: { contains: q } } : {}),
+    },
     orderBy: { updatedAt: 'desc' },
     select: cardSelect,
   });
+  return rows.map(withChordChips);
 }
 
-/** Счётчики для кабинета: избранное, лайкнутое, свои песни. */
+/**
+ * Сколько публичных разборов у автора по каждому инструменту.
+ * Считается всегда без учёта поиска — вкладки не должны исчезать по мере ввода.
+ */
+export async function countUserPublicByInstrument(
+  userId: string,
+): Promise<Record<InstrumentId, number>> {
+  const rows = await prisma.song.groupBy({
+    by: ['instrument'],
+    where: { userId, visibility: 'public' },
+    _count: { _all: true },
+  });
+  const out: Record<InstrumentId, number> = { guitar: 0, ukulele: 0 };
+  for (const r of rows) {
+    out[r.instrument === 'ukulele' ? 'ukulele' : 'guitar'] += r._count._all;
+  }
+  return out;
+}
+
+/**
+ * Счётчики для кабинета: избранное и лайкнутое. Свои разборы считает
+ * `countOwnByInstrument` в [songs.ts](./songs.ts) — они показываются по
+ * инструментам, отдельный общий счётчик был бы лишним запросом.
+ */
 export async function getLibraryCounts(userId: string) {
-  const [favorites, liked, own] = await Promise.all([
+  const [favorites, liked] = await Promise.all([
     prisma.favorite.count({ where: { userId } }),
     prisma.like.count({ where: { userId } }),
-    prisma.song.count({ where: { userId } }),
   ]);
-  return { favorites, liked, own };
+  return { favorites, liked };
 }
 
 /** Переключить лайк. Возвращает true, если стало «лайкнуто». */

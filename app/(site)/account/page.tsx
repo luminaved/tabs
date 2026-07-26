@@ -5,11 +5,12 @@ import { requireUser } from '@/lib/session';
 import { signOut } from '@/lib/auth';
 import { getUserProfile } from '@/lib/users';
 import { getLibraryCounts, listFavoriteSongs, listLikedSongs } from '@/lib/engagement';
+import { countOwnByInstrument } from '@/lib/songs';
 import { SongRow } from '@/components/SongRow';
 import { ProfileEditor } from '@/components/ProfileEditor';
 
 export const metadata: Metadata = {
-  title: 'Личный кабинет — tabs',
+  title: 'Личный кабинет',
   robots: { index: false, follow: false },
 };
 
@@ -22,9 +23,10 @@ export default async function AccountPage({
   const sp = await searchParams;
   const tab = sp.tab === 'liked' ? 'liked' : 'favorites';
 
-  const [profile, counts, songs] = await Promise.all([
+  const [profile, counts, own, songs] = await Promise.all([
     getUserProfile(sessionUser.id),
     getLibraryCounts(sessionUser.id),
+    countOwnByInstrument(sessionUser.id),
     sp.tab === 'liked' ? listLikedSongs(sessionUser.id) : listFavoriteSongs(sessionUser.id),
   ]);
 
@@ -64,9 +66,13 @@ export default async function AccountPage({
           memberSince={memberSince}
         />
 
+        {/* Библиотеки разделены по инструментам — как и публичный каталог */}
         <div className="flex flex-wrap gap-3">
           <Link href="/songs" className="btn btn-outline">
-            Мои песни ({counts.own})
+            Гитара ({own.guitar})
+          </Link>
+          <Link href="/songs/ukulele" className="btn btn-outline">
+            Укулеле ({own.ukulele})
           </Link>
           <Link href="/songs/new" className="btn btn-primary">
             + Новая песня

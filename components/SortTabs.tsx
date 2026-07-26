@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { catalogHref } from '@/lib/catalogUrl';
 import type { SongSort } from '@/lib/songs';
 
 const TABS: { value: SongSort; label: string }[] = [
@@ -7,15 +8,24 @@ const TABS: { value: SongSort; label: string }[] = [
   { value: 'likes', label: 'По лайкам' },
 ];
 
-/** Компактная сортировка каталога — ссылки (работает без JS, сохраняет поиск). */
-export function SortTabs({ sort, query }: { sort: SongSort; query?: string }) {
-  const href = (value: SongSort) => {
-    const params = new URLSearchParams();
-    if (query) params.set('q', query);
-    if (value !== 'new') params.set('sort', value);
-    const qs = params.toString();
-    return qs ? `/?${qs}` : '/';
-  };
+/**
+ * Компактная сортировка каталога — ссылки (работает без JS). Поиск и отбор
+ * подтверждённых переносятся: смена порядка не должна сбрасывать то, что
+ * человек уже выбрал.
+ */
+export function SortTabs({
+  sort,
+  query,
+  verified,
+  basePath = '/',
+}: {
+  sort: SongSort;
+  query?: string;
+  verified?: boolean;
+  /** Каталог, внутри которого сортируем: «/» (гитара) или «/ukulele». */
+  basePath?: string;
+}) {
+  const href = (value: SongSort) => catalogHref(basePath, { query, sort: value, verified });
 
   return (
     <div className="sort-tabs" role="group" aria-label="Сортировка">

@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { lineToColumns } from '@/lib/chordpro/columns';
+import { lineToColumns, lineToPlainText } from '@/lib/chordpro/columns';
 import { Section, Segment, Song } from '@/lib/chordpro/types';
 
 /** Интерактивность строк для аннотаций (опционально — обычный рендер без неё). */
@@ -39,7 +39,7 @@ const SECTION_CLASS: Record<Section['kind'], string> = {
   chorus: 'cs-section cs-section--chorus',
   bridge: 'cs-section cs-section--bridge',
   verse: 'cs-section',
-  tab: 'cs-section',
+  tab: 'cs-section cs-section--tab',
   none: 'cs-section',
 };
 
@@ -52,6 +52,27 @@ function SectionView({
   interaction?: LineInteraction;
   renderChord?: (chord: string) => React.ReactNode;
 }) {
+  // Табулатура: моноширинный блок вместо колоночной раскладки — иначе
+  // выравнивание пробелами («e|--3--5--|») разъезжается.
+  if (section.kind === 'tab') {
+    return (
+      <section className={SECTION_CLASS[section.kind]}>
+        {section.label ? <div className="cs-label">{section.label}</div> : null}
+        <pre className="cs-tab">
+          {section.lines
+            .map((line) =>
+              line.type === 'lyric'
+                ? lineToPlainText(line.segments)
+                : line.type === 'comment'
+                  ? line.text
+                  : '',
+            )
+            .join('\n')}
+        </pre>
+      </section>
+    );
+  }
+
   return (
     <section className={SECTION_CLASS[section.kind]}>
       {section.label ? <div className="cs-label">{section.label}</div> : null}

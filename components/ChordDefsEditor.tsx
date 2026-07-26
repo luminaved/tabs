@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FretboardEditor } from './FretboardEditor';
 import { getChordShape, type ChordShape } from '@/lib/chords/diagrams';
-
-const EMPTY: ChordShape = { frets: [-1, -1, -1, -1, -1, -1] };
+import { getInstrument, type InstrumentId } from '@/lib/chords/instruments';
 
 const HINT = (
   <>
@@ -22,12 +21,26 @@ const HINT = (
 export function ChordDefsEditor({
   chords,
   initial,
+  instrument,
+  onEdit,
 }: {
   chords: string[];
   initial: Record<string, ChordShape>;
+  instrument?: InstrumentId | null;
+  /**
+   * Форма правится кликами по грифу, а не полями ввода, поэтому событие
+   * `change` до формы не доходит — о правке сообщаем сами (нужно черновику).
+   */
+  onEdit?: () => void;
 }) {
-  const needing = chords.filter((c) => getChordShape(c) === null);
-  const standard = chords.filter((c) => getChordShape(c) !== null);
+  const inst = getInstrument(instrument);
+  const empty = useMemo<ChordShape>(
+    () => ({ frets: Array.from({ length: inst.strings }, () => -1) }),
+    [inst.strings],
+  );
+
+  const needing = chords.filter((c) => getChordShape(c, inst) === null);
+  const standard = chords.filter((c) => getChordShape(c, inst) !== null);
 
   const [defs, setDefs] = useState<Record<string, ChordShape>>(() => {
     const d: Record<string, ChordShape> = {};
@@ -35,12 +48,17 @@ export function ChordDefsEditor({
     return d;
   });
 
-  const setVal = (c: string, v: ChordShape) => setDefs((d) => ({ ...d, [c]: v }));
-  const reset = (c: string) =>
+  const setVal = (c: string, v: ChordShape) => {
+    setDefs((d) => ({ ...d, [c]: v }));
+    onEdit?.();
+  };
+  const reset = (c: string) => {
     setDefs((d) => {
       const { [c]: _drop, ...rest } = d;
       return rest;
     });
+    onEdit?.();
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -53,7 +71,11 @@ export function ChordDefsEditor({
             {needing.map((c) => (
               <div key={c} className="flex flex-col items-center gap-2 rounded-xl border border-line p-4">
                 <span className="text-lg font-medium text-accent">{c}</span>
-                <FretboardEditor value={defs[c] ?? EMPTY} onChange={(v) => setVal(c, v)} />
+                <FretboardEditor
+                  value={defs[c] ?? empty}
+                  onChange={(v) => setVal(c, v)}
+                  instrument={inst}
+                />
               </div>
             ))}
           </div>
@@ -69,7 +91,7 @@ export function ChordDefsEditor({
           <div className="flex flex-wrap gap-5">
             {standard.map((c) => {
               const custom = defs[c];
-              const value = custom ?? getChordShape(c) ?? EMPTY;
+              const value = custom ?? getChordShape(c, inst) ?? empty;
               return (
                 <div
                   key={c}
@@ -78,7 +100,11 @@ export function ChordDefsEditor({
                   }`}
                 >
                   <span className="text-lg font-medium text-accent">{c}</span>
-                  <FretboardEditor value={value} onChange={(v) => setVal(c, v)} />
+                  <FretboardEditor
+                    value={value}
+                    onChange={(v) => setVal(c, v)}
+                    instrument={inst}
+                  />
                   {custom ? (
                     <button
                       type="button"

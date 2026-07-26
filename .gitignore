@@ -13,3 +13,4 @@ data-export.json
 .DS_Store
 .vercel
 next-env.d.ts
+*.tsbuildinfo

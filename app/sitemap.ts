@@ -20,6 +20,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     { url: SITE_URL, lastModified: new Date(), changeFrequency: 'daily', priority: 1 },
+    // Каталог укулеле — отдельная точка входа со своими запросами.
+    {
+      url: `${SITE_URL}/ukulele`,
+      lastModified: new Date(),
+      changeFrequency: 'daily' as const,
+      priority: 0.9,
+    },
     ...songs.map((s) => ({
       url: `${SITE_URL}/songs/${s.id}`,
       lastModified: s.updatedAt,

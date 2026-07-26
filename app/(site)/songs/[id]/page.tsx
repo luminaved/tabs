@@ -5,6 +5,8 @@ import { getSongForViewer } from '@/lib/songs';
 import { listBySong } from '@/lib/annotations';
 import { getSongEngagement, recordView } from '@/lib/engagement';
 import { parseChordDefs } from '@/lib/chords/diagrams';
+import { getInstrument } from '@/lib/chords/instruments';
+import { isAdminUser } from '@/lib/admin';
 import { coverSrc } from '@/lib/coverUrl';
 import { absoluteUrl, SITE_NAME } from '@/lib/site';
 import { SongViewer } from '@/components/SongViewer';
@@ -28,13 +30,14 @@ export async function generateMetadata({
   if (!song) notFound();
 
   const artist = song.artist?.trim();
+  const inst = getInstrument(song.instrument);
   const title = artist
-    ? `${song.title} — ${artist}: аккорды на гитаре`
-    : `${song.title} — аккорды на гитаре`;
+    ? `${song.title} — ${artist}: аккорды на ${inst.onName}`
+    : `${song.title} — аккорды на ${inst.onName}`;
 
   const description = [
     `Разбор песни «${song.title}»${artist ? ` — ${artist}` : ''}: аккорды над словами,`,
-    'аппликатуры и транспонирование в любую тональность.',
+    `аппликатуры для ${inst.forName} и транспонирование в любую тональность.`,
     song.key ? `Тональность: ${song.key}.` : '',
   ]
     .filter(Boolean)
@@ -83,16 +86,18 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
   if (!song) notFound();
 
   const isOwner = song.userId === session?.user?.id;
+  const inst = getInstrument(song.instrument);
 
   // Просмотр засчитываем ПАРАЛЛЕЛЬНО с остальными запросами (последовательно
   // это добавляло бы к загрузке лишний round-trip до БД). Счётчик, прочитанный
   // одновременно, может не включать этот просмотр — поэтому прибавляем вручную.
   // Не чаще раза в 12 часов с аккаунта; свои разборы не накручивают счётчик.
   const viewerId = session?.user?.id;
-  const [annotations, engagement, justViewed] = await Promise.all([
+  const [annotations, engagement, justViewed, canVerify] = await Promise.all([
     isOwner ? listBySong(song.id) : Promise.resolve([]),
     getSongEngagement(song.id, viewerId),
     viewerId && !isOwner ? recordView(song.id, viewerId) : Promise.resolve(false),
+    isAdminUser(viewerId),
   ]);
 
   // Структурированные данные: помогают поисковику понять, что это разбор
@@ -102,7 +107,7 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
       ? {
           '@context': 'https://schema.org',
           '@type': 'Article',
-          headline: `${song.title}${song.artist ? ` — ${song.artist}` : ''}: аккорды на гитаре`,
+          headline: `${song.title}${song.artist ? ` — ${song.artist}` : ''}: аккорды на ${inst.onName}`,
           about: {
             '@type': 'MusicComposition',
             name: song.title,
@@ -118,7 +123,8 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
       : null;
 
   return (
-    <main className="container-app pb-28 pt-8">
+    // Запас снизу: на телефоне меньше — там своё место занимает нижняя навигация.
+    <main className="container-app pb-16 pt-8 sm:pb-28">
       {jsonLd ? (
         <script
           type="application/ld+json"
@@ -131,13 +137,16 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
         coverUrl={song.hasCover ? coverSrc(song.id, song.updatedAt) : null}
         note={song.note}
         createdAt={song.createdAt}
-        chordDefs={parseChordDefs(song.chordDefs)}
+        instrument={inst.id}
+        verified={song.verified}
+        canVerify={canVerify}
+        chordDefs={parseChordDefs(song.chordDefs, inst)}
         engagement={{ ...engagement, viewCount: engagement.viewCount + (justViewed ? 1 : 0) }}
         editHref={isOwner ? `/songs/${song.id}/edit` : undefined}
         annotations={annotations}
         canAnnotate={isOwner}
         shareUrl={absoluteUrl(`/songs/${song.id}`)}
-        shareTitle={`${song.title}${song.artist ? ` — ${song.artist}` : ''}: аккорды на гитаре`}
+        shareTitle={`${song.title}${song.artist ? ` — ${song.artist}` : ''}: аккорды на ${inst.onName}`}
       />
     </main>
   );

@@ -11,10 +11,17 @@
   --color-raised: #1e1b15;
   --color-fg: #ece8e0;
   --color-muted: #968f81;
-  --color-faint: #5f594e;
+  /* Был #5f594e — 2.80:1 к фону, ниже минимума даже для крупного текста, а цвет
+     используется для плейсхолдеров и подсказок. Теперь 4.82:1 (AA для обычного
+     текста); остаётся заметно тусклее --color-muted, у которого 6.05:1. */
+  --color-faint: #857e6f;
   --color-line: #2a271f;
   --color-accent: #e6a23c;
   --color-accent-fg: #1a1408;
+  /* Подтверждение модератора: своя краска, чуть холоднее и светлее акцента —
+     галочка, кнопка модератора и отбор в каталоге должны читаться как одно.
+     Раньше этот жёлтый был вписан числом в трёх местах. */
+  --color-verified: #f2c14e;
 
   --font-sans: var(--font-golos), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-spectral), ui-serif, Georgia, serif;
@@ -40,6 +47,18 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+
+  /* Место под нижнюю навигацию, чтобы она не накрывала конец страницы */
+  @media (max-width: 639.98px) {
+    body {
+      padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+    }
+  }
+  @media print {
+    body {
+      padding-bottom: 0;
+    }
   }
 
   /* Атмосфера: мягкое ламповое свечение сверху + едва заметное зерно.
@@ -161,8 +180,54 @@
   .wordmark:hover {
     color: var(--color-accent);
   }
-  .wordmark-dot {
+  /* «Raw» акцентом, «Chords» основным цветом */
+  .wordmark-accent {
     color: var(--color-accent);
+  }
+
+  /* ─── Строка списка песен ─────────────────────────────────────────────── */
+  .song-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    /* Обрезки по границе здесь нет намеренно: она срезала бы подсказку у
+       галочки подтверждения, которая всплывает над строкой. Скруглять углы
+       заливки приходится ей самой (border-radius: inherit ниже). */
+    transition: border-color 0.2s ease;
+  }
+  /* Заливка от левого края в цвет рамки — проявляется при наведении.
+     Отдельный слой, а не фон строки: его можно гасить прозрачностью, не
+     трогая фон, и он лежит под содержимым (у него z-index не задан). */
+  .song-row::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      color-mix(in oklab, var(--color-accent) 16%, transparent),
+      transparent 55%
+    );
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .song-row:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+  }
+  .song-row:hover::before,
+  .song-row:focus-within::before {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .song-row,
+    .song-row::before {
+      transition: none;
+    }
   }
 
   /* Растянутая ссылка: делает всю карточку кликабельной (переход на песню),
@@ -251,6 +316,168 @@
   .tab--on {
     color: var(--color-fg);
     border-bottom-color: var(--color-accent);
+  }
+
+  /* ─── Нижняя навигация (телефон) ──────────────────────────────────────── */
+  .mnav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 45;
+    padding: 0.3rem 0.5rem calc(0.3rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--color-line);
+    background: color-mix(in oklab, var(--color-bg) 80%, transparent);
+    backdrop-filter: blur(14px) saturate(1.1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* Уехала за нижний край при прокрутке вниз (+1px — чтобы не светилась рамка) */
+  .mnav--down {
+    transform: translateY(calc(100% + 1px));
+  }
+  /* От планшета и шире работает обычная шапка */
+  @media (min-width: 640px) {
+    .mnav {
+      display: none;
+    }
+  }
+
+  .mnav-inner {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: 0.25rem;
+    max-width: 30rem;
+    margin-inline: auto;
+  }
+
+  .mnav-item {
+    position: relative;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.5rem 0 0.35rem;
+    color: var(--color-muted);
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color 0.2s ease,
+      transform 0.12s ease;
+  }
+  .mnav-item:active {
+    transform: scale(0.93);
+  }
+  .mnav-item--on {
+    color: var(--color-accent);
+  }
+  .mnav-item svg {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .mnav-item--on svg {
+    transform: translateY(-1px);
+  }
+
+  /* Зона под иконку одной высоты у всех пунктов — включая центральную
+     кнопку, которая крупнее. Иначе подписи стоят на разных уровнях. */
+  .mnav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.15rem;
+  }
+
+  .mnav-label {
+    font-size: 0.63rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+  }
+
+  /* Мягкое пятно за иконкой активного пункта */
+  .mnav-glow {
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    width: 2.75rem;
+    height: 2.15rem;
+    translate: -50% 0;
+    border-radius: 0.65rem;
+    background: color-mix(in oklab, var(--color-accent) 15%, transparent);
+    opacity: 0;
+    transform: scale(0.6);
+    transition:
+      opacity 0.22s ease,
+      transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .mnav-item--on .mnav-glow {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Риска над активным пунктом — «вкладка» выбрана */
+  .mnav-item::before {
+    content: '';
+    position: absolute;
+    top: -0.3rem;
+    left: 50%;
+    width: 1.6rem;
+    height: 2px;
+    translate: -50% 0;
+    border-radius: 999px;
+    background: var(--color-accent);
+    opacity: 0;
+    transform: scaleX(0.25);
+    transition:
+      opacity 0.2s ease,
+      transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .mnav-item--on::before {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  /* Центральное действие — «добавить песню».
+     Ровно по высоте иконки соседних пунктов и БЕЗ отрицательного отступа:
+     иначе кнопка выступает за верхний край панели. */
+  .mnav-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 0.7rem;
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+    box-shadow: 0 3px 12px color-mix(in oklab, var(--color-accent) 28%, transparent);
+    transition: filter 0.18s ease;
+  }
+  .mnav-item:active .mnav-fab {
+    filter: brightness(1.08);
+  }
+  /* У центральной кнопки своя подсветка не нужна — она и так акцентная */
+  .mnav-item--on .mnav-fab {
+    filter: brightness(1.05);
+  }
+
+  .mnav-avatar {
+    display: inline-flex;
+    padding: 1px;
+    border-radius: 50%;
+    transition: box-shadow 0.2s ease;
+  }
+  .mnav-item--on .mnav-avatar {
+    box-shadow: 0 0 0 1.5px var(--color-accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mnav,
+    .mnav-item,
+    .mnav-item svg,
+    .mnav-glow,
+    .mnav-item::before {
+      transition: none;
+    }
   }
 
   /* Пункт навигации в шапке */
@@ -407,13 +634,74 @@
 
   /* Панель аккордов над текстом: крупные диаграммы, показаны сразу */
   .chord-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.1rem;
+    position: relative;
     margin-bottom: 1.5rem;
     padding-bottom: 1.35rem;
     border-bottom: 1px solid var(--color-line);
     color: var(--color-fg);
+  }
+  .chord-bar-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+    /* Место под кнопку-скрепку в правом верхнем углу */
+    padding-right: 2.25rem;
+  }
+
+  /* Кнопка-скрепка: закрепляет панель сверху */
+  .chord-pin {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    color: var(--color-muted);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .chord-pin:hover {
+    color: var(--color-fg);
+    border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-line));
+  }
+  .chord-pin--on {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+  /* Кнопка нарисована уже «воткнутой» (остриём вниз), поэтому поворачивать её
+     не нужно: включённое состояние читается по акцентной заливке. */
+
+  /* Закреплённое состояние. Липкость обеспечивает родительский блок с
+     тулбаром (панель рендерится внутрь него), поэтому здесь только внешний
+     вид: непрозрачная подложка, чтобы текст уезжал под неё, и одна строка с
+     горизонтальной прокруткой вместо переноса. */
+  .chord-bar--pinned {
+    margin-top: 0.4rem;
+    margin-bottom: 0;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.9rem;
+    background: color-mix(in oklab, var(--color-raised) 88%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  .chord-bar--pinned .chord-bar-strip {
+    flex-wrap: nowrap;
+    gap: 0.7rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chord-bar--pinned .chord-card {
+    flex: 0 0 auto;
   }
   .chord-card {
     display: flex;
@@ -480,10 +768,11 @@
     align-items: center;
     gap: 0.4rem;
   }
+  /* Число колонок = число струн инструмента (задаётся инлайном компонентом) */
   .fb-grid {
     position: relative;
     display: grid;
-    grid-template-columns: repeat(6, 2rem);
+    grid-template-columns: repeat(var(--fb-strings, 6), 2rem);
     gap: 3px;
     user-select: none;
     -webkit-user-select: none;
@@ -497,7 +786,9 @@
     line-height: 1;
     cursor: pointer;
   }
-  .fb-grid--nut .fb-cell:nth-child(n + 7):nth-child(-n + 12) {
+  /* Порожек: жирная линия над первым ладом (класс, а не nth-child — число
+     струн зависит от инструмента) */
+  .fb-grid--nut .fb-cell--top {
     border-top-width: 3px;
     border-top-color: var(--color-fg);
   }
@@ -692,6 +983,48 @@
     transition: opacity 0.35s ease;
   }
 
+  /* ─── Черновик редактора ──────────────────────────────────────────────── */
+  .draft-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 35%, var(--color-line));
+    border-radius: 0.8rem;
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    animation: draft-in 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  @keyframes draft-in {
+    from {
+      opacity: 0;
+      transform: translateY(-0.4rem);
+    }
+  }
+
+  /* Подтверждение записи: коротко появляется и остаётся бледной подписью. */
+  .draft-saved {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--color-faint);
+    animation: draft-saved-in 0.25s ease;
+  }
+  @keyframes draft-saved-in {
+    from {
+      opacity: 0;
+      transform: translateX(-0.3rem);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .draft-banner,
+    .draft-saved {
+      animation: none;
+    }
+  }
+
   /* ─── Скелетон загрузки ───────────────────────────────────────────────── */
   .skeleton {
     background: color-mix(in oklab, var(--color-line) 55%, transparent);
@@ -739,6 +1072,187 @@
     color: var(--color-accent-fg);
     background: var(--color-accent);
     font-weight: 600;
+  }
+
+  /* ─── Отбор «только подтверждённые» ───────────────────────────────────────
+     Стоит рядом с сортировкой и совпадает с ней по высоте и радиусу, но это
+     не вкладка, а выключатель — поэтому отдельная рамка, а не общий поддон.
+     Включённое состояние берёт краску галочки: и так понятно, про что отбор. */
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.6rem;
+    background: color-mix(in oklab, var(--color-surface) 45%, transparent);
+    font-size: 0.82rem;
+    color: var(--color-muted);
+    white-space: nowrap;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+  .filter-chip:hover {
+    color: var(--color-fg);
+    border-color: color-mix(in oklab, var(--color-verified) 40%, var(--color-line));
+  }
+  .filter-chip--on {
+    color: var(--color-verified);
+    border-color: color-mix(in oklab, var(--color-verified) 50%, var(--color-line));
+    background: color-mix(in oklab, var(--color-verified) 12%, transparent);
+    font-weight: 600;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .filter-chip {
+      transition: none;
+    }
+  }
+
+  /* ─── Переключатель инструмента (каталог) ─────────────────────────────── */
+  .inst-tabs {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 0.2rem;
+    padding: 0.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  }
+  .inst-tab {
+    padding: 0.4rem 1rem;
+    border-radius: 0.55rem;
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--color-muted);
+    white-space: nowrap;
+    transition:
+      color 0.15s ease,
+      background 0.2s ease;
+  }
+  .inst-tab:hover {
+    color: var(--color-fg);
+  }
+  .inst-tab--on {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+    font-weight: 600;
+  }
+  /* Счётчик разборов в своей библиотеке */
+  .inst-tab-count {
+    margin-left: 0.4rem;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.65;
+  }
+
+  /* ─── Подтверждённый разбор ───────────────────────────────────────────── */
+  /* Жёлтая галочка. Цвет чуть светлее акцента — она должна читаться как знак
+     качества, а не сливаться с обычными акцентными элементами. */
+  .verified-badge {
+    position: relative;
+    /* Поверх «растянутой» ссылки строки каталога (у неё ::after с z-index: 0),
+       иначе наведение до галочки не доходит и подсказка не появляется.
+       Значение выше липкой шапки (50): z-index здесь создаёт слой, внутри
+       которого живёт подсказка, поэтому спорит с шапкой именно он — а на
+       странице разбора заголовок стоит ровно под ней, и подсказка вверх
+       уходила бы под шапку. */
+    z-index: 60;
+    display: inline-flex;
+    align-items: center;
+    /* Галочка стоит и в потоке текста (заголовок разбора), и во flex-строке
+       списка. vertical-align во flex игнорируется, поэтому безвреден там и
+       сажает значок на нужную высоту здесь.
+       Значение подобрано по метрике шрифта, а не на глаз: центр значка
+       приходится на середину строчных (базовая линия минус половина
+       x-height). При -0.14em он уезжал на три пиксела ниже и заметно провисал
+       под строкой. */
+    vertical-align: -0.10em;
+    color: var(--color-verified);
+    line-height: 0;
+    cursor: help;
+  }
+  .verified-badge:focus-visible {
+    border-radius: 50%;
+  }
+
+  /* Подсказка над галочкой: мгновенная (без задержки и перехода), в оформлении
+     сайта. Ширину задаёт содержимое, но не шире экрана — длинный текст
+     переносится, а не выталкивает страницу вбок. */
+  .verified-tip {
+    position: absolute;
+    bottom: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    width: max-content;
+    /* На узком экране подсказка центрируется по галочке, а та может стоять
+       близко к краю — поэтому ограничение по ширине заметно строже vw, чтобы
+       текст переносился, а не упирался в границу окна. */
+    max-width: min(14rem, 54vw);
+    padding: 0.4rem 0.6rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 28%, var(--color-line));
+    border-radius: 0.55rem;
+    background: var(--color-raised);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: 0;
+    text-align: center;
+    white-space: normal;
+    box-shadow: 0 10px 26px rgb(0 0 0 / 0.5);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  /* Хвостик подсказки */
+  .verified-tip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -0.3rem;
+    border: 0.3rem solid transparent;
+    border-top-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-line));
+  }
+  .verified-badge:hover .verified-tip,
+  .verified-badge:focus-visible .verified-tip {
+    opacity: 1;
+    visibility: visible;
+  }
+  @media print {
+    .verified-tip {
+      display: none;
+    }
+  }
+
+  /* Кнопка модератора во включённом состоянии */
+  .btn-verified {
+    background: var(--color-verified);
+    border-color: var(--color-verified);
+    color: var(--color-accent-fg);
+    font-weight: 600;
+  }
+  .btn-verified:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  /* Бейдж инструмента в списке своих разборов */
+  .inst-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 1.3rem;
+    padding-inline: 0.4rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--color-muted);
   }
 
   /* ─── Модалка ─────────────────────────────────────────────────────────── */
@@ -870,6 +1384,20 @@
     padding-left: 1rem;
   }
 
+  /* Табулатура: моноширинно, с сохранением пробелов. По ширине не влезающие
+     табы скроллятся сами — переносить их нельзя, выравнивание сломается. */
+  .cs-tab {
+    margin: 0;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.82em;
+    line-height: 1.45;
+    white-space: pre;
+    tab-size: 4;
+    color: var(--color-fg);
+    -webkit-overflow-scrolling: touch;
+  }
+
   .cs-label {
     margin-bottom: 0.6rem;
     font-size: 0.68rem;
@@ -907,11 +1435,13 @@
     vertical-align: bottom;
   }
 
+  /* Размер имени аккорда — долей от текста песни. Превью редактора поднимает
+     его через --sheet-chord-size: там лист ужат, и на 0.64em аккорды не читались. */
   .cs-chord {
     display: block;
     height: 1.5em;
     line-height: 1.5;
-    font-size: 0.64em;
+    font-size: var(--sheet-chord-size, 0.64em);
     font-weight: 600;
     color: var(--color-accent);
     white-space: pre;
@@ -922,6 +1452,7 @@
     display: block;
     white-space: pre;
   }
+
 
   .chordsheet--nochords .cs-chord {
     display: none;

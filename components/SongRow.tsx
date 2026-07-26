@@ -1,18 +1,30 @@
 import Link from 'next/link';
 import type { SongCard } from '@/lib/engagement';
+import { INSTRUMENTS, parseInstrumentId } from '@/lib/chords/instruments';
 import { SongThumb } from './SongThumb';
 import { SongChordChips } from './SongChordChips';
+import { VerifiedBadge } from './VerifiedBadge';
 
-/** Строка песни в списке: обложка, название, мета + лайки, чипы аккордов. */
+/**
+ * Строка песни в списке: обложка, название, мета + лайки, чипы аккордов.
+ *
+ * Инструмент помечается бейджем только когда он НЕ гитара: гитара — основной
+ * случай, и подпись в каждой строке была бы шумом, а укулеле важно отличить.
+ */
 export function SongRow({ song, meta }: { song: SongCard; meta?: React.ReactNode }) {
+  const instrument = parseInstrumentId(song.instrument);
   return (
-    <Link
-      href={`/songs/${song.id}`}
-      className="group flex items-center gap-4 rounded-xl border border-line px-3 py-3 transition hover:border-[color-mix(in_oklab,var(--color-accent)_45%,var(--color-line))]"
-    >
+    <Link href={`/songs/${song.id}`} className="song-row">
       <SongThumb songId={song.id} hasCover={song.hasCover} updatedAt={song.updatedAt} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-lg font-medium">{song.title}</div>
+        {/* Отступы — как в каталоге: галочка вплотную к названию, бейдж дальше */}
+        <div className="flex items-center gap-1">
+          <span className="truncate text-lg font-medium">{song.title}</span>
+          {song.verified ? <VerifiedBadge size={19} /> : null}
+          {instrument !== 'guitar' ? (
+            <span className="inst-badge ms-1 shrink-0">{INSTRUMENTS[instrument].name}</span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2 text-sm text-muted">
           <span className="truncate">
             {meta ?? (
@@ -32,7 +44,7 @@ export function SongRow({ song, meta }: { song: SongCard; meta?: React.ReactNode
           </span>
         </div>
       </div>
-      <SongChordChips body={song.body} />
+      <SongChordChips chords={song.chords} />
     </Link>
   );
 }

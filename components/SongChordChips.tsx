@@ -1,10 +1,13 @@
-import { chordsInOrder } from '@/lib/chordpro/usedChords';
-
 const MAX = 16;
 
-/** Чипы аккордов песни (в порядке первого появления) для строки списка. */
-export function SongChordChips({ body }: { body: string }) {
-  const chords = chordsInOrder(body);
+/**
+ * Чипы аккордов песни (в порядке первого появления) для строки списка.
+ *
+ * Готовый список приходит пропом, а не считается здесь из текста песни:
+ * строки каталога уезжают на клиент при подгрузке следующей порции, и весь
+ * текст ради этих подписей пересылать незачем (см. `withChordChips`).
+ */
+export function SongChordChips({ chords }: { chords: string[] }) {
   if (chords.length === 0) return null;
 
   const shown = chords.slice(0, MAX);

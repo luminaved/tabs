@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { getPublicUser } from '@/lib/users';
 import { Avatar } from './Avatar';
+import { InstrumentIcon } from './InstrumentIcon';
 
 export async function SiteHeader() {
   const session = await auth();
@@ -13,13 +14,21 @@ export async function SiteHeader() {
     <header className="site-header site-header--bordered">
       <div className="container-app flex h-14 items-center justify-between gap-3">
         <Link href="/" className="wordmark">
-          tabs<span className="wordmark-dot">.</span>
+          <span className="wordmark-accent">Raw</span>Chords
         </Link>
 
-        <nav className="flex items-center gap-1 sm:gap-2">
+        {/* На телефоне навигация живёт внизу экрана (MobileNav), поэтому здесь
+            она скрыта — шапка остаётся тонкой полосой с вордмарком. */}
+        <nav className="hidden items-center gap-1 sm:flex sm:gap-2">
+          {/* Отрицательный отступ убирает пустое поле внутри самой картинки:
+              у укулеле контур уже гитарного, поэтому подтягиваем сильнее. */}
           <Link href="/" className="nav-link">
-            <SearchIcon />
-            <span>Поиск</span>
+            <InstrumentIcon instrument="guitar" size={17} className="-me-0.5" />
+            <span>Гитара</span>
+          </Link>
+          <Link href="/ukulele" className="nav-link">
+            <InstrumentIcon instrument="ukulele" size={18} className="-me-2" />
+            <span>Укулеле</span>
           </Link>
 
           {session?.user ? (
@@ -49,15 +58,6 @@ export async function SiteHeader() {
         </nav>
       </div>
     </header>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <circle cx="11" cy="11" r="7" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
   );
 }
 

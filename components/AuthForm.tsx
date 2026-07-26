@@ -29,7 +29,7 @@ export function AuthForm({
     <main className="mx-auto flex min-h-dvh w-full max-w-[26rem] flex-col justify-center gap-9 px-6 py-16">
       <div className="flex flex-col gap-6">
         <Link href="/" className="wordmark self-start text-lg">
-          tabs<span className="wordmark-dot">.</span>
+          <span className="wordmark-accent">Raw</span>Chords
         </Link>
         <div className="flex flex-col gap-2">
           <h1 className="display text-4xl font-medium">{title}</h1>

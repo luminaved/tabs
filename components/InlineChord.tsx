@@ -3,17 +3,20 @@
 import { useState } from 'react';
 import { ChordDiagram } from './ChordDiagram';
 import { getChordShape, type ChordShape } from '@/lib/chords/diagrams';
+import type { InstrumentId } from '@/lib/chords/instruments';
 
 /** Аккорд в тексте: при наведении/тапе всплывает аппликатура. */
 export function InlineChord({
   name,
+  instrument,
   customDefs,
 }: {
   name: string;
+  instrument?: InstrumentId | null;
   customDefs?: Record<string, ChordShape>;
 }) {
   const [open, setOpen] = useState(false);
-  const shape = getChordShape(name, customDefs);
+  const shape = getChordShape(name, instrument ?? null, customDefs);
 
   return (
     <span

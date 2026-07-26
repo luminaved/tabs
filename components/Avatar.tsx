@@ -1,3 +1,5 @@
+import { avatarSrc } from '@/lib/avatarUrl';
+
 /** Аватар: картинка (напр. из Google) либо круг с инициалом. */
 export function Avatar({
   image,
@@ -17,8 +19,10 @@ export function Avatar({
 
   if (image) {
     // Загруженный аватар (data URL) отдаём маршрутом: иначе он вшивается в
-    // HTML каждой страницы. Внешние ссылки (Google) — как есть.
-    const src = image.startsWith('data:') && userId ? `/avatars/${userId}` : image;
+    // HTML каждой страницы. Внешние ссылки (Google) — как есть. Без userId
+    // (превью только что выбранного файла в редакторе профиля — в БД его ещё
+    // нет) показываем data URL напрямую.
+    const src = userId ? avatarSrc(userId, image) : image;
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img

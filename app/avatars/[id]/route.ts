@@ -8,6 +8,10 @@ import { prisma } from '@/lib/db';
  * в разметку base64 утяжелял бы вообще все страницы (и заново на каждой).
  * Здесь он пережимается в маленький webp и кэшируется браузером.
  * Аватары Google — обычные внешние ссылки, сюда не попадают.
+ *
+ * Ссылка версионируется отпечатком картинки (`?v=`, см. lib/avatarUrl.ts), и
+ * версия входит в ключ кэша. Без неё кэш процесса никогда не промахивался после
+ * смены фото, и пользователь видел старый аватар до перезапуска сервера.
  */
 
 const SIZE = 96; // ×2 к самому крупному показу (48px в кабинете)
@@ -17,10 +21,11 @@ const cache = new Map<string, { body: Buffer; type: string }>();
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const format = (req.headers.get('accept') ?? '').includes('image/webp') ? 'webp' : 'jpeg';
-  const key = `${id}:${format}`;
+  const version = new URL(req.url).searchParams.get('v') ?? '';
+  const key = `${id}:${version}:${format}`;
 
   const hit = cache.get(key);
-  if (hit) return respond(hit.body, hit.type);
+  if (hit) return respond(hit.body, hit.type, !!version);
 
   const user = await prisma.user.findUnique({ where: { id }, select: { image: true } });
   const image = user?.image;
@@ -51,16 +56,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (oldest !== undefined) cache.delete(oldest);
   }
   cache.set(key, { body, type });
-  return respond(body, type);
+  return respond(body, type, !!version);
 }
 
-function respond(body: Buffer, type: string) {
+function respond(body: Buffer, type: string, versioned: boolean) {
   return new Response(new Uint8Array(body), {
     headers: {
       'Content-Type': type,
       'Content-Length': String(body.byteLength),
-      // Аватар меняется редко; версии в ссылке нет, поэтому кэш умеренный.
-      'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+      // С версией в ссылке адрес меняется вместе с картинкой — можно кэшировать
+      // надолго. Без неё (старая разметка из кэша) остаёмся осторожными.
+      'Cache-Control': versioned
+        ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=300, stale-while-revalidate=3600',
       Vary: 'Accept',
     },
   });
