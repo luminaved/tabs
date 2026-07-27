@@ -403,7 +403,10 @@ export function SongEditor({
       {/* Редактор + живое превью (верх textarea и превью на одном уровне) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between gap-2">
+          {/* min-h-8 — высота кнопки импорта. Тот же минимум стоит у заголовка
+              превью, иначе левая колонка оказывается ниже правой: там подпись
+              с кнопкой, тут одна подпись. */}
+          <div className="flex min-h-8 items-center justify-between gap-2">
             <span className="text-sm text-muted">Текст (ChordPro)</span>
             <ImportTextDialog onImport={importText} />
           </div>
@@ -423,7 +426,9 @@ export function SongEditor({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted">Превью</span>
+          <div className="flex min-h-8 items-center">
+            <span className="text-sm text-muted">Превью</span>
+          </div>
           <div
             ref={previewRef}
             onScroll={onPreviewScroll}
@@ -432,7 +437,7 @@ export function SongEditor({
             style={
               { '--sheet-font-size': '0.9rem', '--sheet-chord-size': '0.88em' } as CSSProperties
             }
-            className="card min-h-[24rem] px-5 py-5 lg:h-[34rem] lg:min-h-0 lg:overflow-auto"
+            className="card scroll-thin min-h-[24rem] px-5 py-5 lg:h-[34rem] lg:min-h-0 lg:overflow-auto"
           >
             <ChordSheet song={preview} />
           </div>

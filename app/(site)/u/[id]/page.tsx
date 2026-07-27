@@ -12,6 +12,8 @@ import {
 import { SITE_NAME } from '@/lib/site';
 import { Avatar } from '@/components/Avatar';
 import { SongRow } from '@/components/SongRow';
+import { LoadMoreSongs } from '@/components/LoadMoreSongs';
+import { loadMoreUserSongsAction } from './actions';
 
 export async function generateMetadata({
   params,
@@ -54,7 +56,7 @@ export default async function ProfilePage({
   const instrument = sp.instrument ? parseInstrumentId(sp.instrument) : undefined;
 
   // Параллельно: запросы независимы, последовательно это лишний round-trip.
-  const [user, songs, counts] = await Promise.all([
+  const [user, { songs, hasMore }, counts] = await Promise.all([
     getPublicUser(id),
     listUserPublicSongs(id, { instrument, query }),
     countUserPublicByInstrument(id),
@@ -141,6 +143,12 @@ export default async function ProfilePage({
               <SongRow song={song} />
             </li>
           ))}
+          {/* key: смена вкладки инструмента или поиска сбрасывает подгруженное */}
+          <LoadMoreSongs
+            key={`${instrument ?? 'all'}:${query ?? ''}`}
+            loadMore={loadMoreUserSongsAction.bind(null, { userId: id, query, instrument })}
+            hasMore={hasMore}
+          />
         </ul>
       )}
     </main>

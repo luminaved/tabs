@@ -3,13 +3,14 @@ import { prisma } from './db';
 import type { InstrumentId } from './chords/instruments';
 import { searchQueryForLike } from './chordpro/searchText';
 import { withChordChips } from './chordpro/usedChords';
+import { pageSkip, pageTake, splitPage } from './paging';
 
 // Поля песни для строки списка (каталог/кабинет).
 // Внимание: coverUrl (тяжёлый base64) здесь НЕ выбирается — списки берут только
 // флаг hasCover, а картинка приходит отдельным кэшируемым запросом /covers/[id].
 // `body` нужен только чтобы посчитать чипы аккордов, наружу уходит уже готовый
 // список (см. `withChordChips`).
-const cardSelect = {
+export const cardSelect = {
   id: true,
   title: true,
   artist: true,
@@ -17,6 +18,9 @@ const cardSelect = {
   hasCover: true,
   instrument: true,
   verified: true,
+  // Нужна подписи в своей библиотеке («приватная» / «по ссылке»). Строка
+  // короткая, поэтому проще возить её везде, чем заводить второй набор полей.
+  visibility: true,
   updatedAt: true,
   body: true,
   viewCount: true,
@@ -27,6 +31,12 @@ type SongCardRecord = Prisma.SongGetPayload<{ select: typeof cardSelect }>;
 
 /** Строка списка, как её получает разметка: со списком аккордов вместо текста. */
 export type SongCard = Omit<SongCardRecord, 'body'> & { chords: string[] };
+
+/** Порция списка карточек: сама страница и есть ли продолжение. */
+export interface SongListPage {
+  songs: SongCard[];
+  hasMore: boolean;
+}
 
 // Только видимые песни: чужие приватные не показываем даже если лайкнуты.
 const visibleToUser = (userId: string): Prisma.SongWhereInput => ({
@@ -59,8 +69,8 @@ export async function listLikedSongs(userId: string): Promise<SongCard[]> {
  */
 export async function listUserPublicSongs(
   userId: string,
-  filters: { instrument?: InstrumentId; query?: string } = {},
-): Promise<SongCard[]> {
+  filters: { instrument?: InstrumentId; query?: string; page?: number } = {},
+): Promise<SongListPage> {
   // По той же денормализованной колонке, что и каталог, — чтобы у автора
   // тоже находилась строчка из середины песни (и с тем же экранированием масок).
   const q = searchQueryForLike(filters.query);
@@ -71,10 +81,15 @@ export async function listUserPublicSongs(
       ...(filters.instrument ? { instrument: filters.instrument } : {}),
       ...(q ? { searchText: { contains: q } } : {}),
     },
-    orderBy: { updatedAt: 'desc' },
+    // id в хвосте: без него строки с одинаковым updatedAt могут разъезжаться
+    // между страницами и дублироваться при подгрузке.
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    skip: pageSkip(filters.page ?? 0),
+    take: pageTake(),
     select: cardSelect,
   });
-  return rows.map(withChordChips);
+  const { page, hasMore } = splitPage(rows);
+  return { songs: page.map(withChordChips), hasMore };
 }
 
 /**
@@ -174,29 +189,49 @@ export async function getSongEngagement(
   };
 }
 
-// Окно дедупликации просмотров: повторные открытия с того же аккаунта в
+// Окно дедупликации просмотров: повторные открытия одним и тем же зрителем в
 // пределах 12 часов не засчитываются.
 const VIEW_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 /**
- * Засчитывает просмотр разбора: не чаще раза в 12 часов с одного аккаунта.
- * Возвращает true, если просмотр был засчитан. Анонимы не учитываются
- * (нужен аккаунт, иначе счётчик легко накрутить).
+ * Кто смотрит: вошедший — по аккаунту, гость — по суточному отпечатку
+ * (см. lib/visitor.ts). Тип-объединение, а не два опциональных поля: «ни
+ * одного» и «оба сразу» — состояния бессмысленные, и их лучше не выражать.
  */
-export async function recordView(songId: string, userId: string): Promise<boolean> {
-  const cutoff = new Date(Date.now() - VIEW_WINDOW_MS);
+export type ViewerRef = { userId: string } | { visitorId: string };
 
-  // Одним запросом: вставить отметку или обновить её, только если прошло окно.
-  // ON CONFLICT ... WHERE не даёт засчитать повторный просмотр, а RETURNING
-  // сообщает, было ли что-то записано (иначе понадобился бы отдельный SELECT).
-  const rows = await prisma.$queryRaw<{ id: string }[]>`
-    INSERT INTO "View" ("id", "userId", "songId", "viewedAt")
-    VALUES (${crypto.randomUUID()}, ${userId}, ${songId}, NOW())
-    ON CONFLICT ("userId", "songId")
-      DO UPDATE SET "viewedAt" = NOW()
-      WHERE "View"."viewedAt" < ${cutoff}
-    RETURNING "id"
-  `;
+/**
+ * Засчитывает просмотр разбора: не чаще раза в 12 часов с одного зрителя.
+ * Возвращает true, если просмотр был засчитан.
+ *
+ * Запрос один: вставить отметку либо обновить её, только если окно прошло.
+ * `ON CONFLICT ... WHERE` не даёт засчитать повторный просмотр, а `RETURNING`
+ * сообщает, было ли что-то записано (иначе понадобился бы отдельный SELECT).
+ * Ветки различаются лишь колонкой и целью конфликта — подставить имя колонки
+ * параметром нельзя, поэтому запроса два.
+ */
+export async function recordView(songId: string, viewer: ViewerRef): Promise<boolean> {
+  const cutoff = new Date(Date.now() - VIEW_WINDOW_MS);
+  const id = crypto.randomUUID();
+
+  const rows =
+    'userId' in viewer
+      ? await prisma.$queryRaw<{ id: string }[]>`
+          INSERT INTO "View" ("id", "userId", "songId", "viewedAt")
+          VALUES (${id}, ${viewer.userId}, ${songId}, NOW())
+          ON CONFLICT ("userId", "songId")
+            DO UPDATE SET "viewedAt" = NOW()
+            WHERE "View"."viewedAt" < ${cutoff}
+          RETURNING "id"
+        `
+      : await prisma.$queryRaw<{ id: string }[]>`
+          INSERT INTO "View" ("id", "visitorId", "songId", "viewedAt")
+          VALUES (${id}, ${viewer.visitorId}, ${songId}, NOW())
+          ON CONFLICT ("visitorId", "songId")
+            DO UPDATE SET "viewedAt" = NOW()
+            WHERE "View"."viewedAt" < ${cutoff}
+          RETURNING "id"
+        `;
 
   if (rows.length === 0) return false; // просмотр уже был засчитан в окне
   await prisma.song.update({ where: { id: songId }, data: { viewCount: { increment: 1 } } });

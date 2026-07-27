@@ -181,18 +181,26 @@ model Like {
   @@index([songId])
 }
 
-// Просмотр разбора. Одна запись на пару пользователь+песня; `viewedAt`
+// Просмотр разбора. Одна запись на пару «зритель + песня»; `viewedAt`
 // обновляется, когда засчитывается новый просмотр (не чаще раза в 12 часов).
+//
+// Зритель — либо аккаунт (`userId`), либо гость (`visitorId` — суточный
+// отпечаток, см. lib/visitor.ts). Заполнено ровно одно из двух, второе NULL.
+// Два уникальных индекса вместо одного работают именно благодаря этому:
+// Postgres считает NULL различными значениями, поэтому пара с NULL никого не
+// ограничивает, и каждый индекс сторожит только «свой» вид записей.
 model View {
-  id       String   @id @default(cuid())
-  userId   String
-  songId   String
-  viewedAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String?
+  visitorId String?
+  songId    String
+  viewedAt  DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song  @relation(fields: [songId], references: [id], onDelete: Cascade)
 
   @@unique([userId, songId])
+  @@unique([visitorId, songId])
   @@index([songId])
 }
 

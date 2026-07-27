@@ -1,7 +1,13 @@
 import { cache } from 'react';
 import { Prisma } from '@prisma/client';
 import { prisma } from './db';
-import type { InstrumentId } from './chords/instruments';
+import { INSTRUMENT_IDS, parseInstrumentId, type InstrumentId } from './chords/instruments';
+// Строка списка карточек определена в engagement.ts — здесь она же
+// переэкспортируется, чтобы вызывающему коду не приходилось знать, в каком из
+// двух модулей лежит нужный ему список.
+import { cardSelect, type SongListPage } from './engagement';
+export type { SongListPage } from './engagement';
+import { SONGS_PAGE_SIZE, pageSkip, pageTake, parsePage, splitPage } from './paging';
 import { buildSearchText, searchQueryForLike } from './chordpro/searchText';
 import { withChordChips } from './chordpro/usedChords';
 
@@ -65,31 +71,23 @@ function searchFilter(query?: string): Prisma.SongWhereInput {
  */
 export async function listSongs(
   viewerId: string,
-  filters: { query?: string; instrument?: InstrumentId },
-) {
+  filters: { query?: string; instrument?: InstrumentId; page?: number },
+): Promise<SongListPage> {
   const rows = await prisma.song.findMany({
     where: {
       userId: viewerId,
       ...(filters.instrument ? { instrument: filters.instrument } : {}),
       ...searchFilter(filters.query),
     },
-    orderBy: { updatedAt: 'desc' },
-    select: {
-      id: true,
-      title: true,
-      artist: true,
-      key: true,
-      body: true,
-      hasCover: true,
-      instrument: true,
-      verified: true,
-      visibility: true,
-      updatedAt: true,
-      viewCount: true,
-      _count: { select: { likes: true } },
-    },
+    // id в хвосте сортировки — иначе строки с равным updatedAt разъезжаются
+    // между страницами и дублируются при подгрузке.
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    skip: pageSkip(filters.page ?? 0),
+    take: pageTake(),
+    select: cardSelect,
   });
-  return rows.map(withChordChips);
+  const { page, hasMore } = splitPage(rows);
+  return { songs: page.map(withChordChips), hasMore };
 }
 
 /** Сколько своих разборов у пользователя по каждому инструменту. */
@@ -109,11 +107,8 @@ export async function countOwnByInstrument(
   return out;
 }
 
-/** Сколько разборов отдаём в каталог за раз. */
-const CATALOG_LIMIT = 60;
-
-/** Размер одной порции каталога («Показать ещё» подгружает следующую). */
-export const CATALOG_PAGE_SIZE = 24;
+/** Размер порции — общий для всех списков песен, см. [paging.ts](./paging.ts). */
+export const CATALOG_PAGE_SIZE = SONGS_PAGE_SIZE;
 
 /** Порядок в каталоге: новые / популярные (просмотры) / любимые (лайки). */
 export type SongSort = 'new' | 'views' | 'likes';
@@ -215,7 +210,7 @@ export async function listPublicSongs(filters: {
   /** Только подтверждённые модератором разборы. */
   verified?: boolean;
 }): Promise<CatalogPage> {
-  const page = Math.max(0, Math.trunc(filters.page ?? 0));
+  const page = parsePage(filters.page ?? 0);
   const where: Prisma.SongWhereInput = {
     visibility: 'public',
     ...(filters.instrument ? { instrument: filters.instrument } : {}),
@@ -229,17 +224,14 @@ export async function listPublicSongs(filters: {
     // id в хвосте сортировки: без него строки с одинаковым ключом могут
     // разъезжаться между страницами и дублироваться при подгрузке.
     orderBy: [...SORT_ORDER[filters.sort ?? 'new'], { id: 'desc' }],
-    skip: page * CATALOG_PAGE_SIZE,
-    // На одну больше запрошенного — так узнаём про следующую порцию.
-    take: CATALOG_PAGE_SIZE + 1,
+    skip: pageSkip(page),
+    take: pageTake(),
     select: catalogSelect,
   });
 
   if (rows.length > 0) {
-    return {
-      songs: rows.slice(0, CATALOG_PAGE_SIZE).map(withChordChips),
-      hasMore: rows.length > CATALOG_PAGE_SIZE,
-    };
+    const { page: rowsPage, hasMore } = splitPage(rows);
+    return { songs: rowsPage.map(withChordChips), hasMore };
   }
 
   // Точных совпадений нет — пробуем понять, что человек имел в виду.
@@ -273,28 +265,50 @@ export async function listPublicSongs(filters: {
  * Публичные разборы одного исполнителя. Исполнитель — свободное текстовое поле
  * на песне (отдельной модели нет), поэтому сравниваем без учёта регистра.
  */
-export const listSongsByArtist = cache(async function listSongsByArtist(artist: string) {
+export async function listSongsByArtist(
+  artist: string,
+  filters: { page?: number } = {},
+): Promise<SongListPage> {
   const name = artist.trim();
-  if (!name) return [];
+  if (!name) return { songs: [], hasMore: false };
   const rows = await prisma.song.findMany({
     where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
-    orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
-    take: CATALOG_LIMIT,
-    select: {
-      id: true,
-      title: true,
-      artist: true,
-      key: true,
-      body: true,
-      hasCover: true,
-      instrument: true,
-      verified: true,
-      updatedAt: true,
-      viewCount: true,
-      _count: { select: { likes: true } },
-    },
+    orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+    skip: pageSkip(filters.page ?? 0),
+    take: pageTake(),
+    select: cardSelect,
   });
-  return rows.map(withChordChips);
+  const { page, hasMore } = splitPage(rows);
+  return { songs: page.map(withChordChips), hasMore };
+}
+
+/**
+ * Сводка по исполнителю: сколько у него публичных разборов и на какие
+ * инструменты. Считается отдельным запросом, а НЕ по загруженной странице:
+ * заголовок и мета собираются по всем разборам сразу, иначе после разбивки на
+ * страницы «13 разборов» превратилось бы в «24», а укулеле, оказавшись на
+ * второй странице, пропало бы из заголовка.
+ *
+ * cache(): страница и generateMetadata спрашивают одно и то же.
+ */
+export const getArtistSummary = cache(async function getArtistSummary(artist: string) {
+  const name = artist.trim();
+  const empty = { total: 0, instruments: [] as InstrumentId[] };
+  if (!name) return empty;
+
+  const rows = await prisma.song.groupBy({
+    by: ['instrument'],
+    where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
+    _count: { _all: true },
+  });
+
+  const counts: Record<InstrumentId, number> = { guitar: 0, ukulele: 0 };
+  for (const r of rows) counts[parseInstrumentId(r.instrument)] += r._count._all;
+
+  return {
+    total: counts.guitar + counts.ukulele,
+    instruments: INSTRUMENT_IDS.filter((id) => counts[id] > 0),
+  };
 });
 
 /** Точное написание имени исполнителя, как оно хранится (для заголовка). */

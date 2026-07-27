@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { getSongForViewer } from '@/lib/songs';
 import { listBySong } from '@/lib/annotations';
-import { getSongEngagement, recordView } from '@/lib/engagement';
+import { getSongEngagement, recordView, type ViewerRef } from '@/lib/engagement';
+import { currentVisitorKey } from '@/lib/visitor';
 import { parseChordDefs } from '@/lib/chords/diagrams';
 import { getInstrument } from '@/lib/chords/instruments';
 import { isAdminUser } from '@/lib/admin';
@@ -88,15 +89,25 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
   const isOwner = song.userId === session?.user?.id;
   const inst = getInstrument(song.instrument);
 
+  const viewerId = session?.user?.id;
+
+  // Кого считать за зрителя: вошедшего — по аккаунту, гостя — по суточному
+  // отпечатку (боты отсеиваются там же). Свой разбор счётчик не накручивает,
+  // поэтому у владельца зрителя нет. Отпечаток берётся из заголовков и в БД не
+  // ходит, так что до общего Promise.all это не добавляет ожидания.
+  const viewer: ViewerRef | null = viewerId
+    ? isOwner
+      ? null
+      : { userId: viewerId }
+    : await currentVisitorKey().then((key) => (key ? { visitorId: key } : null));
+
   // Просмотр засчитываем ПАРАЛЛЕЛЬНО с остальными запросами (последовательно
   // это добавляло бы к загрузке лишний round-trip до БД). Счётчик, прочитанный
   // одновременно, может не включать этот просмотр — поэтому прибавляем вручную.
-  // Не чаще раза в 12 часов с аккаунта; свои разборы не накручивают счётчик.
-  const viewerId = session?.user?.id;
   const [annotations, engagement, justViewed, canVerify] = await Promise.all([
     isOwner ? listBySong(song.id) : Promise.resolve([]),
     getSongEngagement(song.id, viewerId),
-    viewerId && !isOwner ? recordView(song.id, viewerId) : Promise.resolve(false),
+    viewer ? recordView(song.id, viewer) : Promise.resolve(false),
     isAdminUser(viewerId),
   ]);
 

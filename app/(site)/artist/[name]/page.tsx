@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { findArtistName, listSongsByArtist } from '@/lib/songs';
-import { INSTRUMENTS, parseInstrumentId, type InstrumentId } from '@/lib/chords/instruments';
+import { findArtistName, getArtistSummary, listSongsByArtist } from '@/lib/songs';
+import { INSTRUMENTS, type InstrumentId } from '@/lib/chords/instruments';
 import { withPluralRu } from '@/lib/plural';
+import { songMeta } from '@/lib/songMeta';
 import { SITE_NAME } from '@/lib/site';
 import { SongRow } from '@/components/SongRow';
+import { LoadMoreSongs } from '@/components/LoadMoreSongs';
+import { loadMoreArtistSongsAction } from './actions';
 
 function decodeName(raw: string): string {
   try {
@@ -15,17 +18,12 @@ function decodeName(raw: string): string {
 }
 
 /**
- * Какие инструменты есть среди разборов исполнителя. Страница объединяет оба
- * каталога, поэтому заголовок и мета собираются по факту, а не «на гитаре»
- * всегда: у исполнителя может не быть ни одного гитарного разбора.
+ * «гитаре» / «укулеле» / «гитаре и укулеле».
+ *
+ * Список инструментов берётся из сводки по ВСЕМ разборам исполнителя
+ * (`getArtistSummary`), а не из загруженной страницы: после разбивки на
+ * страницы укулеле, оказавшееся во второй порции, пропало бы из заголовка.
  */
-function instrumentsOf(songs: { instrument: string }[]): InstrumentId[] {
-  const found = new Set<InstrumentId>();
-  for (const s of songs) found.add(parseInstrumentId(s.instrument));
-  return (['guitar', 'ukulele'] as InstrumentId[]).filter((id) => found.has(id));
-}
-
-/** «гитаре» / «укулеле» / «гитаре и укулеле». */
 function onNames(ids: InstrumentId[]): string {
   const names = (ids.length ? ids : ['guitar' as InstrumentId]).map((id) => INSTRUMENTS[id].onName);
   return names.join(' и ');
@@ -38,15 +36,15 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { name } = await params;
   const decoded = decodeName(name);
-  // listSongsByArtist обёрнут в cache(): страница спросит то же самое без
-  // повторного запроса к БД.
-  const [artist, songs] = await Promise.all([
+  // Обе функции обёрнуты в cache(): страница спросит то же самое без повторного
+  // запроса к БД.
+  const [artist, summary] = await Promise.all([
     findArtistName(decoded),
-    listSongsByArtist(decoded),
+    getArtistSummary(decoded),
   ]);
   if (!artist) notFound();
 
-  const on = onNames(instrumentsOf(songs));
+  const on = onNames(summary.instruments);
   const title = `${artist} — аккорды всех песен на ${on}`;
   const description =
     `Все разборы ${artist}: аккорды на ${on} с текстом, аппликатурами ` +
@@ -70,8 +68,9 @@ export async function generateMetadata({
 export default async function ArtistPage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
   const decoded = decodeName(name);
-  const [artist, songs] = await Promise.all([
+  const [artist, summary, { songs, hasMore }] = await Promise.all([
     findArtistName(decoded),
+    getArtistSummary(decoded),
     listSongsByArtist(decoded),
   ]);
   if (!artist) notFound();
@@ -82,17 +81,24 @@ export default async function ArtistPage({ params }: { params: Promise<{ name: s
         <p className="eyebrow mb-2">Исполнитель</p>
         <h1 className="display text-4xl font-medium">{artist}</h1>
         <p className="mt-2 text-muted">
-          Аккорды на {onNames(instrumentsOf(songs))} ·{' '}
-          {withPluralRu(songs.length, 'разбор', 'разбора', 'разборов')}
+          {/* Счётчик — из сводки, а не по длине страницы: иначе он показывал бы
+              размер порции, а не то, сколько разборов есть всего. */}
+          Аккорды на {onNames(summary.instruments)} ·{' '}
+          {withPluralRu(summary.total, 'разбор', 'разбора', 'разборов')}
         </p>
       </div>
 
       <ul className="flex flex-col gap-2">
         {songs.map((song) => (
           <li key={song.id}>
-            <SongRow song={song} meta={[song.key, 'аккорды'].filter(Boolean).join(' · ')} />
+            <SongRow song={song} meta={songMeta(song, 'artist')} />
           </li>
         ))}
+        <LoadMoreSongs
+          loadMore={loadMoreArtistSongsAction.bind(null, { artist: decoded })}
+          hasMore={hasMore}
+          meta="artist"
+        />
       </ul>
     </main>
   );

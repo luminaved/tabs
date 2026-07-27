@@ -1,14 +1,11 @@
 import Link from 'next/link';
 import { requireUser } from '@/lib/session';
 import { countOwnByInstrument, listSongs } from '@/lib/songs';
+import { songMeta } from '@/lib/songMeta';
 import { INSTRUMENTS, INSTRUMENT_IDS, type InstrumentId } from '@/lib/chords/instruments';
 import { SongRow } from '@/components/SongRow';
-
-const VIS_LABEL: Record<string, string> = {
-  private: 'приватная',
-  unlisted: 'по ссылке',
-  public: 'публичная',
-};
+import { LoadMoreSongs } from '@/components/LoadMoreSongs';
+import { loadMoreLibraryAction } from '@/app/(site)/songs/list-actions';
 
 /** Адрес своей библиотеки для инструмента: гитара живёт на «/songs». */
 export function libraryPath(id: InstrumentId): string {
@@ -32,7 +29,7 @@ export async function LibraryView({
   const query = sp.q?.trim() || undefined;
   const inst = INSTRUMENTS[instrument];
 
-  const [songs, counts] = await Promise.all([
+  const [{ songs, hasMore }, counts] = await Promise.all([
     listSongs(user.id, { query, instrument }),
     countOwnByInstrument(user.id),
   ]);
@@ -106,14 +103,16 @@ export async function LibraryView({
         <ul className="flex flex-col gap-2">
           {songs.map((song) => (
             <li key={song.id}>
-              <SongRow
-                song={song}
-                meta={[song.artist || 'без исполнителя', song.key, VIS_LABEL[song.visibility]]
-                  .filter(Boolean)
-                  .join(' · ')}
-              />
+              <SongRow song={song} meta={songMeta(song, 'library')} />
             </li>
           ))}
+          {/* key: при смене инструмента/поиска подгруженные строки сбрасываются */}
+          <LoadMoreSongs
+            key={`${instrument}:${query ?? ''}`}
+            loadMore={loadMoreLibraryAction.bind(null, { query, instrument })}
+            hasMore={hasMore}
+            meta="library"
+          />
         </ul>
       )}
     </main>

@@ -62,7 +62,10 @@ export const ChordProInput = forwardRef<
 
   return (
     <div className="cp-input">
-      <pre className="cp-hl" aria-hidden ref={backdropRef} dangerouslySetInnerHTML={{ __html: highlight(value) }} />
+      {/* scroll-thin нужен ОБОИМ слоям, хотя подложка не прокручивается: у них
+          `scrollbar-gutter: stable`, и разная ширина резерва развела бы перенос
+          строк — подсветка поехала бы относительно текста. */}
+      <pre className="cp-hl scroll-thin" aria-hidden ref={backdropRef} dangerouslySetInnerHTML={{ __html: highlight(value) }} />
       <textarea
         ref={ref}
         name={name}
@@ -70,7 +73,7 @@ export const ChordProInput = forwardRef<
         onChange={(e) => onChange(e.target.value)}
         onScroll={handleScroll}
         spellCheck={spellCheck}
-        className={`cp-ta ${className ?? ''}`}
+        className={`cp-ta scroll-thin ${className ?? ''}`}
       />
     </div>
   );
