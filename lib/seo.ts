@@ -135,10 +135,55 @@ export function songSeoDescription(
  *    второй: `noindex, follow` со временем начинает работать как
  *    `noindex, nofollow`, и ссылки на разборы вглубь обесцениваются.
  */
+export interface CatalogFilters {
+  q?: string;
+  sort?: string;
+  verified?: string;
+  page?: string;
+}
+
+/**
+ * Канонический адрес каталога. Отдельной функцией, потому что его приходится
+ * ставить в ДВУХ местах — см. `catalogCanonicalNeedsTag`.
+ */
+export function catalogCanonical(path: string, filters: CatalogFilters): string {
+  const filtered = !!(filters.q?.trim() || filters.sort || filters.verified);
+  // Отобранная выдача склеивается с чистым каталогом: она и так не в индексе.
+  return filtered ? path : catalogHref(path, { page: parseCatalogPage(filters.page) });
+}
+
+/**
+ * Сможет ли Next выразить этот canonical без искажения.
+ *
+ * Баг, проверен на Next 15.5: `resolveAbsoluteUrlWithPathname` заканчивается
+ * строкой `result.pathname === '/' ? result.origin : result.href` — у адреса,
+ * чей ПУТЬ равен корню, отбрасывается всё, кроме источника, вместе с
+ * query-строкой. Каталог гитары и есть корень сайта, поэтому «/?page=2»
+ * превращался в голый «https://сайт»: вторая страница объявляла себя копией
+ * первой — ровно то, чего пагинация делать не должна, иначе поисковик
+ * перестаёт заходить вглубь каталога.
+ *
+ * Обойти это через `alternates` нельзя: форма с объектом `URL` упирается в ту
+ * же строку. Ставить тег руками из разметки тоже нельзя — у каталога есть
+ * `loading.tsx`, ответ уходит стримом, и `<head>` улетает раньше, чем
+ * отрисуется страница (проверено: тег остаётся в `<body>`, где поисковик его
+ * не читает).
+ *
+ * Поэтому на таких адресах canonical просто НЕ выводится. Это не полумера:
+ * тег нужен, только чтобы РАЗЛИЧИТЬ дубли, а когда его нет, поисковик берёт
+ * канонической саму запрошенную ссылку — то есть ровно то, что и требуется.
+ * Дублей у «/?page=2» нет: на неё не ведёт ни один другой адрес.
+ *
+ * На «/ukulele?page=2» путь не корневой, тег выводится обычным способом.
+ */
+export function catalogCanonicalIsSafe(canonical: string): boolean {
+  return !canonical.startsWith('/?');
+}
+
 export function catalogMetadata(
   inst: Instrument,
   path: string,
-  filters: { q?: string; sort?: string; verified?: string; page?: string },
+  filters: CatalogFilters,
 ) {
   const filtered = !!(filters.q?.trim() || filters.sort || filters.verified);
   const page = parseCatalogPage(filters.page);
@@ -157,13 +202,15 @@ export function catalogMetadata(
 
   // Свой адрес у каждой страницы пагинации. У отобранной выдачи — чистый
   // каталог: она из индекса и так исключена, и склеивать её надо с ним.
-  const canonical = filtered ? path : catalogHref(path, { page });
+  const canonical = catalogCanonical(path, filters);
 
   return {
     title,
     description,
     alternates: {
-      canonical,
+      // Адрес, который Next исказил бы, лучше не объявлять вовсе, чем объявить
+      // неправильно: без тега канонической считается сама ссылка (см. выше).
+      ...(catalogCanonicalIsSafe(canonical) ? { canonical } : {}),
       // Ссылку на ленту приходится повторять здесь, хотя она есть и в корневом
       // layout: Next не дополняет `alternates` родителя, а ЗАМЕНЯЕТ блок
       // целиком — стоит странице задать свой canonical, и ссылка на ленту с неё
