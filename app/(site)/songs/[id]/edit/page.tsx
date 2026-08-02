@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireUser } from '@/lib/session';
 import { getOwnedSong } from '@/lib/songs';
 import { coverSrc } from '@/lib/coverUrl';
+import { songIdFromParam } from '@/lib/slug';
 import { SongEditor } from '@/components/SongEditor';
 import { DeleteSongForm } from '@/components/DeleteSongForm';
 import { updateSongAction } from '../../actions';
@@ -13,9 +14,11 @@ export const metadata: Metadata = {
 };
 
 export default async function EditSongPage({ params }: { params: Promise<{ id: string }> }) {
+  // Сегмент общий со страницей разбора, значит может прийти подписанным —
+  // ключ достаём тем же разбором (см. lib/slug.ts).
   const { id } = await params;
   const user = await requireUser();
-  const song = await getOwnedSong(id, user.id);
+  const song = await getOwnedSong(songIdFromParam(id), user.id);
   if (!song) notFound();
 
   return (

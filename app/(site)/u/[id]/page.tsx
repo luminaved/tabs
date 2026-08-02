@@ -9,7 +9,10 @@ import {
   parseInstrumentId,
   type InstrumentId,
 } from '@/lib/chords/instruments';
-import { SITE_NAME } from '@/lib/site';
+import { absoluteUrl, SITE_NAME } from '@/lib/site';
+import { itemListJsonLd } from '@/lib/seo';
+import { jsonLdScript } from '@/lib/jsonLd';
+import { songPath } from '@/lib/slug';
 import { Avatar } from '@/components/Avatar';
 import { SongRow } from '@/components/SongRow';
 import { LoadMoreSongs } from '@/components/LoadMoreSongs';
@@ -17,27 +20,33 @@ import { loadMoreUserSongsAction } from './actions';
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ instrument?: string; q?: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
+  const sp = await searchParams;
   const user = await getPublicUser(id);
   if (!user) notFound(); // до стриминга — иначе ушёл бы soft-404 (см. песню)
 
   const name = user.name ?? 'Автор';
+  const title = `${name} — разборы песен и аккорды`;
   return {
-    title: `${name} — разборы песен и аккорды`,
+    title,
     description: `Разборы песен от ${name}: аккорды для гитары и укулеле с текстом и аппликатурами.`,
     // Разделение по инструментам и поиск — параметры запроса, а не отдельные
     // адреса: спроса на «автор X укулеле» в поиске нет, а плодить тонкие
-    // индексируемые страницы ради фильтра не нужно. Canonical всегда базовый.
+    // индексируемые страницы ради фильтра не нужно. Canonical всегда базовый,
+    // а сама отобранная выдача вдобавок закрыта от индекса — как в каталоге.
     alternates: { canonical: `/u/${id}` },
+    ...(sp.instrument || sp.q?.trim() ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       type: 'profile',
       url: `/u/${id}`,
       siteName: SITE_NAME,
       locale: 'ru_RU',
-      title: `${name} — разборы песен и аккорды`,
+      title,
       description: `Разборы песен от ${name}: аккорды для гитары и укулеле.`,
     },
   };
@@ -76,8 +85,40 @@ export default async function ProfilePage({
     return qs ? `/u/${id}?${qs}` : `/u/${id}`;
   };
 
+  // Страница автора: кто это и какие разборы отсюда доступны. `ProfilePage`
+  // с вложенным `Person` — то, чем страница является; список нужен, чтобы у
+  // разборов появился ещё один явный источник ссылок помимо каталога.
+  // Только на чистой странице: у отобранной и разметка была бы непостоянной.
+  const jsonLd =
+    !instrument && !query
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'ProfilePage',
+          url: absoluteUrl(`/u/${id}`),
+          inLanguage: 'ru',
+          mainEntity: {
+            '@type': 'Person',
+            name: user.name || 'Автор',
+            url: absoluteUrl(`/u/${id}`),
+          },
+          hasPart: itemListJsonLd(
+            songs.map((s) => ({
+              name: `${s.title}${s.artist ? ` — ${s.artist}` : ''}`,
+              path: songPath(s),
+            })),
+            `Разборы автора: ${user.name || 'Автор'}`,
+          ),
+        }
+      : null;
+
   return (
     <main className="container-app py-10">
+      {jsonLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
+        />
+      ) : null}
       <section className="mb-8 flex items-center gap-4">
         <Avatar version={user.avatarVersion} name={user.name} size={96} userId={id} />
         <div className="min-w-0">

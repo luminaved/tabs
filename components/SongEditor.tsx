@@ -23,6 +23,7 @@ import { parseSong } from '@/lib/chordpro/parse';
 import { chordsInOrder } from '@/lib/chordpro/usedChords';
 import { parseChordDefs } from '@/lib/chords/diagrams';
 import { parseInstrumentId, type InstrumentId } from '@/lib/chords/instruments';
+import { songPath } from '@/lib/slug';
 import {
   clearDraft,
   draftKey,
@@ -469,7 +470,16 @@ export function SongEditor({
         <button type="submit" disabled={pending} className="btn btn-primary">
           {pending ? '…' : submitLabel}
         </button>
-        <Link href={initial?.id ? `/songs/${initial.id}` : '/songs'} className="btn btn-ghost">
+        {/* Подпись в адресе собирается из СОХРАНЁННЫХ названия и исполнителя:
+            «Отмена» ведёт туда, откуда пришли, а не туда, что успели набрать. */}
+        <Link
+          href={
+            initial?.id
+              ? songPath({ id: initial.id, title: initial.title ?? '', artist: initial.artist })
+              : '/songs'
+          }
+          className="btn btn-ghost"
+        >
           Отмена
         </Link>
         {savedAt ? (

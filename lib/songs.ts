@@ -5,7 +5,7 @@ import { INSTRUMENT_IDS, parseInstrumentId, type InstrumentId } from './chords/i
 // Строка списка карточек определена в engagement.ts — здесь она же
 // переэкспортируется, чтобы вызывающему коду не приходилось знать, в каком из
 // двух модулей лежит нужный ему список.
-import { cardSelect, type SongListPage } from './engagement';
+import { cardSelect, type SongCard, type SongListPage } from './engagement';
 export type { SongListPage } from './engagement';
 import { SONGS_PAGE_SIZE, pageSkip, pageTake, parsePage, splitPage } from './paging';
 import { buildSearchText, searchQueryForLike } from './chordpro/searchText';
@@ -337,6 +337,87 @@ export const findArtistName = cache(async function findArtistName(artist: string
   });
   return row?.artist ?? null;
 });
+
+/**
+ * Соседние разборы для страницы песни: сначала того же исполнителя, потом —
+ * просто популярные на том же инструменте.
+ *
+ * Нужны не «на всякий случай». Страница разбора — тупик: со всего сайта на неё
+ * ведут ссылки, а с неё не ведёт ни одной, поэтому обход упирается в неё и
+ * разворачивается. Блок соседей превращает тупик в развилку и заодно
+ * закольцовывает каталог: у каждого разбора появляются входящие ссылки не
+ * только со страницы каталога, где он рано или поздно уедет на вторую страницу.
+ *
+ * Приватные и «по ссылке» сюда не попадают: блок виден всем, включая гостя.
+ */
+export async function listRelatedSongs(
+  song: { id: string; artist: string | null; instrument: string },
+  limit = 6,
+): Promise<SongCard[]> {
+  const base: Prisma.SongWhereInput = { visibility: 'public', id: { not: song.id } };
+  const popular: Prisma.SongOrderByWithRelationInput[] = [
+    { viewCount: 'desc' },
+    { createdAt: 'desc' },
+    { id: 'desc' },
+  ];
+
+  const artist = song.artist?.trim();
+  const sameArtist = artist
+    ? await prisma.song.findMany({
+        where: { ...base, artist: { equals: artist, mode: 'insensitive' } },
+        orderBy: popular,
+        take: limit,
+        select: cardSelect,
+      })
+    : [];
+
+  // У исполнителя набралось на весь блок — второй запрос не нужен.
+  if (sameArtist.length >= limit) return sameArtist.map(withChordChips);
+
+  const rest = await prisma.song.findMany({
+    where: {
+      ...base,
+      instrument: song.instrument,
+      ...(sameArtist.length ? { id: { notIn: [song.id, ...sameArtist.map((s) => s.id)] } } : {}),
+    },
+    orderBy: popular,
+    take: limit - sameArtist.length,
+    select: cardSelect,
+  });
+
+  return [...sameArtist, ...rest].map(withChordChips);
+}
+
+/**
+ * Исполнители, у которых больше всего публичных разборов на инструменте.
+ *
+ * Питает блок ссылок под каталогом. Без него страницы исполнителей висели в
+ * стороне: ссылка на них была только внутри строки списка, то есть жила ровно
+ * до того момента, как разбор уезжал на вторую страницу каталога. Теперь у
+ * каждой заметной страницы исполнителя есть постоянная ссылка с главной — а
+ * это и обход, и запросы вида «<исполнитель> аккорды».
+ */
+export async function listTopArtists(
+  instrument: InstrumentId,
+  // Потолок жёсткий и намеренно небольшой: блок растёт вместе с каталогом
+  // только до этого числа, а дальше — никогда. Двенадцати хватает, чтобы
+  // заметные страницы исполнителей получили постоянную ссылку; всё остальное
+  // разбирают карта сайта и строки самих разборов, а на странице это была бы
+  // уже простыня ссылок — то, что поисковики считают ссылочной свалкой, а
+  // человек просто пролистывает.
+  limit = 12,
+): Promise<{ name: string; count: number }[]> {
+  const rows = await prisma.song.groupBy({
+    by: ['artist'],
+    where: { visibility: 'public', instrument, artist: { not: null } },
+    _count: { _all: true },
+    orderBy: { _count: { artist: 'desc' } },
+    take: limit,
+  });
+  return rows
+    .filter((r): r is typeof r & { artist: string } => !!r.artist?.trim())
+    .map((r) => ({ name: r.artist, count: r._count._all }));
+}
 
 /**
  * Все исполнители с публичными разборами — для карты сайта.

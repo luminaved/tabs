@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { currentUserIsAdmin } from '@/lib/admin';
 import { getAdminStats, type Delta, type TopSong } from '@/lib/stats';
 import { INSTRUMENTS } from '@/lib/chords/instruments';
+import { songPath } from '@/lib/slug';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { BarList } from '@/components/charts/BarList';
 import { Meter, ShareBar } from '@/components/charts/ShareBar';
@@ -174,7 +175,7 @@ function toBars(songs: TopSong[], pick: (s: TopSong) => number) {
     label: song.title,
     sub: song.artist,
     value: pick(song),
-    href: `/songs/${song.id}`,
+    href: songPath(song),
   }));
 }
 

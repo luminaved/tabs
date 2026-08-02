@@ -6,6 +6,7 @@ import { requireUser } from '@/lib/session';
 import { createSong, deleteSong, updateSong, type SongInput, type SongVisibility } from '@/lib/songs';
 import { parseInstrumentId } from '@/lib/chords/instruments';
 import { parseCoverField } from '@/lib/imageInput';
+import { songPath } from '@/lib/slug';
 
 export interface SongFormState {
   error?: string;
@@ -56,7 +57,9 @@ export async function createSongAction(_prev: SongFormState, formData: FormData)
 
   const song = await createSong(user.id, parsed);
   revalidatePath('/songs');
-  redirect(`/songs/${song.id}`);
+  // Сразу на канонический адрес с подписью — иначе первый же переход после
+  // сохранения ловил бы 308 из layout'а просмотра.
+  redirect(songPath(song));
 }
 
 export async function updateSongAction(_prev: SongFormState, formData: FormData): Promise<SongFormState> {
@@ -68,9 +71,13 @@ export async function updateSongAction(_prev: SongFormState, formData: FormData)
   const updated = await updateSong(id, user.id, parsed);
   if (!updated) return { error: 'Песня не найдена или нет доступа' };
 
+  // Подпись в адресе зависит от названия и исполнителя, поэтому после правки
+  // сбрасываем и старый адрес, и новый: они могут не совпасть.
+  const path = songPath(updated);
   revalidatePath('/songs');
   revalidatePath(`/songs/${id}`);
-  redirect(`/songs/${id}`);
+  if (path !== `/songs/${id}`) revalidatePath(path);
+  redirect(path);
 }
 
 /**

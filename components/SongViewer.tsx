@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Fragment,
   useEffect,
   useMemo,
   useOptimistic,
@@ -107,6 +106,12 @@ export function SongViewer({
   });
   const base = useMemo(() => songFromRecord(record), [record]);
   const inst = getInstrument(instrument);
+
+  // Подпись под шапкой: только то, чего страница не говорит в других местах.
+  const metaBits = [
+    base.meta.tempo ? `${base.meta.tempo} bpm` : null,
+    createdLabel ? `добавлено ${createdLabel}` : null,
+  ].filter(Boolean);
 
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);
@@ -353,8 +358,18 @@ export function SongViewer({
         <div className="flex gap-4">
           {coverUrl ? (
             <div className="cover-fill">
+              {/* Подпись описывает картинку как картинку («обложка такой-то
+                  песни»), а не повторяет заголовок: она есть в карте сайта и
+                  участвует в поиске по картинкам, где текста рядом нет.
+                  Миниатюры в списках так НЕ подписаны (alt="") — там название
+                  стоит вплотную, и подпись читалась бы дважды. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={coverUrl} alt="" className="cover-fill-img" decoding="async" />
+              <img
+                src={coverUrl}
+                alt={`Обложка: ${base.meta.title ?? 'без названия'}${base.meta.artist ? ` — ${base.meta.artist}` : ''}`}
+                className="cover-fill-img"
+                decoding="async"
+              />
             </div>
           ) : null}
           <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -398,25 +413,18 @@ export function SongViewer({
           </div>
         </div>
 
-        {/* Ниже, во всю ширину: подпись · тональность · bpm · дата.
-            Исполнитель — под названием (рядом с обложкой).
-            «Аккорды для гитары» здесь не только подпись, но и то, как эту
-            страницу ищут в поисковике — поэтому текст видимый, а не только в мете. */}
-        <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
-          {[
-            `Аккорды для ${inst.forName}`,
-            base.meta.key ? `тональность ${base.meta.key}` : null,
-            base.meta.tempo ? `${base.meta.tempo} bpm` : null,
-            createdLabel ? `добавлено ${createdLabel}` : null,
-          ]
-            .filter(Boolean)
-            .map((item, i) => (
-              <Fragment key={i}>
-                {i > 0 ? <span className="text-faint">·</span> : null}
-                <span>{item}</span>
-              </Fragment>
-            ))}
-        </p>
+        {/* Строка была длиннее: «Аккорды для гитары · тональность · bpm · дата».
+            Инструмент и тональность отсюда ушли — их страница уже говорит в
+            других местах (первой крошкой над обложкой и крупно в панели
+            управления), и вторым разом они только шумели. Остались темп и дата:
+            их больше нигде нет.
+
+            Соединение через join, а не разделителем в разметке, как было:
+            частей теперь две, и городить ради них Fragment с отдельным
+            <span> под точку незачем. */}
+        {metaBits.length > 0 ? (
+          <p className="mt-3 text-muted">{metaBits.join(' · ')}</p>
+        ) : null}
 
         {/* «Поделиться» доступна всем, лайк/избранное — только со входом. */}
         <div className="print-hide mt-3 flex flex-wrap items-center gap-2">
@@ -448,13 +456,30 @@ export function SongViewer({
 
           {shareUrl ? <ShareButton url={shareUrl} title={shareTitle ?? ''} /> : null}
 
-          {/* Подтверждение разбора — только у модератора */}
+          {optimisticEng ? (
+            <span className="ml-1 flex items-center gap-1.5 text-sm text-muted" title="Просмотры">
+              <ViewsIcon />
+              {optimisticEng.viewCount}
+            </span>
+          ) : null}
+
+          {/*
+            Подтверждение разбора — только у модератора, и стоит последним,
+            приглушённым и без заливки.
+
+            Раньше подтверждённый разбор рисовал здесь кнопку, залитую акцентом:
+            она была самым громким элементом страницы, хотя читателю не говорит
+            ничего (о подтверждении сообщает галочка у заголовка), а модератору
+            на уже подтверждённом разборе делать нечего. Крупная подпись нужна
+            ровно в одном состоянии — когда есть что нажать.
+          */}
           {canVerify && songId ? (
             <button
               type="button"
               onClick={onToggleVerified}
-              className={`btn h-9 gap-1.5 px-3 text-sm ${optimisticVerified ? 'btn-verified' : 'btn-outline'}`}
+              className={`btn h-9 gap-1.5 text-sm ${optimisticVerified ? 'btn-ghost w-9 px-0' : 'btn-outline px-3'}`}
               aria-pressed={optimisticVerified}
+              aria-label={optimisticVerified ? 'Снять подтверждение' : 'Подтвердить: аккорды верны'}
               title={
                 optimisticVerified
                   ? `Снять подтверждение · ${VERIFIED_TITLE}`
@@ -462,17 +487,8 @@ export function SongViewer({
               }
             >
               <CheckIcon />
-              <span className="hidden sm:inline">
-                {optimisticVerified ? 'Подтверждено' : 'Подтвердить'}
-              </span>
+              {optimisticVerified ? null : <span className="hidden sm:inline">Подтвердить</span>}
             </button>
-          ) : null}
-
-          {optimisticEng ? (
-            <span className="ml-1 flex items-center gap-1.5 text-sm text-muted" title="Просмотры">
-              <ViewsIcon />
-              {optimisticEng.viewCount}
-            </span>
           ) : null}
         </div>
       </header>
@@ -488,9 +504,13 @@ export function SongViewer({
           >
             −
           </button>
+          {/* Крупно — текущая тональность, мелко — на сколько сдвинули. Если
+              тональность у разбора не указана, сдвиг занимает крупную строку и
+              мелкая НЕ рисуется: иначе «±0» стояло дважды подряд, и читалось
+              это как два разных числа, которые почему-то совпали. */}
           <div className="key-readout">
             <b>{realKey ?? offsetLabel}</b>
-            <span>{offsetLabel}</span>
+            {realKey ? <span>{offsetLabel}</span> : null}
           </div>
           <button
             type="button"
@@ -596,6 +616,7 @@ export function SongViewer({
                 Печать / PDF
               </button>
 
+
               {transpose !== 0 ? (
                 <button
                   type="button"
@@ -606,6 +627,16 @@ export function SongViewer({
                 </button>
               ) : null}
             </div>
+
+            {/* Подсказка про заметки жила отдельной строкой над текстом песни и
+                висела там постоянно — притом что нужна она один раз и только
+                владельцу разбора. Здесь она на виду у того, кто открыл
+                настройки, и не мешает всем остальным. */}
+            {canAnnotate ? (
+              <p className="border-t border-line pt-4 text-sm text-faint">
+                Нажмите на строку песни, чтобы добавить к ней заметку.
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -623,11 +654,6 @@ export function SongViewer({
         </div>
       ) : null}
 
-      {canAnnotate ? (
-        <p className="print-hide mb-3 text-sm text-faint">
-          Нажмите на строку, чтобы добавить заметку.
-        </p>
-      ) : null}
 
       <div
         className="print-area"

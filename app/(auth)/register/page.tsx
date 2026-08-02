@@ -1,6 +1,13 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AuthForm } from '@/components/AuthForm';
 import { registerAction } from '../actions';
+
+// Почему тег нужен вдобавок к robots.txt — см. страницу входа.
+export const metadata: Metadata = {
+  title: 'Регистрация',
+  robots: { index: false, follow: false },
+};
 
 export default function RegisterPage() {
   return (

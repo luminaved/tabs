@@ -30,7 +30,23 @@ export const metadata: Metadata = {
     'Аккорды песен на гитару: текст с аккордами над словами, аппликатуры, ' +
     'транспонирование в любую тональность и разборы от других гитаристов.',
   applicationName: SITE_NAME,
-  alternates: { canonical: '/' },
+  alternates: {
+    canonical: '/',
+    // Ссылка на ленту в <head> — то, как её находят читалки и агрегаторы:
+    // сам файл ниоткуда не виден, если о нём не сказать здесь.
+    types: { 'application/rss+xml': [{ url: '/feed.xml', title: `${SITE_NAME} — новые разборы` }] },
+  },
+  // Подтверждение прав в панелях вебмастера. Значения — из окружения, а не
+  // строкой в коде: они привязаны к конкретному аккаунту, и в общем репозитории
+  // им не место. Пусто — тег просто не выводится (у Google права уже
+  // подтверждены файлом в public/, это запасной способ и место для Яндекса,
+  // который для русскоязычного сайта даёт заметную часть трафика).
+  verification: {
+    ...(process.env.GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+      : {}),
+    ...(process.env.YANDEX_VERIFICATION ? { yandex: process.env.YANDEX_VERIFICATION } : {}),
+  },
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,

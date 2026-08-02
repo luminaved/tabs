@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { prisma } from '@/lib/db';
 import { getInstrument } from '@/lib/chords/instruments';
+import { songIdFromParam } from '@/lib/slug';
 
 /**
  * Картинка для превью ссылки (Telegram/VK/WhatsApp/Twitter) — 1200×630.
@@ -70,7 +71,9 @@ function placeholder(strings = 6): Buffer {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  // Адрес страницы разбора подписан («подпись-идентификатор»), и картинка
+  // живёт под тем же сегментом — поэтому ключ достаём тем же разбором.
+  const id = songIdFromParam((await params).id);
 
   const song = await prisma.song.findUnique({
     where: { id },

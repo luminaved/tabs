@@ -1755,16 +1755,6 @@
   }
 
   /* Кнопка модератора во включённом состоянии */
-  .btn-verified {
-    background: var(--color-verified);
-    border-color: var(--color-verified);
-    color: var(--color-accent-fg);
-    font-weight: 600;
-  }
-  .btn-verified:hover:not(:disabled) {
-    filter: brightness(1.06);
-  }
-
   /* Бейдж инструмента в списке своих разборов */
   .inst-badge {
     display: inline-flex;
@@ -1778,6 +1768,34 @@
     line-height: 1;
     white-space: nowrap;
     color: var(--color-muted);
+  }
+
+  /* Ссылка на исполнителя в блоке перелинковки под каталогом. Отдельный класс,
+     а не .inst-badge: тот — подпись высотой 1.3rem, а сюда надо попадать
+     пальцем, поэтому цель крупнее и с наведением. */
+  .artist-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2rem;
+    padding-inline: 0.65rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--color-muted);
+  }
+
+  .artist-chip:hover {
+    color: var(--color-fg);
+    border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+  }
+
+  .artist-chip-count {
+    color: var(--color-faint);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
   }
 
   /* ─── Модалка ─────────────────────────────────────────────────────────── */
@@ -1817,6 +1835,53 @@
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--color-muted);
+  }
+
+  /* Хлебные крошки. Стоят на месте «надзаголовка» (.eyebrow) и оформлены так
+     же — но БЕЗ uppercase: заглавными идёт рубрика, а здесь ссылки, и капслок
+     на названии исполнителя читался бы как крик. */
+  .breadcrumbs {
+    /* Отступ снизу — часть самой цепочки, а не забота страницы: крошки стоят
+       над разным содержимым (обложка разбора, шапка исполнителя), и без него
+       они прилипали к нему вплотную, читаясь как его первая строка. */
+    margin-bottom: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+  }
+
+  .breadcrumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .breadcrumbs li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    /* Длинное название песни в последней крошке не должно распирать страницу. */
+    min-width: 0;
+  }
+
+  .breadcrumbs a:hover {
+    color: var(--color-fg);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .breadcrumbs [aria-current='page'] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 22rem;
+  }
+
+  .breadcrumbs-sep {
+    color: var(--color-faint);
   }
 
   .display {

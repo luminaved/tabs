@@ -1,12 +1,16 @@
 import Link from 'next/link';
-import { listPublicSongs, parseSort } from '@/lib/songs';
+import { listPublicSongs, listTopArtists, parseSort } from '@/lib/songs';
 import { catalogHref, parseVerifiedParam } from '@/lib/catalogUrl';
 import { INSTRUMENTS, catalogPath, type InstrumentId } from '@/lib/chords/instruments';
+import { itemListJsonLd } from '@/lib/seo';
+import { jsonLdScript } from '@/lib/jsonLd';
+import { songPath } from '@/lib/slug';
 import { CatalogRow } from './CatalogRow';
 import { LoadMoreCatalog } from './LoadMoreCatalog';
 import { InstrumentTabs } from './InstrumentTabs';
 import { SortTabs } from './SortTabs';
 import { VerifiedFilter } from './VerifiedFilter';
+import { ArtistCloud } from './ArtistCloud';
 
 /**
  * Каталог одного инструмента. Общее тело для `/` (гитара) и `/ukulele` —
@@ -26,19 +30,45 @@ export async function CatalogView({
   const inst = INSTRUMENTS[instrument];
   const basePath = catalogPath(instrument);
 
-  const { songs, hasMore, fuzzy } = await listPublicSongs({
-    query,
-    sort,
-    instrument,
-    verified,
-  });
+  // Блок исполнителей нужен только на чистом каталоге: на странице поиска или
+  // отбора он не к месту (человек ищет конкретное), да и сама она в индекс не
+  // идёт — перелинковывать оттуда нечего.
+  const plain = !query && !verified && sort === 'new';
+
+  const [{ songs, hasMore, fuzzy }, artists] = await Promise.all([
+    listPublicSongs({ query, sort, instrument, verified }),
+    plain ? listTopArtists(instrument) : Promise.resolve([]),
+  ]);
 
   return (
     <main className="container-app py-10">
+      {/* Явный перечень того, куда ведёт страница: списки с такой разметкой
+          поисковик разбирает охотнее, чем те же ссылки «просто в вёрстке».
+          Только на чистом каталоге — на выдаче отбора список непостоянен. */}
+      {plain && songs.length > 0 ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: jsonLdScript(
+              itemListJsonLd(
+                songs.map((s) => ({
+                  name: `${s.title}${s.artist ? ` — ${s.artist}` : ''}`,
+                  path: songPath(s),
+                })),
+                `Аккорды песен для ${inst.forName}`,
+              ),
+            ),
+          }}
+        />
+      ) : null}
+
       <div className="mb-6">
         <p className="eyebrow mb-2">Каталог</p>
         <h1 className="display text-4xl font-medium">Аккорды для {inst.forName}</h1>
-        <p className="mt-2 text-muted">Публичные разборы со всех аккаунтов.</p>
+        <p className="mt-2 text-muted">
+          Тексты песен с аккордами над словами, аппликатуры и транспонирование в любую
+          тональность. Публичные разборы со всех аккаунтов.
+        </p>
       </div>
 
       <div className="mb-8 flex flex-col gap-3">
@@ -112,6 +142,8 @@ export async function CatalogView({
           />
         </ul>
       )}
+
+      <ArtistCloud artists={artists} />
     </main>
   );
 }

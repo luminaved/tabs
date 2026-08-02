@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { SongCard } from '@/lib/engagement';
 import { INSTRUMENTS, parseInstrumentId } from '@/lib/chords/instruments';
+import { songPath } from '@/lib/slug';
 import { SongThumb } from './SongThumb';
 import { SongChordChips } from './SongChordChips';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -14,7 +15,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 export function SongRow({ song, meta }: { song: SongCard; meta?: React.ReactNode }) {
   const instrument = parseInstrumentId(song.instrument);
   return (
-    <Link href={`/songs/${song.id}`} className="song-row">
+    <Link href={songPath(song)} className="song-row">
       <SongThumb songId={song.id} hasCover={song.hasCover} updatedAt={song.updatedAt} />
       <div className="min-w-0 flex-1">
         {/* Отступы — как в каталоге: галочка вплотную к названию, бейдж дальше */}

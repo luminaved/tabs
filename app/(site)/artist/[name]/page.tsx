@@ -4,9 +4,14 @@ import { findArtistName, getArtistSummary, listSongsByArtist } from '@/lib/songs
 import { INSTRUMENTS, type InstrumentId } from '@/lib/chords/instruments';
 import { withPluralRu } from '@/lib/plural';
 import { songMeta } from '@/lib/songMeta';
-import { SITE_NAME } from '@/lib/site';
+import { absoluteUrl, SITE_NAME } from '@/lib/site';
+import { breadcrumbJsonLd, itemListJsonLd, type Crumb } from '@/lib/seo';
+import { jsonLdScript } from '@/lib/jsonLd';
+import { songPath } from '@/lib/slug';
+import { catalogPath } from '@/lib/chords/instruments';
 import { SongRow } from '@/components/SongRow';
 import { LoadMoreSongs } from '@/components/LoadMoreSongs';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { loadMoreArtistSongsAction } from './actions';
 
 function decodeName(raw: string): string {
@@ -45,10 +50,14 @@ export async function generateMetadata({
   if (!artist) notFound();
 
   const on = onNames(summary.instruments);
-  const title = `${artist} — аккорды всех песен на ${on}`;
+  const title = `${artist} — аккорды и разборы всех песен на ${on}`;
+  // Имя стоит ОТДЕЛЬНО, а не внутри фразы: по-русски его пришлось бы склонять
+  // («все песни Кишлака»), а имена исполнителей склонению не поддаются —
+  // половина из них латиницей или вовсе не существительные.
   const description =
-    `Все разборы ${artist}: аккорды на ${on} с текстом, аппликатурами ` +
-    'и транспонированием в любую тональность.';
+    `${artist} — все песни с аккордами: ` +
+    `${withPluralRu(summary.total, 'разбор', 'разбора', 'разборов')} на ${on} ` +
+    'с текстом над словами, аппликатурами и транспонированием в любую тональность.';
 
   return {
     title,
@@ -75,8 +84,50 @@ export default async function ArtistPage({ params }: { params: Promise<{ name: s
   ]);
   if (!artist) notFound();
 
+  const path = `/artist/${encodeURIComponent(artist)}`;
+  // Первый инструмент из сводки — тот каталог, к которому исполнитель ближе
+  // всего. Крошка ведёт вверх по разделу, а не на главную «просто потому что».
+  const crumbs: Crumb[] = [
+    { name: 'Каталог', path: catalogPath(summary.instruments[0] ?? 'guitar') },
+    { name: artist, path },
+  ];
+
+  /**
+   * Исполнитель как сущность плюс перечень его разборов. `MusicGroup` — то, чем
+   * страница является на самом деле; отдельным блоком идёт список, потому что
+   * одна разметка отвечает на вопрос «про кого страница», а вторая — «куда она
+   * ведёт», и склеивать их в одну поисковик не просит.
+   */
+  const jsonLd = [
+    breadcrumbJsonLd(crumbs),
+    {
+      '@context': 'https://schema.org',
+      '@type': 'MusicGroup',
+      name: artist,
+      url: absoluteUrl(path),
+      inLanguage: 'ru',
+    },
+    itemListJsonLd(
+      songs.map((s) => ({
+        name: `${s.title} — ${artist}`,
+        path: songPath(s),
+      })),
+      `Песни ${artist} с аккордами`,
+    ),
+  ];
+
   return (
     <main className="container-app py-10">
+      {jsonLd.map((data, i) => (
+        <script
+          key={i}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(data) }}
+        />
+      ))}
+      <Breadcrumbs crumbs={crumbs} />
+
+      {/* Без mt-*: отступ под крошками задаёт сам компонент крошек. */}
       <div className="mb-8">
         <p className="eyebrow mb-2">Исполнитель</p>
         <h1 className="display text-4xl font-medium">{artist}</h1>

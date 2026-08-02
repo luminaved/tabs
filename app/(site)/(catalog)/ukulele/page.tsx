@@ -1,27 +1,22 @@
 import type { Metadata } from 'next';
 import { CatalogView } from '@/components/CatalogView';
-import { SITE_NAME } from '@/lib/site';
+import { INSTRUMENTS, catalogPath } from '@/lib/chords/instruments';
+import { catalogMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: 'Аккорды песен на укулеле — каталог разборов',
-  description:
-    'Каталог разборов для укулеле: аккорды песен с текстом, аппликатурами под ' +
-    'строй GCEA и транспонированием. Ищите песню по названию или исполнителю.',
-  alternates: { canonical: '/ukulele' },
-  openGraph: {
-    type: 'website',
-    url: '/ukulele',
-    siteName: SITE_NAME,
-    locale: 'ru_RU',
-    title: 'Аккорды песен на укулеле — каталог разборов',
-    description: 'Разборы для укулеле: аккорды над словами, аппликатуры GCEA, транспонирование.',
-  },
-};
+type CatalogSearchParams = { q?: string; sort?: string; verified?: string };
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<CatalogSearchParams>;
+}): Promise<Metadata> {
+  return catalogMetadata(INSTRUMENTS.ukulele, catalogPath('ukulele'), await searchParams);
+}
 
 export default function UkuleleCatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; verified?: string }>;
+  searchParams: Promise<CatalogSearchParams>;
 }) {
   return <CatalogView instrument="ukulele" searchParams={searchParams} />;
 }

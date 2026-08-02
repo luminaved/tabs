@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { CatalogSong } from '@/lib/songs';
 import { INSTRUMENTS, parseInstrumentId } from '@/lib/chords/instruments';
+import { songPath } from '@/lib/slug';
 import { SongThumb } from './SongThumb';
 import { SongChordChips } from './SongChordChips';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -20,7 +21,7 @@ export function CatalogRow({ song }: { song: CatalogSong }) {
         {/* gap-1: галочка относится к названию, поэтому жмётся к нему вплотную,
             а бейдж инструмента отделён своим отступом (ms-1). */}
         <Link
-          href={`/songs/${song.id}`}
+          href={songPath(song)}
           className="stretched-link flex items-center gap-1 text-lg font-medium"
         >
           <span className="truncate">{song.title}</span>

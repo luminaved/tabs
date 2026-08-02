@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { getSongForViewer } from '@/lib/songs';
+import { songIdFromParam } from '@/lib/slug';
 
 /**
  * Гейт существования/видимости разбора.
@@ -11,6 +12,9 @@ import { getSongForViewer } from '@/lib/songs';
  * 404, а не «200 + страница не найдена» (soft-404, за который штрафует поиск).
  * Запрос не лишний: getSongForViewer обёрнут в cache() и переиспользуется
  * страницей и generateMetadata.
+ *
+ * Сегмент адреса — «подпись-идентификатор» (см. [lib/slug.ts](../../../../lib/slug.ts)),
+ * поэтому ключ достаётся из него, а не берётся целиком.
  */
 export default async function SongLayout({
   children,
@@ -21,7 +25,7 @@ export default async function SongLayout({
 }) {
   const { id } = await params;
   const session = await auth();
-  const song = await getSongForViewer(id, session?.user?.id);
+  const song = await getSongForViewer(songIdFromParam(id), session?.user?.id);
   if (!song) notFound();
 
   return <>{children}</>;

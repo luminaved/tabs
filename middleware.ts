@@ -97,11 +97,13 @@ export const config = {
      *   _next/static, _next/image — сборка и оптимизатор картинок;
      *   covers, avatars — наши маршруты картинок (у них свои заголовки, и
      *     лишний разбор на каждую обложку в каталоге ни к чему);
-     *   favicon.ico, icon.svg, robots.txt, sitemap.xml — статика.
+     *   favicon.ico, icon.svg, robots.txt, sitemap.xml, feed.xml — статика и
+     *     машинные форматы: скриптов там нет, а CSP на XML только мешал бы
+     *     читалкам и валидаторам.
      */
     {
       source:
-        '/((?!_next/static|_next/image|covers/|avatars/|favicon.ico|icon.svg|robots.txt|sitemap.xml).*)',
+        '/((?!_next/static|_next/image|covers/|avatars/|favicon.ico|icon.svg|robots.txt|sitemap.xml|feed.xml).*)',
       missing: [{ type: 'header', key: 'next-router-prefetch' }],
     },
   ],

@@ -1,53 +1,43 @@
 import type { Metadata } from 'next';
 import { CatalogView } from '@/components/CatalogView';
-import { SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site';
+import { INSTRUMENTS, catalogPath } from '@/lib/chords/instruments';
+import { catalogMetadata, websiteJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
 
-export const metadata: Metadata = {
-  title: 'Аккорды песен на гитару — каталог разборов',
-  description:
-    'Каталог разборов: аккорды песен на гитару с текстом, аппликатурами и ' +
-    'транспонированием. Ищите песню по названию или исполнителю.',
-  alternates: { canonical: '/' },
-  openGraph: {
-    type: 'website',
-    url: '/',
-    // siteName и locale приходится повторять на каждой странице со своим
-    // openGraph: Next заменяет этот блок целиком, а не дополняет корневой, и
-    // без них превью ссылки уходит в мессенджер без имени сайта.
-    siteName: SITE_NAME,
-    locale: 'ru_RU',
-    title: 'Аккорды песен на гитару — каталог разборов',
-    description: 'Разборы песен: аккорды над словами, аппликатуры, транспонирование.',
-  },
-};
+/** Параметры отбора каталога — общие для обеих точек входа. */
+type CatalogSearchParams = { q?: string; sort?: string; verified?: string };
 
 /**
- * Название сайта для поисковика. Именно по разметке `WebSite` на ГЛАВНОЙ
- * Google решает, каким именем подписать сайт в выдаче — без неё он додумывает
- * его сам из домена и заголовков, что после переименования даёт разнобой.
- * Только здесь: на внутренних страницах эта разметка игнорируется.
+ * Метаданные считаются на запрос, а не заданы константой, потому что от
+ * параметров зависит `robots`: каталог с поиском или отбором в индекс не идёт
+ * (разбор — в [lib/seo.ts](../../../lib/seo.ts)).
  */
-const siteJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  name: SITE_NAME,
-  description: SITE_TAGLINE,
-  url: SITE_URL,
-  inLanguage: 'ru',
-};
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<CatalogSearchParams>;
+}): Promise<Metadata> {
+  return catalogMetadata(INSTRUMENTS.guitar, catalogPath('guitar'), await searchParams);
+}
 
 /** Каталог гитары — он же главная страница (адрес не менялся). */
 export default function GuitarCatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; verified?: string }>;
+  searchParams: Promise<CatalogSearchParams>;
 }) {
   return (
     <>
+      {/*
+        Название сайта для поисковика и строка поиска в выдаче. Именно по
+        разметке `WebSite` на ГЛАВНОЙ Google решает, каким именем подписать сайт
+        — без неё он додумывает его сам из домена и заголовков, что после
+        переименования даёт разнобой. Только здесь: на внутренних страницах эта
+        разметка игнорируется.
+      */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(websiteJsonLd) }}
       />
       <CatalogView instrument="guitar" searchParams={searchParams} />
     </>
