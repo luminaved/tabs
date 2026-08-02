@@ -38,6 +38,7 @@ model User {
   likes     Like[]
   favorites Favorite[]
   views     View[]
+  requestVotes SongRequestVote[]
 }
 
 model Account {
@@ -217,6 +218,54 @@ model View {
   @@unique([userId, songId])
   @@unique([visitorId, songId])
   @@index([songId])
+}
+
+// Заявка на разбор — «этой песни у вас нет, сделайте».
+//
+// Свободного текстового поля здесь НЕТ намеренно, и это защита, а не экономия:
+// список публичный, а публиковать чужой произвольный текст на своём домене —
+// значит завести доску объявлений для спама и модерировать её вручную. Название
+// с исполнителем спамить бессмысленно: ссылку туда не вставишь.
+model SongRequest {
+  id         String   @id @default(cuid())
+  title      String
+  artist     String?
+  // Инструмент: каталоги разделены, и «на гитаре» с «на укулеле» — разные заявки.
+  instrument String   @default("guitar")
+  // Ключ склейки дублей: нормализованные инструмент + название + исполнитель
+  // (см. requestMatchKey). Уникальность здесь и есть механизм — повторная
+  // заявка не создаёт вторую строку, а превращается в голос за существующую.
+  matchKey   String   @unique
+  createdAt  DateTime @default(now())
+
+  votes SongRequestVote[]
+
+  @@index([createdAt])
+}
+
+// Голос за заявку. Устроен как View (см. выше) и по той же причине: голосуют в
+// основном гости, пришедшие из поиска, поэтому зритель — либо аккаунт, либо
+// суточный отпечаток, и заполнено ровно одно из двух полей. Два уникальных
+// индекса работают благодаря тому, что Postgres считает NULL различными.
+//
+// Отпечаток живёт сутки (lib/visitor.ts), значит вернувшийся через неделю гость
+// проголосует снова. Это осознанно: чинится только долговременным слежением за
+// устройством, от которого проект отказался сознательно. Поэтому счётчик честно
+// подписан «просят», а не «столько людей» — он мерит давление спроса, а не
+// уникальных посетителей.
+model SongRequestVote {
+  id        String   @id @default(cuid())
+  requestId String
+  userId    String?
+  visitorId String?
+  createdAt DateTime @default(now())
+
+  request SongRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user    User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+  @@unique([visitorId, requestId])
+  @@index([requestId])
 }
 
 // Избранное пользователя (просмотр — позже, в личном кабинете).

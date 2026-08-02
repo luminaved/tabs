@@ -136,6 +136,18 @@ export async function CatalogView({
               </Link>
             </div>
           ) : null}
+
+          {/* Поиск не дал результата — это ровно та секунда, когда человек
+              точно знает, чего хочет, и готов это назвать. Другого такого
+              момента на сайте нет, поэтому заявка предлагается именно здесь, а
+              не ссылкой в подвале. */}
+          {query && !verified ? (
+            <div className="mt-4 text-base">
+              <Link href="/requests" className="text-accent underline-offset-4 hover:underline">
+                Запросить разбор этой песни →
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -184,6 +196,18 @@ export async function CatalogView({
       ) : null}
 
       <ArtistCloud artists={artists} />
+
+      {/* Постоянный вход в заявки — для тех, кто пришёл не через поиск.
+          Только на чистой первой странице, чтобы не мозолить глаза. */}
+      {plain ? (
+        <p className="mt-8 text-sm text-muted">
+          Не нашли песню?{' '}
+          <Link href="/requests" className="text-accent underline-offset-4 hover:underline">
+            Запросите разбор
+          </Link>{' '}
+          — что просят чаще, то разбираем раньше.
+        </p>
+      ) : null}
     </main>
   );
 }

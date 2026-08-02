@@ -48,6 +48,52 @@ export function adoptRemoteAvatar(userId: string, url: string): Promise<string |
   return task;
 }
 
+/**
+ * Сколько перенаправлений проходим. Одного хватает с запасом: адрес приходит от
+ * провайдера входа и обычно отдаёт картинку сразу.
+ */
+const MAX_REDIRECTS = 2;
+
+/**
+ * Запрос с ПОШАГОВОЙ проверкой перенаправлений.
+ *
+ * `redirect: 'follow'` здесь был дырой: белый список проверял только первый
+ * адрес, а дальше fetch шёл по Location куда скажут. То есть достаточно было
+ * ответа с перенаправлением на внутренний адрес (169.254.169.254 у облачных
+ * метаданных, localhost, что угодно в приватной сети) — и сервер сходил бы
+ * туда сам. Это классический SSRF через редирект: сам белый список от него не
+ * защищает, потому что проверяет не то, куда в итоге ушёл запрос.
+ *
+ * Поэтому каждый следующий адрес проходит тот же `isAllowedAvatarUrl`, что и
+ * первый.
+ */
+async function fetchChecked(url: string): Promise<Response | null> {
+  let current = url;
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!isAllowedAvatarUrl(current)) return null;
+
+    const res = await fetch(current, {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      redirect: 'manual',
+      headers: { accept: 'image/*' },
+    });
+
+    if (res.status < 300 || res.status >= 400) return res;
+
+    const location = res.headers.get('location');
+    if (!location) return null;
+    // Относительный Location разрешаем относительно текущего адреса — и он
+    // тоже пойдёт на проверку следующим витком.
+    try {
+      current = new URL(location, current).toString();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 async function run(userId: string, url: string): Promise<string | null> {
   // Белый список проверяется здесь, а не только у вызывающего: адрес приходит
   // из базы, и без проверки этот код стал бы способом слать запросы куда угодно
@@ -55,13 +101,16 @@ async function run(userId: string, url: string): Promise<string | null> {
   if (!isAllowedAvatarUrl(url)) return null;
 
   try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      redirect: 'follow',
-      headers: { accept: 'image/*' },
-    });
-    if (!res.ok) return null;
+    const res = await fetchChecked(url);
+    if (!res?.ok) return null;
     if (!(res.headers.get('content-type') ?? '').startsWith('image/')) return null;
+
+    // Размер проверяем ДО чтения тела, если сервер его объявил: иначе ответ на
+    // сотни мегабайт целиком поднимался бы в память процесса, и только потом
+    // отбраковывался. Заголовку верим лишь на отказ — сама проверка ниже
+    // остаётся и ловит тех, кто его не прислал или соврал в меньшую сторону.
+    const declared = Number(res.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > MAX_BYTES) return null;
 
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.byteLength > MAX_BYTES) return null;

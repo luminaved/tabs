@@ -8,7 +8,13 @@
  */
 export default function Loading() {
   return (
-    <main className="container-app pb-28 pt-8" aria-busy>
+    // Отступы — те же, что у настоящей страницы (pb-16 sm:pb-28): иначе при
+    // подмене прыгает высота документа, а вместе с ней и полоса прокрутки.
+    <main className="container-app pb-16 pt-8 sm:pb-28" aria-busy>
+      {/* Крошки. Появились над обложкой позже скелетона, и без этой строки
+          содержимое при подмене уезжало вниз на их высоту вместе с отступом. */}
+      <div className="skeleton mb-6 h-4 w-56 rounded" />
+
       <div className="mb-6 flex gap-4">
         <div className="skeleton h-[7.5rem] w-[7.5rem] shrink-0 rounded-[0.65rem] sm:h-[8.5rem] sm:w-[8.5rem]" />
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-3">

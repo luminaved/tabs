@@ -1659,10 +1659,20 @@
   .inst-tab:hover {
     color: var(--color-fg);
   }
-  .inst-tab--on {
+  .inst-tab--on,
+  /* Тот же вид, когда вкладка — ярлык со спрятанным radio (форма заявки):
+     состояние берётся из самой формы, поэтому переключатель работает без JS. */
+  .inst-tab:has(input:checked) {
     color: var(--color-accent-fg);
     background: var(--color-accent);
     font-weight: 600;
+  }
+
+  /* Клавиатурный фокус на спрятанном radio виден по ярлыку — иначе по форме
+     нельзя было бы пройти табом, не потеряв каретку. */
+  .inst-tab:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
   /* Счётчик разборов в своей библиотеке */
   .inst-tab-count {
