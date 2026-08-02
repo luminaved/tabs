@@ -3,7 +3,7 @@ import { CatalogView } from '@/components/CatalogView';
 import { INSTRUMENTS, catalogPath } from '@/lib/chords/instruments';
 import { catalogMetadata } from '@/lib/seo';
 
-type CatalogSearchParams = { q?: string; sort?: string; verified?: string };
+type CatalogSearchParams = { q?: string; sort?: string; verified?: string; page?: string };
 
 export async function generateMetadata({
   searchParams,

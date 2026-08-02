@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { catalogHref, parseVerifiedParam } from './catalogUrl';
+import { catalogHref, parseCatalogPage, parseVerifiedParam } from './catalogUrl';
 
 describe('catalogHref', () => {
   it('без параметров — чистый адрес каталога', () => {
@@ -27,6 +27,44 @@ describe('catalogHref', () => {
 
   it('спецсимволы в запросе экранируются', () => {
     expect(catalogHref('/', { query: 'a&b=c' })).toBe('/?q=a%26b%3Dc');
+  });
+
+  it('первая страница в адрес не пишется', () => {
+    // Иначе «/» и «/?page=1» — два адреса одной выдачи.
+    expect(catalogHref('/', { page: 1 })).toBe('/');
+    expect(catalogHref('/', { page: 0 })).toBe('/');
+    expect(catalogHref('/', { page: undefined })).toBe('/');
+  });
+
+  it('страница со второй попадает в адрес и уживается с отбором', () => {
+    expect(catalogHref('/', { page: 2 })).toBe('/?page=2');
+    expect(catalogHref('/ukulele', { sort: 'views', verified: true, page: 3 })).toBe(
+      '/ukulele?sort=views&verified=1&page=3',
+    );
+  });
+});
+
+describe('parseCatalogPage', () => {
+  it('считает с единицы', () => {
+    expect(parseCatalogPage('2')).toBe(2);
+    expect(parseCatalogPage('1')).toBe(1);
+  });
+
+  it('мусор и выход за границы — это первая страница', () => {
+    expect(parseCatalogPage(undefined)).toBe(1);
+    expect(parseCatalogPage(null)).toBe(1);
+    expect(parseCatalogPage('')).toBe(1);
+    expect(parseCatalogPage('abc')).toBe(1);
+    expect(parseCatalogPage('0')).toBe(1);
+    expect(parseCatalogPage('-5')).toBe(1);
+  });
+
+  it('дробное усекается', () => {
+    expect(parseCatalogPage('3.9')).toBe(3);
+  });
+
+  it('упирается в потолок, а не листает БД сколь угодно далеко', () => {
+    expect(parseCatalogPage('999999')).toBe(200);
   });
 });
 

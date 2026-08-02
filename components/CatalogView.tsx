@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { listPublicSongs, listTopArtists, parseSort } from '@/lib/songs';
-import { catalogHref, parseVerifiedParam } from '@/lib/catalogUrl';
+import { catalogHref, parseCatalogPage, parseVerifiedParam } from '@/lib/catalogUrl';
 import { INSTRUMENTS, catalogPath, type InstrumentId } from '@/lib/chords/instruments';
 import { itemListJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
@@ -21,22 +21,24 @@ export async function CatalogView({
   searchParams,
 }: {
   instrument: InstrumentId;
-  searchParams: Promise<{ q?: string; sort?: string; verified?: string }>;
+  searchParams: Promise<{ q?: string; sort?: string; verified?: string; page?: string }>;
 }) {
   const sp = await searchParams;
   const query = sp.q?.trim() || undefined;
   const sort = parseSort(sp.sort);
   const verified = parseVerifiedParam(sp.verified);
+  // В адресе страницы считаются с единицы, в выборке — с нуля.
+  const page = parseCatalogPage(sp.page);
   const inst = INSTRUMENTS[instrument];
   const basePath = catalogPath(instrument);
 
-  // Блок исполнителей нужен только на чистом каталоге: на странице поиска или
-  // отбора он не к месту (человек ищет конкретное), да и сама она в индекс не
-  // идёт — перелинковывать оттуда нечего.
-  const plain = !query && !verified && sort === 'new';
+  // Блок исполнителей и разметка списка — только на ПЕРВОЙ странице чистого
+  // каталога: на выдаче поиска или отбора они не к месту (человек ищет
+  // конкретное), а на второй странице повторять тот же блок ссылок незачем.
+  const plain = !query && !verified && sort === 'new' && page === 1;
 
   const [{ songs, hasMore, fuzzy }, artists] = await Promise.all([
-    listPublicSongs({ query, sort, instrument, verified }),
+    listPublicSongs({ query, sort, instrument, verified, page: page - 1 }),
     plain ? listTopArtists(instrument) : Promise.resolve([]),
   ]);
 
@@ -99,11 +101,27 @@ export async function CatalogView({
 
       {songs.length === 0 ? (
         <div className="card px-6 py-16 text-center text-lg text-muted">
-          {query
+          {/* Пустая страница «за концом» списка. Ссылок на неё нет ниоткуда
+              («Показать ещё» появляется только когда продолжение есть), так что
+              попасть сюда можно лишь набрав номер руками — но объяснить, что
+              произошло, всё равно надо. */}
+          {page > 1
+            ? 'Такой страницы в каталоге нет.'
+            : query
             ? 'Ничего не найдено.'
             : verified
               ? `Подтверждённых разборов для ${inst.forName} пока нет.`
               : `Пока нет публичных разборов для ${inst.forName}.`}
+          {page > 1 ? (
+            <div className="mt-4 text-base">
+              <Link
+                href={catalogHref(basePath, { query, sort, verified })}
+                className="text-accent underline-offset-4 hover:underline"
+              >
+                В начало каталога →
+              </Link>
+            </div>
+          ) : null}
           {/* С включённым отбором пустая выдача чаще всего означает не «нет
               такой песни», а «она есть, но её ещё не проверил модератор» —
               поэтому даём выход одним кликом, а не отправляем искать заново. */}
@@ -131,17 +149,38 @@ export async function CatalogView({
               <CatalogRow song={song} />
             </li>
           ))}
-          {/* key: при смене запроса/сортировки/отбора подгруженные строки сбрасываются */}
+          {/* key: при смене запроса/сортировки/отбора/страницы подгруженные
+              строки сбрасываются — иначе после перехода на «?page=3» под
+              списком остались бы дописанные к прошлой странице. */}
           <LoadMoreCatalog
-            key={`${sort}:${verified ? 'v' : ''}:${query ?? ''}`}
+            key={`${sort}:${verified ? 'v' : ''}:${query ?? ''}:${page}`}
             query={query}
             sort={sort}
             instrument={instrument}
             verified={verified}
+            basePath={basePath}
+            page={page}
             hasMore={hasMore}
           />
         </ul>
       )}
+
+      {/* Ход назад. Вперёд ведёт «Показать ещё» внутри списка, а сюда попадают
+          те, кто пришёл на «?page=N» из поиска или по чужой ссылке: без этой
+          ссылки они оказывались бы в середине каталога без пути к его началу.
+          rel="prev" — та же подсказка поисковику, что и rel="next". */}
+      {page > 1 && songs.length > 0 ? (
+        <nav className="mt-6 flex items-center justify-center gap-3 text-sm" aria-label="Страницы каталога">
+          <Link
+            href={catalogHref(basePath, { query, sort, verified, page: page - 1 })}
+            rel="prev"
+            className="text-accent underline-offset-4 hover:underline"
+          >
+            ← Предыдущая
+          </Link>
+          <span className="text-faint">Страница {page}</span>
+        </nav>
+      ) : null}
 
       <ArtistCloud artists={artists} />
     </main>

@@ -4,8 +4,8 @@ import { INSTRUMENTS, catalogPath } from '@/lib/chords/instruments';
 import { catalogMetadata, websiteJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
 
-/** Параметры отбора каталога — общие для обеих точек входа. */
-type CatalogSearchParams = { q?: string; sort?: string; verified?: string };
+/** Параметры отбора и пагинации каталога — общие для обеих точек входа. */
+type CatalogSearchParams = { q?: string; sort?: string; verified?: string; page?: string };
 
 /**
  * Метаданные считаются на запрос, а не заданы константой, потому что от

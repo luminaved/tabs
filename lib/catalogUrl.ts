@@ -11,6 +11,8 @@
  * `/`, и canonical не расходится с реальной ссылкой.
  */
 
+import { parsePage } from './paging';
+
 export interface CatalogParams {
   /** Поисковый запрос. */
   query?: string;
@@ -18,6 +20,16 @@ export interface CatalogParams {
   sort?: string;
   /** Только подтверждённые модератором разборы. */
   verified?: boolean;
+  /**
+   * Номер страницы, СЧИТАЯ С ЕДИНИЦЫ — как его видит человек в адресе.
+   * Внутри (`listPublicSongs`, экшены) страницы нумеруются с нуля, поэтому на
+   * границе всегда есть ±1; здесь единица выбрана потому, что адрес читают
+   * люди, а «page=0» для второй страницы объяснить невозможно.
+   *
+   * Первая страница в адрес НЕ пишется: у каталога должен остаться ровно один
+   * адрес, иначе `/` и `/?page=1` — две копии одной выдачи.
+   */
+  page?: number;
 }
 
 export function catalogHref(basePath: string, params: CatalogParams = {}): string {
@@ -25,8 +37,21 @@ export function catalogHref(basePath: string, params: CatalogParams = {}): strin
   if (params.query) qs.set('q', params.query);
   if (params.sort && params.sort !== 'new') qs.set('sort', params.sort);
   if (params.verified) qs.set('verified', '1');
+  if (params.page && params.page > 1) qs.set('page', String(params.page));
   const s = qs.toString();
   return s ? `${basePath}?${s}` : basePath;
+}
+
+/**
+ * Номер страницы из адреса — с единицы, с тем же потолком, что и у выборки из
+ * БД: `parsePage` не пускает дальше, чтобы запросом нельзя было заставить
+ * Postgres пролистать и выбросить произвольно много строк.
+ *
+ * Мусор («abc», отрицательное, дробное) молча становится первой страницей:
+ * номер приходит из адреса, то есть от кого угодно, и падать на нём незачем.
+ */
+export function parseCatalogPage(value: string | undefined | null): number {
+  return Math.max(1, parsePage(value));
 }
 
 /**
