@@ -10,6 +10,7 @@ import { getInstrument } from '@/lib/chords/instruments';
 import { isAdminUser } from '@/lib/admin';
 import { coverSrc } from '@/lib/coverUrl';
 import { absoluteUrl, SITE_NAME } from '@/lib/site';
+import { jsonLdScript } from '@/lib/jsonLd';
 import { SongViewer } from '@/components/SongViewer';
 
 /**
@@ -139,7 +140,7 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
       {jsonLd ? (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
         />
       ) : null}
       <SongViewer

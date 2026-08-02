@@ -1,28 +1,36 @@
 import { avatarSrc } from '@/lib/avatarUrl';
 
-/** Аватар: картинка (напр. из Google) либо круг с инициалом. */
+/**
+ * Аватар: картинка либо круг с инициалом.
+ *
+ * Источников два, и они не пересекаются:
+ *   — `userId` + `version` — обычный случай. Картинка приходит отдельным
+ *     кэшируемым запросом на /avatars/[id], а на страницу попадает только
+ *     короткий отпечаток. Ни base64, ни адрес Google в разметке не появляются.
+ *   — `image` — только превью в редакторе профиля: файл сжат в data URL прямо
+ *     в браузере, в базе его ещё нет, и показать его можно лишь напрямую.
+ */
 export function Avatar({
   image,
+  version,
   name,
   email,
   size = 32,
   userId,
 }: {
+  /** Data URL для превью только что выбранного файла (в БД его ещё нет). */
   image?: string | null;
+  /** Отпечаток картинки из БД — вместе с `userId` даёт ссылку на маршрут. */
+  version?: string | null;
   name?: string | null;
   email?: string | null;
   size?: number;
-  /** Нужен, чтобы загруженный аватар шёл ссылкой, а не base64 в разметке. */
   userId?: string | null;
 }) {
   const style = { width: size, height: size };
+  const src = userId && version ? avatarSrc(userId, version) : (image ?? null);
 
-  if (image) {
-    // Загруженный аватар (data URL) отдаём маршрутом: иначе он вшивается в
-    // HTML каждой страницы. Внешние ссылки (Google) — как есть. Без userId
-    // (превью только что выбранного файла в редакторе профиля — в БД его ещё
-    // нет) показываем data URL напрямую.
-    const src = userId ? avatarSrc(userId, image) : image;
+  if (src) {
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img

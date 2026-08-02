@@ -2,16 +2,32 @@
 
 import { useRef, useState } from 'react';
 import { resizeToDataUrl } from '@/lib/resizeImage';
+import { COVER_KEEP } from '@/lib/imageInput';
 
 /**
- * Загрузка обложки: файл сжимается на клиенте (canvas, макс. 512px, JPEG)
- * в data URL и кладётся в скрытый инпут `coverUrl` — хранится прямо в БД,
- * без внешнего хранилища.
+ * Загрузка обложки: файл сжимается на клиенте (canvas, макс. 512px, JPEG) в
+ * data URL и кладётся в скрытый инпут `coverUrl` — хранится прямо в БД, без
+ * внешнего хранилища.
+ *
+ * Уже сохранённая обложка приходит ССЫЛКОЙ (`initialSrc` → /covers/[id]), а не
+ * картинкой. Раньше сюда отдавали весь base64: он вшивался в HTML страницы
+ * редактирования и уезжал обратно в POST при каждом сохранении — по живым
+ * данным это 35 КБ в среднем и до 100 КБ в пике, туда и обратно, ради картинки,
+ * которая и так лежит в базе неизменной.
+ *
+ * Поэтому в скрытом инпуте теперь не картинка, а состояние:
+ *   `COVER_KEEP` — не трогали (сервер оставит, что было);
+ *   `''`         — убрали;
+ *   `data:…`     — выбрали новую.
  */
-export function CoverInput({ initial }: { initial?: string | null }) {
-  const [cover, setCover] = useState(initial ?? '');
+export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
+  // Пришла ссылка на существующую обложку — значит трогать её пока не просили.
+  const [cover, setCover] = useState(initialSrc ? COVER_KEEP : '');
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Что показываем: прежнюю обложку по ссылке либо только что выбранный файл.
+  const previewSrc = cover === COVER_KEEP ? (initialSrc ?? null) : cover || null;
 
   const onFile = async (file: File) => {
     setBusy(true);
@@ -26,9 +42,9 @@ export function CoverInput({ initial }: { initial?: string | null }) {
 
   return (
     <div className="flex items-center gap-4">
-      {cover ? (
+      {previewSrc ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={cover} alt="Обложка" className="cover cover-lg" />
+        <img src={previewSrc} alt="Обложка" className="cover cover-lg" />
       ) : (
         <div className="cover cover-lg cover-empty">
           <MusicIcon />
@@ -44,9 +60,9 @@ export function CoverInput({ initial }: { initial?: string | null }) {
           disabled={busy}
           className="btn btn-outline h-9 px-3 text-sm"
         >
-          {busy ? '…' : cover ? 'Заменить' : 'Загрузить обложку'}
+          {busy ? '…' : previewSrc ? 'Заменить' : 'Загрузить обложку'}
         </button>
-        {cover ? (
+        {previewSrc ? (
           <button
             type="button"
             onClick={() => setCover('')}

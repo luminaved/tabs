@@ -79,7 +79,7 @@ export default async function ProfilePage({
   return (
     <main className="container-app py-10">
       <section className="mb-8 flex items-center gap-4">
-        <Avatar image={user.image} name={user.name} size={96} userId={id} />
+        <Avatar version={user.avatarVersion} name={user.name} size={96} userId={id} />
         <div className="min-w-0">
           <h1 className="display truncate text-3xl font-medium">{user.name || 'Автор'}</h1>
           <p className="text-muted">Публичных разборов: {total}</p>

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireUser } from '@/lib/session';
 import { getOwnedSong } from '@/lib/songs';
+import { coverSrc } from '@/lib/coverUrl';
 import { SongEditor } from '@/components/SongEditor';
 import { DeleteSongForm } from '@/components/DeleteSongForm';
 import { updateSongAction } from '../../actions';
@@ -33,7 +34,8 @@ export default async function EditSongPage({ params }: { params: Promise<{ id: s
           tempo: song.tempo,
           body: song.body,
           note: song.note,
-          coverUrl: song.coverUrl,
+          // Ссылка, а не картинка: сам base64 в разметку больше не попадает.
+          coverSrc: song.hasCover ? coverSrc(song.id, song.updatedAt) : null,
           chordDefs: song.chordDefs,
           visibility: song.visibility,
           instrument: song.instrument,

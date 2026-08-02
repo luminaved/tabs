@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
+    "db:push": "prisma db push && node scripts/setup-search.mjs",
+    "db:setup-search": "node scripts/setup-search.mjs",
     "db:studio": "prisma studio",
     "db:export": "node scripts/export-data.mjs",
     "db:import": "node scripts/import-data.mjs"

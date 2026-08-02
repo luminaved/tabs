@@ -39,7 +39,7 @@ export async function SiteHeader() {
               </Link>
               <Link href="/account" className="nav-link" title="Личный кабинет">
                 <Avatar
-                  image={me?.image}
+                  version={me?.avatarVersion}
                   name={displayName}
                   email={session.user.email}
                   size={24}

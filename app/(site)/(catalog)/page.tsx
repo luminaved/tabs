@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CatalogView } from '@/components/CatalogView';
 import { SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site';
+import { jsonLdScript } from '@/lib/jsonLd';
 
 export const metadata: Metadata = {
   title: 'Аккорды песен на гитару — каталог разборов',
@@ -46,7 +47,7 @@ export default function GuitarCatalogPage({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(siteJsonLd) }}
       />
       <CatalogView instrument="guitar" searchParams={searchParams} />
     </>

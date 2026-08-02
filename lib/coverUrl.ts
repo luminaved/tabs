@@ -11,6 +11,15 @@ export function coverSrc(
   updatedAt: Date | string | number,
   size: 'sm' | 'md' = 'md',
 ): string {
-  const v = new Date(updatedAt).getTime().toString(36);
-  return `/covers/${songId}?v=${v}&s=${size}`;
+  return `/covers/${songId}?v=${coverVersion(updatedAt)}&s=${size}`;
+}
+
+/**
+ * Версия обложки. Считается и здесь (для ссылки), и в самом маршруте (для ключа
+ * кэша) — маршрут берёт `updatedAt` из базы, а не из query-параметра: значение
+ * из адреса задаёт клиент, и как ключ кэша оно пускало любого желающего
+ * плодить записи произвольными `?v=`.
+ */
+export function coverVersion(updatedAt: Date | string | number): string {
+  return new Date(updatedAt).getTime().toString(36);
 }

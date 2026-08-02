@@ -17,13 +17,14 @@ export function MobileNav({
   authed,
   name,
   email,
-  image,
+  avatarVersion,
   userId,
 }: {
   authed: boolean;
   name?: string | null;
   email?: string | null;
-  image?: string | null;
+  /** Отпечаток аватара, а не сама картинка: base64 в разметку не попадает. */
+  avatarVersion?: string | null;
   userId?: string | null;
 }) {
   const pathname = usePathname();
@@ -93,7 +94,7 @@ export function MobileNav({
 
             <NavItem href="/account" label="Кабинет" active={pathname.startsWith('/account')}>
               <span className="mnav-avatar">
-                <Avatar image={image} name={name} email={email} size={22} userId={userId} />
+                <Avatar version={avatarVersion} name={name} email={email} size={22} userId={userId} />
               </span>
             </NavItem>
           </>

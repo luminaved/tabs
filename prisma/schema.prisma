@@ -1,7 +1,10 @@
-// Prisma-схема. Локально — SQLite (файл, без внешних сервисов), чтобы всё
-// работало сразу. Схема переносима на PostgreSQL/Neon: без enum'ов и
-// провайдер-специфичных типов — для деплоя поменяйте provider на "postgresql"
-// и DATABASE_URL на строку Neon (см. README).
+// Prisma-схема. PostgreSQL и локально, и в продакшне (Neon) — см. README.
+//
+// Возврат на SQLite уже невозможен, даже несмотря на отсутствие enum'ов в
+// схеме: сырые запросы в lib/stats.ts (date_trunc/to_char), lib/engagement.ts
+// (INSERT … ON CONFLICT … RETURNING) и lib/songs.ts (word_similarity из
+// pg_trgm) написаны на диалекте Postgres. Плюс два уникальных индекса на
+// View держатся на том, что NULL здесь считаются различными значениями.
 
 generator client {
   provider = "prisma-client-js"
@@ -122,6 +125,18 @@ model Song {
   @@index([viewCount])
   // Каталог всегда фильтруется по паре «публичная + инструмент».
   @@index([visibility, instrument])
+  // Те же два поля плюс колонка сортировки. Каталог не просто фильтрует — он
+  // ещё и упорядочивает: по умолчанию «новые» (createdAt), вкладка
+  // «популярные» — по viewCount. Пары «visibility + instrument» для этого мало:
+  // Postgres отбирает по ней строки, а потом сортирует ВСЁ отобранное, чтобы
+  // отдать двадцать штук. С этими индексами он идёт по индексу и останавливается,
+  // набрав страницу. Отдельный @@index([viewCount]) выше эту работу не делает —
+  // он не знает про фильтр и для запроса каталога бесполезен.
+  //
+  // Сейчас в базе два десятка разборов, и планировщик всё равно выбирает Seq
+  // Scan (на таком объёме это дешевле) — выигрыш появится с ростом каталога.
+  @@index([visibility, instrument, createdAt])
+  @@index([visibility, instrument, viewCount])
 }
 
 model Annotation {

@@ -18,7 +18,7 @@ export async function MobileNavBar() {
       authed={!!session?.user}
       name={me?.name ?? session?.user?.name ?? null}
       email={session?.user?.email ?? null}
-      image={me?.image ?? null}
+      avatarVersion={me?.avatarVersion ?? null}
       userId={session?.user?.id ?? null}
     />
   );

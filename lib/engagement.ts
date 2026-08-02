@@ -124,8 +124,29 @@ export async function getLibraryCounts(userId: string) {
   return { favorites, liked };
 }
 
-/** Переключить лайк. Возвращает true, если стало «лайкнуто». */
-export async function toggleLike(userId: string, songId: string): Promise<boolean> {
+/**
+ * Можно ли этому пользователю отмечать этот разбор.
+ *
+ * Идентификатор приходит с клиента, а кнопка есть только на видимой странице —
+ * то есть в самом экшене его никто не проверял, и запросом можно было поставить
+ * лайк на ЧУЖОЙ приватный разбор. Текст при этом не утекал (списки фильтрует
+ * `visibleToUser`), но счётчик копился заранее и всплывал, стоило автору
+ * опубликовать разбор, а разница «получилось / ошибка внешнего ключа» работала
+ * оракулом существования id.
+ */
+async function canEngage(userId: string, songId: string): Promise<boolean> {
+  const song = await prisma.song.findUnique({
+    where: { id: songId },
+    select: { userId: true, visibility: true },
+  });
+  if (!song) return false;
+  return song.visibility !== 'private' || song.userId === userId;
+}
+
+/** Переключить лайк. true/false — новое состояние, null — нет доступа. */
+export async function toggleLike(userId: string, songId: string): Promise<boolean | null> {
+  if (!(await canEngage(userId, songId))) return null;
+
   const existing = await prisma.like.findUnique({
     where: { userId_songId: { userId, songId } },
   });
@@ -137,8 +158,10 @@ export async function toggleLike(userId: string, songId: string): Promise<boolea
   return true;
 }
 
-/** Переключить избранное. Возвращает true, если стало «в избранном». */
-export async function toggleFavorite(userId: string, songId: string): Promise<boolean> {
+/** Переключить избранное. true/false — новое состояние, null — нет доступа. */
+export async function toggleFavorite(userId: string, songId: string): Promise<boolean | null> {
+  if (!(await canEngage(userId, songId))) return null;
+
   const existing = await prisma.favorite.findUnique({
     where: { userId_songId: { userId, songId } },
   });
@@ -204,36 +227,44 @@ export type ViewerRef = { userId: string } | { visitorId: string };
  * Засчитывает просмотр разбора: не чаще раза в 12 часов с одного зрителя.
  * Возвращает true, если просмотр был засчитан.
  *
- * Запрос один: вставить отметку либо обновить её, только если окно прошло.
- * `ON CONFLICT ... WHERE` не даёт засчитать повторный просмотр, а `RETURNING`
- * сообщает, было ли что-то записано (иначе понадобился бы отдельный SELECT).
- * Ветки различаются лишь колонкой и целью конфликта — подставить имя колонки
- * параметром нельзя, поэтому запроса два.
+ * Отметка ставится одним запросом: вставить либо обновить, только если окно
+ * прошло. `ON CONFLICT ... WHERE` не даёт засчитать повторный просмотр, а
+ * `RETURNING` сообщает, было ли что-то записано (иначе понадобился бы отдельный
+ * SELECT). Ветки различаются лишь колонкой и целью конфликта — подставить имя
+ * колонки параметром нельзя, поэтому запроса два.
+ *
+ * Отметка и денормализованный счётчик пишутся ОДНОЙ транзакцией. По отдельности
+ * упавший инкремент оставлял отметку в базе, и она закрывала окно на 12 часов:
+ * просмотр терялся насовсем, повторить его было нечем. Вдобавок `viewCount`
+ * расходился с `count(View)`, а админская страница читает этот разрыв как
+ * признак накрутки скриптом — то есть обычный сбой выглядел бы подделкой.
  */
 export async function recordView(songId: string, viewer: ViewerRef): Promise<boolean> {
   const cutoff = new Date(Date.now() - VIEW_WINDOW_MS);
   const id = crypto.randomUUID();
 
-  const rows =
-    'userId' in viewer
-      ? await prisma.$queryRaw<{ id: string }[]>`
-          INSERT INTO "View" ("id", "userId", "songId", "viewedAt")
-          VALUES (${id}, ${viewer.userId}, ${songId}, NOW())
-          ON CONFLICT ("userId", "songId")
-            DO UPDATE SET "viewedAt" = NOW()
-            WHERE "View"."viewedAt" < ${cutoff}
-          RETURNING "id"
-        `
-      : await prisma.$queryRaw<{ id: string }[]>`
-          INSERT INTO "View" ("id", "visitorId", "songId", "viewedAt")
-          VALUES (${id}, ${viewer.visitorId}, ${songId}, NOW())
-          ON CONFLICT ("visitorId", "songId")
-            DO UPDATE SET "viewedAt" = NOW()
-            WHERE "View"."viewedAt" < ${cutoff}
-          RETURNING "id"
-        `;
+  return prisma.$transaction(async (tx) => {
+    const rows =
+      'userId' in viewer
+        ? await tx.$queryRaw<{ id: string }[]>`
+            INSERT INTO "View" ("id", "userId", "songId", "viewedAt")
+            VALUES (${id}, ${viewer.userId}, ${songId}, NOW())
+            ON CONFLICT ("userId", "songId")
+              DO UPDATE SET "viewedAt" = NOW()
+              WHERE "View"."viewedAt" < ${cutoff}
+            RETURNING "id"
+          `
+        : await tx.$queryRaw<{ id: string }[]>`
+            INSERT INTO "View" ("id", "visitorId", "songId", "viewedAt")
+            VALUES (${id}, ${viewer.visitorId}, ${songId}, NOW())
+            ON CONFLICT ("visitorId", "songId")
+              DO UPDATE SET "viewedAt" = NOW()
+              WHERE "View"."viewedAt" < ${cutoff}
+            RETURNING "id"
+          `;
 
-  if (rows.length === 0) return false; // просмотр уже был засчитан в окне
-  await prisma.song.update({ where: { id: songId }, data: { viewCount: { increment: 1 } } });
-  return true;
+    if (rows.length === 0) return false; // просмотр уже был засчитан в окне
+    await tx.song.update({ where: { id: songId }, data: { viewCount: { increment: 1 } } });
+    return true;
+  });
 }

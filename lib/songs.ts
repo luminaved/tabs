@@ -20,6 +20,10 @@ export interface SongInput {
   tempo?: number | null;
   body: string;
   note?: string | null;
+  /**
+   * Обложка. Три состояния, и они РАЗНЫЕ: data URL — поставить новую,
+   * `null` — убрать, `undefined` — не трогать (см. `coverFields`).
+   */
   coverUrl?: string | null;
   chordDefs?: string | null;
   visibility: SongVisibility;
@@ -27,7 +31,6 @@ export interface SongInput {
 }
 
 function normalize(input: SongInput) {
-  const coverUrl = input.coverUrl?.trim() || null;
   const title = input.title.trim();
   const artist = input.artist?.trim() || null;
   return {
@@ -38,12 +41,27 @@ function normalize(input: SongInput) {
     tempo: input.tempo ?? null,
     body: input.body,
     note: input.note?.trim() || null,
-    coverUrl,
-    hasCover: !!coverUrl, // держим флаг в согласии с картинкой
     chordDefs: input.chordDefs?.trim() || null,
     visibility: input.visibility,
     instrument: input.instrument,
   };
+}
+
+/**
+ * Поля обложки — либо ПУСТО, если картинку не трогаем.
+ *
+ * Именно пустота и позволила убрать base64 из формы: пока «не прислали» значило
+ * «убрать», редактор был обязан возвращать всю картинку при каждом сохранении.
+ * Теперь `undefined` не попадает в `data`, и Prisma оставляет колонки как есть.
+ *
+ * `hasCover` всегда пишется вместе с `coverUrl` — флаг обязан оставаться в
+ * согласии с картинкой, иначе списки покажут миниатюру, которой нет (или
+ * наоборот спрячут существующую).
+ */
+function coverFields(coverUrl: string | null | undefined) {
+  if (coverUrl === undefined) return {};
+  const value = coverUrl?.trim() || null;
+  return { coverUrl: value, hasCover: !!value };
 }
 
 /**
@@ -202,7 +220,6 @@ async function fuzzyMatchIds(
  */
 export async function listPublicSongs(filters: {
   query?: string;
-  key?: string;
   sort?: SongSort;
   page?: number;
   /** Каталог одного инструмента; без него — разборы для всех инструментов. */
@@ -215,7 +232,6 @@ export async function listPublicSongs(filters: {
     visibility: 'public',
     ...(filters.instrument ? { instrument: filters.instrument } : {}),
     ...(filters.verified ? { verified: true } : {}),
-    ...(filters.key ? { key: filters.key } : {}),
     ...searchFilter(filters.query),
   };
 
@@ -322,40 +338,23 @@ export const findArtistName = cache(async function findArtistName(artist: string
   return row?.artist ?? null;
 });
 
-/** Все исполнители с публичными разборами — для карты сайта. */
+/**
+ * Все исполнители с публичными разборами — для карты сайта.
+ *
+ * groupBy, а не findMany + distinct: `distinct` у Prisma схлопывает строки УЖЕ
+ * НА КЛИЕНТЕ — в SQL никакого DISTINCT не уходит, и вдобавок в выборку
+ * подставляется `id`, чтобы было по чему различать. То есть из базы приезжала
+ * строка на каждый публичный разбор, а наружу отдавался список уникальных имён.
+ * На двух десятках песен разница незаметна, на нескольких тысячах — это тысячи
+ * строк по сети ради пары сотен имён, причём на построении карты сайта.
+ * groupBy же компилируется в настоящий GROUP BY и считается в Postgres.
+ */
 export async function listPublicArtists(): Promise<string[]> {
-  const rows = await prisma.song.findMany({
+  const rows = await prisma.song.groupBy({
+    by: ['artist'],
     where: { visibility: 'public', artist: { not: null } },
-    select: { artist: true },
-    distinct: ['artist'],
   });
   return rows.map((r) => r.artist).filter((a): a is string => !!a?.trim());
-}
-
-/** Тональности публичных песен — для фильтра каталога. */
-export async function listPublicKeys(): Promise<string[]> {
-  const rows = await prisma.song.findMany({
-    where: { key: { not: null }, visibility: 'public' },
-    select: { key: true },
-    distinct: ['key'],
-  });
-  return rows
-    .map((r) => r.key)
-    .filter((k): k is string => !!k)
-    .sort((a, b) => a.localeCompare(b));
-}
-
-/** Тональности видимых песен — для фильтра. */
-export async function listKeys(viewerId: string): Promise<string[]> {
-  const rows = await prisma.song.findMany({
-    where: { key: { not: null }, OR: [{ userId: viewerId }, { visibility: 'public' }] },
-    select: { key: true },
-    distinct: ['key'],
-  });
-  return rows
-    .map((r) => r.key)
-    .filter((k): k is string => !!k)
-    .sort((a, b) => a.localeCompare(b));
 }
 
 /**
@@ -395,21 +394,53 @@ export const getSongForViewer = cache(async function getSongForViewer(
   return song;
 });
 
-/** Строго своя песня (для редактирования). */
+/**
+ * Строго своя песня — для редактирования.
+ *
+ * `coverUrl` НЕ выбираем: раньше здесь стоял `findUnique` без `select`, то есть
+ * весь base64 обложки ехал из базы, вшивался в HTML страницы редактирования и
+ * возвращался в POST при сохранении. Редактору хватает `hasCover` и
+ * `updatedAt` — из них собирается ссылка на /covers/[id] (см. coverSrc), а сама
+ * картинка приходит в браузер отдельным кэшируемым запросом, как везде.
+ */
 export async function getOwnedSong(id: string, userId: string) {
-  const song = await prisma.song.findUnique({ where: { id } });
+  const song = await prisma.song.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      title: true,
+      artist: true,
+      key: true,
+      tempo: true,
+      body: true,
+      note: true,
+      chordDefs: true,
+      hasCover: true,
+      instrument: true,
+      visibility: true,
+      updatedAt: true,
+      userId: true,
+    },
+  });
   if (!song || song.userId !== userId) return null;
   return song;
 }
 
 export function createSong(userId: string, input: SongInput) {
-  return prisma.song.create({ data: { ...normalize(input), userId } });
+  // У новой песни сохранять нечего, поэтому «не трогать» здесь читается как
+  // «обложки нет».
+  return prisma.song.create({
+    data: { ...normalize(input), ...coverFields(input.coverUrl ?? null), userId },
+  });
 }
 
 export async function updateSong(id: string, userId: string, input: SongInput) {
   const existing = await prisma.song.findUnique({ where: { id }, select: { userId: true } });
   if (!existing || existing.userId !== userId) return null;
-  return prisma.song.update({ where: { id }, data: normalize(input) });
+  return prisma.song.update({
+    where: { id },
+    data: { ...normalize(input), ...coverFields(input.coverUrl) },
+  });
 }
 
 export async function deleteSong(id: string, userId: string) {

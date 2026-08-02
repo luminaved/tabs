@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/session';
 import { createSong, deleteSong, updateSong, type SongInput, type SongVisibility } from '@/lib/songs';
 import { parseInstrumentId } from '@/lib/chords/instruments';
+import { parseCoverField } from '@/lib/imageInput';
 
 export interface SongFormState {
   error?: string;
@@ -22,7 +23,17 @@ function parseForm(formData: FormData): SongInput | { error: string } {
   const tempoRaw = String(formData.get('tempo') ?? '').trim();
   const tempoNum = tempoRaw ? Number(tempoRaw) : NaN;
 
-  const coverUrl = String(formData.get('coverUrl') ?? '');
+  // Обложка: сентинел «не трогали», пустое поле «убрать», иначе новая картинка
+  // (разбор и потолок размера — в parseCoverField). Проверка обязана быть на
+  // сервере: форма уходит в серверный экшен, и клиентское сжатие обойти ничего
+  // не стоит. Не прошедшую картинку не выбрасываем молча — иначе сохранение
+  // стёрло бы её без единого слова.
+  const cover = parseCoverField(String(formData.get('coverUrl') ?? ''));
+  if (cover.kind === 'invalid') {
+    return { error: 'Обложка слишком большая или в неподдерживаемом формате' };
+  }
+  const coverUrl =
+    cover.kind === 'keep' ? undefined : cover.kind === 'remove' ? null : cover.dataUrl;
 
   return {
     title,
@@ -31,7 +42,7 @@ function parseForm(formData: FormData): SongInput | { error: string } {
     tempo: Number.isFinite(tempoNum) && tempoNum > 0 ? tempoNum : null,
     body: String(formData.get('body') ?? ''),
     note: String(formData.get('note') ?? ''),
-    coverUrl: coverUrl.startsWith('data:image/') ? coverUrl : null,
+    coverUrl,
     chordDefs: String(formData.get('chordDefs') ?? '') || null,
     visibility,
     instrument: parseInstrumentId(String(formData.get('instrument') ?? '')),
@@ -62,10 +73,19 @@ export async function updateSongAction(_prev: SongFormState, formData: FormData)
   redirect(`/songs/${id}`);
 }
 
+/**
+ * Удаление разбора. Кнопка есть только у владельца на своей странице, поэтому
+ * отказ `deleteSong` — это не сценарий интерфейса, а либо гонка (разбор уже
+ * удалён), либо подмена id. Раньше результат игнорировался и экшен в любом
+ * случае уводил на /songs, то есть неудавшееся удаление выглядело удавшимся.
+ */
 export async function deleteSongAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const id = String(formData.get('id') ?? '');
-  await deleteSong(id, user.id);
+
+  const deleted = await deleteSong(id, user.id);
+  if (!deleted) throw new Error('Песня не найдена или нет доступа');
+
   revalidatePath('/songs');
   redirect('/songs');
 }

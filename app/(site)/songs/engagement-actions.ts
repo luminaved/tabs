@@ -23,6 +23,10 @@ export async function toggleLikeAction(
   if (!songId) return { liked: false, likeCount: 0 };
 
   const liked = await toggleLike(user.id, songId);
+  // null — разбора нет или он чужой приватный. Отвечаем «не лайкнуто», а не
+  // ошибкой: перебор id не должен различать «нет доступа» и «нет разбора».
+  if (liked === null) return { liked: false, likeCount: 0 };
+
   // Счётчик перечитываем, а не считаем на клиенте: лайкать могли параллельно.
   const likeCount = await prisma.like.count({ where: { songId } });
   return { liked, likeCount };
@@ -33,5 +37,5 @@ export async function toggleFavoriteAction(songId: string): Promise<{ favorited:
   if (!songId) return { favorited: false };
 
   const favorited = await toggleFavorite(user.id, songId);
-  return { favorited };
+  return { favorited: favorited ?? false };
 }

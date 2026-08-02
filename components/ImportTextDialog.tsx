@@ -5,8 +5,11 @@ import { ChordSheet } from './ChordSheet';
 import { parseSong } from '@/lib/chordpro/parse';
 import { plainToChordPro } from '@/lib/chordpro/plainImport';
 
-const EXAMPLE = `       G#        C            Fm         C#
-Мне как-то до пизды, мне как-то до пизды`;
+// Пример-подсказка в пустом поле. Не строчка из песни, а нейтральная фраза,
+// которая заодно объясняет, что произойдёт. Аккорды расставлены по колонкам так,
+// чтобы каждый пришёлся на начало слова — видно, что важно именно положение.
+const EXAMPLE = `Am      F              C                    G
+Простая строчка, чтобы стало видно, как это работает`;
 
 /** Кнопка + модалка: вставка «аккордов над текстом» с авто-конвертом в ChordPro. */
 export function ImportTextDialog({ onImport }: { onImport: (chordpro: string) => void }) {

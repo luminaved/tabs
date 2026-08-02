@@ -45,7 +45,8 @@ export interface EditorInitial {
   tempo?: number | null;
   body?: string;
   note?: string | null;
-  coverUrl?: string | null;
+  /** Ссылка на уже сохранённую обложку (/covers/[id]), а НЕ сама картинка. */
+  coverSrc?: string | null;
   chordDefs?: string | null;
   visibility?: string;
   instrument?: string;
@@ -342,7 +343,7 @@ export function SongEditor({
       {/* Обложка */}
       <div className="flex flex-col gap-1.5">
         <span className="text-sm text-muted">Обложка</span>
-        <CoverInput initial={initial?.coverUrl} />
+        <CoverInput initialSrc={initial?.coverSrc} />
       </div>
 
       {/* Мета-поля */}

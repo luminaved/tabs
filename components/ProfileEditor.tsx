@@ -47,6 +47,15 @@ export function ProfileEditor({
         </button>
         {saved ? <span className="pb-3.5 text-sm text-accent">✓</span> : null}
       </div>
+
+      {state.error ? (
+        <p
+          className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          role="alert"
+        >
+          {state.error}
+        </p>
+      ) : null}
     </form>
   );
 }

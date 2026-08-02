@@ -31,10 +31,18 @@ export async function createAnnotationAction(
   return { ok: true };
 }
 
+/**
+ * Удаление заметки. Как и у разбора: кнопка есть только у владельца, поэтому
+ * отказ — гонка либо подмена id, а не обычный ход событий. Молча ревалидировать
+ * страницу и показать заметку на месте было бы хуже видимой ошибки.
+ */
 export async function deleteAnnotationAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const id = String(formData.get('id') ?? '');
   const songId = String(formData.get('songId') ?? '');
-  await deleteAnnotation(user.id, id);
+
+  const deleted = await deleteAnnotation(user.id, id);
+  if (!deleted) throw new Error('Заметка не найдена или нет доступа');
+
   revalidatePath(`/songs/${songId}`);
 }

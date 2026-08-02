@@ -5,6 +5,7 @@ import { requireUser } from '@/lib/session';
 import { signOut } from '@/lib/auth';
 import { getUserProfile } from '@/lib/users';
 import { getLibraryCounts, listFavoriteSongs, listLikedSongs } from '@/lib/engagement';
+import { isAdminUser } from '@/lib/admin';
 import { countOwnByInstrument } from '@/lib/songs';
 import { SongRow } from '@/components/SongRow';
 import { ProfileEditor } from '@/components/ProfileEditor';
@@ -23,11 +24,12 @@ export default async function AccountPage({
   const sp = await searchParams;
   const tab = sp.tab === 'liked' ? 'liked' : 'favorites';
 
-  const [profile, counts, own, songs] = await Promise.all([
+  const [profile, counts, own, songs, isAdmin] = await Promise.all([
     getUserProfile(sessionUser.id),
     getLibraryCounts(sessionUser.id),
     countOwnByInstrument(sessionUser.id),
     sp.tab === 'liked' ? listLikedSongs(sessionUser.id) : listFavoriteSongs(sessionUser.id),
+    isAdminUser(sessionUser.id),
   ]);
 
   if (!profile) redirect('/login');
@@ -43,6 +45,13 @@ export default async function AccountPage({
         <div className="flex items-center justify-between gap-2">
           <p className="eyebrow">Личный кабинет</p>
           <div className="flex items-center gap-2">
+            {/* Вход в статистику — только у администратора: обычному
+                пользователю страница отдаёт 404, и ссылка вела бы в никуда. */}
+            {isAdmin ? (
+              <Link href="/admin" className="btn btn-ghost h-9 px-3 text-sm">
+                Статистика
+              </Link>
+            ) : null}
             <Link href={`/u/${sessionUser.id}`} className="btn btn-ghost h-9 px-3 text-sm">
               Публичный профиль
             </Link>

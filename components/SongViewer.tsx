@@ -43,6 +43,20 @@ const TYPE_LABEL: Record<string, string> = {
   note: 'заметка',
 };
 
+/**
+ * Подпись типа над заметкой — либо null, если подписывать нечего.
+ *
+ * У обычной заметки подписи нет намеренно: слово «заметка» над заметкой не
+ * сообщает читателю ничего, а строчку капсом и её вес в потоке песни занимает.
+ * «Техника», «ритм» и «переход» — другое дело: там подпись и есть содержание,
+ * она говорит, к чему относится текст. Само значение в БД не трогаем — прячем
+ * только показ.
+ */
+function noteTypeLabel(type?: string | null): string | null {
+  if (!type || type === 'note') return null;
+  return TYPE_LABEL[type] ?? type;
+}
+
 // Размер шрифта текста песни (rem). Дефолт немного уменьшен по просьбе.
 const FONT_MIN = 0.8;
 const FONT_MAX = 1.7;
@@ -329,7 +343,10 @@ export function SongViewer({
   }, [wakeOn, wakeSupported]);
 
   return (
-    <div>
+    // song-layout: на широком экране панель аппликатур уезжает отсюда в пустое
+    // поле справа отдельной липкой колонкой (см. globals.css). Разметка при
+    // этом не меняется — вся раскладка держится на CSS.
+    <div className="song-layout">
       <header className="mb-6">
         {/* Верхний ряд: обложка слева, крупный заголовок рядом (заполняет место
             справа от обложки), кнопка редактирования — в правом верхнем углу. */}
@@ -637,10 +654,12 @@ export function SongViewer({
                     if (notes.length === 0 && !(isActive && canAnnotate)) return null;
                     return (
                       <div className="cs-notes">
-                        {notes.map((n) => (
+                        {notes.map((n) => {
+                          const typeLabel = noteTypeLabel(n.type);
+                          return (
                           <div key={n.id} className="cs-note">
-                            {n.type ? (
-                              <span className="cs-note-type">{TYPE_LABEL[n.type] ?? n.type}</span>
+                            {typeLabel ? (
+                              <span className="cs-note-type">{typeLabel}</span>
                             ) : null}
                             <span className="cs-note-text">{n.text}</span>
                             {canAnnotate && songId ? (
@@ -658,7 +677,8 @@ export function SongViewer({
                               </form>
                             ) : null}
                           </div>
-                        ))}
+                          );
+                        })}
                         {isActive && canAnnotate && songId ? (
                           <AnnotationForm
                             songId={songId}
