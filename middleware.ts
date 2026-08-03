@@ -29,7 +29,29 @@ function makeNonce(): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
-function policy(nonce: string): string {
+/**
+ * Страницы, где дополнительно разрешён `eval`.
+ *
+ * Разрешение точечное и вынужденное: виджет входа Telegram использует `eval`
+ * внутри себя, и без него он молча не строит кнопку — скрипт загружается,
+ * начинает работать и умирает на первом же вызове, а в консоли остаётся только
+ * нарушение CSP.
+ *
+ * Почему это приемлемо ИМЕННО ЗДЕСЬ и нигде больше: страницы входа и
+ * регистрации не показывают ничего пользовательского — ни разборов, ни имён, ни
+ * заметок. Подставить туда чужой скрипт неоткуда, поэтому `eval` не расширяет
+ * поверхность атаки так, как расширил бы на странице разбора. На всём остальном
+ * сайте запрет остаётся.
+ *
+ * Строгая альтернатива, если однажды захочется убрать и это: у Telegram есть
+ * вход полным переходом на oauth.telegram.org без виджета и без стороннего
+ * скрипта вовсе — разбор подписи (lib/telegram.ts) там тот же самый.
+ */
+const EVAL_ALLOWED_PATHS = ['/login', '/register'];
+
+function policy(nonce: string, pathname: string): string {
+  const needsEval = isDev || EVAL_ALLOWED_PATHS.includes(pathname);
+
   return [
     "default-src 'self'",
 
@@ -37,8 +59,9 @@ function policy(nonce: string): string {
     // нашим nonce, — так работает разбиение бандла на чанки, и при этом
     // белый список путей становится не нужен (современные браузеры при
     // 'strict-dynamic' игнорируют 'self' и host-выражения здесь).
-    // 'unsafe-eval' — только в разработке: на нём держится HMR.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
+    // 'unsafe-eval' — в разработке (на нём держится HMR) и на страницах входа
+    // (см. EVAL_ALLOWED_PATHS выше).
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${needsEval ? " 'unsafe-eval'" : ''}`,
 
     // 'unsafe-inline' для стилей убрать нельзя, и это не небрежность: nonce
     // применим к тегу <style>, но НЕ к атрибуту style=, а React расставляет
@@ -80,7 +103,7 @@ function policy(nonce: string): string {
 
 export function middleware(request: NextRequest) {
   const nonce = makeNonce();
-  const csp = policy(nonce);
+  const csp = policy(nonce, request.nextUrl.pathname);
 
   // Заголовки запроса — чтобы Next достал отсюда nonce для своих скриптов.
   const headers = new Headers(request.headers);
