@@ -23,8 +23,30 @@ export const yandexEnabled = !!(process.env.AUTH_YANDEX_ID && process.env.AUTH_Y
  * Имя бота нужно только виджету на странице входа — им он подписывает кнопку.
  */
 export const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN ?? '';
-export const telegramBotName = process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME ?? '';
+/**
+ * Имя бота — ОБЫЧНАЯ серверная переменная, без префикса NEXT_PUBLIC_.
+ *
+ * С префиксом здесь была ловушка: такие переменные Next подставляет в код на
+ * этапе СБОРКИ, а не читает при запуске. Значит сборка, прошедшая раньше, чем
+ * переменную завели в панели хостинга, навсегда уносила с собой `undefined`, и
+ * кнопка не появлялась, сколько ни правь настройки, — до следующей пересборки.
+ * Публичной ей быть незачем: значение нужно только серверу, чтобы подставить
+ * атрибут виджету.
+ */
+export const telegramBotName = process.env.TELEGRAM_BOT_NAME ?? '';
 export const telegramEnabled = !!(telegramBotToken && telegramBotName);
+
+// Задана ровно одна переменная из двух — почти наверняка опечатка или забытая
+// половина настройки. Молча прятать кнопку в этом случае хуже всего: снаружи
+// это неотличимо от «вход не настраивали вовсе». Пишем в лог сервера (не
+// пользователю: наружу состав настроек не показываем).
+if (!!telegramBotToken !== !!telegramBotName) {
+  console.warn(
+    '[auth] Вход через Telegram выключен: задана только одна переменная из двух — ' +
+      `TELEGRAM_BOT_TOKEN=${telegramBotToken ? 'есть' : 'НЕТ'}, ` +
+      `TELEGRAM_BOT_NAME=${telegramBotName ? 'есть' : 'НЕТ'}.`,
+  );
+}
 
 /**
  * Попытки входа с одного адреса за 15 минут. Живому человеку, забывшему пароль,
