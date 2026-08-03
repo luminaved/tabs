@@ -1,6 +1,12 @@
 import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { telegramCheckString, verifyTelegramAuth, telegramDisplayName } from './telegram';
+import {
+  telegramCheckString,
+  verifyTelegramAuth,
+  telegramDisplayName,
+  telegramAuthUrl,
+  parseTgAuthResult,
+} from './telegram';
 
 const BOT = '123456:AAHfake-token-for-tests';
 
@@ -89,6 +95,72 @@ describe('verifyTelegramAuth', () => {
   it('без токена бота не пропускает никого', () => {
     // Иначе незаданная переменная окружения превратилась бы в открытую дверь.
     expect(verifyTelegramAuth(sign(base()), '', now)).toEqual({ ok: false, reason: 'malformed' });
+  });
+});
+
+describe('telegramAuthUrl', () => {
+  const args = {
+    botToken: '123456:AAsecret',
+    origin: 'https://rawchords.example',
+    returnTo: 'https://rawchords.example/login',
+  };
+
+  it('берёт bot_id из части токена до двоеточия', () => {
+    const url = new URL(telegramAuthUrl(args)!);
+    expect(url.origin + url.pathname).toBe('https://oauth.telegram.org/auth');
+    expect(url.searchParams.get('bot_id')).toBe('123456');
+  });
+
+  it('секретную половину токена в адрес не пускает', () => {
+    // Адрес виден человеку в строке браузера — секрету там не место.
+    expect(telegramAuthUrl(args)).not.toContain('AAsecret');
+  });
+
+  it('передаёт origin и адрес возврата', () => {
+    const url = new URL(telegramAuthUrl(args)!);
+    expect(url.searchParams.get('origin')).toBe(args.origin);
+    expect(url.searchParams.get('return_to')).toBe(args.returnTo);
+  });
+
+  it('на непохожем токене отдаёт null, а не битый адрес', () => {
+    expect(telegramAuthUrl({ ...args, botToken: 'мусор' })).toBeNull();
+    expect(telegramAuthUrl({ ...args, botToken: '' })).toBeNull();
+  });
+});
+
+describe('parseTgAuthResult', () => {
+  const payload = { id: 4242, first_name: 'Юрий', auth_date: 1785000000, hash: 'abc' };
+  const encode = (o: unknown, urlSafe = false) => {
+    const b = Buffer.from(JSON.stringify(o), 'utf8').toString('base64');
+    return urlSafe ? b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : b;
+  };
+
+  it('разбирает якорь и приводит числа к строкам', () => {
+    const r = parseTgAuthResult(`#tgAuthResult=${encode(payload)}`);
+    // Дальше значения уходят в поля формы и в подпись — там нужны строки.
+    expect(r).toEqual({ id: '4242', first_name: 'Юрий', auth_date: '1785000000', hash: 'abc' });
+  });
+
+  it('понимает URL-безопасную кодировку без дополняющих знаков', () => {
+    expect(parseTgAuthResult(`#tgAuthResult=${encode(payload, true)}`)?.id).toBe('4242');
+  });
+
+  it('находит параметр среди других', () => {
+    expect(parseTgAuthResult(`#foo=1&tgAuthResult=${encode(payload)}`)?.id).toBe('4242');
+  });
+
+  it('без параметра — null', () => {
+    expect(parseTgAuthResult('')).toBeNull();
+    expect(parseTgAuthResult('#что-то-другое')).toBeNull();
+  });
+
+  it('мусор вместо base64 не роняет разбор', () => {
+    expect(parseTgAuthResult('#tgAuthResult=!!!не-base64!!!')).toBeNull();
+  });
+
+  it('ответ без подписи считается негодным', () => {
+    // Без hash проверять нечего — такой ответ до сервера доходить не должен.
+    expect(parseTgAuthResult(`#tgAuthResult=${encode({ id: 1 })}`)).toBeNull();
   });
 });
 
