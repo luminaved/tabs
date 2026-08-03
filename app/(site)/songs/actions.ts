@@ -71,12 +71,12 @@ export async function updateSongAction(_prev: SongFormState, formData: FormData)
   const updated = await updateSong(id, user.id, parsed);
   if (!updated) return { error: 'Песня не найдена или нет доступа' };
 
-  // Подпись в адресе зависит от названия и исполнителя, поэтому после правки
-  // сбрасываем и старый адрес, и новый: они могут не совпасть.
+  // Сброс по шаблону маршрута: подпись в адресе зависит от названия, поэтому
+  // после правки собранный адрес мог измениться, и перечислять оба варианта
+  // руками — лишний способ ошибиться.
   const path = songPath(updated);
   revalidatePath('/songs');
-  revalidatePath(`/songs/${id}`);
-  if (path !== `/songs/${id}`) revalidatePath(path);
+  revalidatePath('/songs/[id]', 'page');
   redirect(path);
 }
 

@@ -5,8 +5,8 @@ import {
   verifyTelegramAuth,
   telegramDisplayName,
   telegramAuthUrl,
-  parseTgAuthResult,
 } from './telegram';
+import { parseTgAuthResult } from './telegramResult';
 
 const BOT = '123456:AAHfake-token-for-tests';
 

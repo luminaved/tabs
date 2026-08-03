@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
-import { parseTgAuthResult } from '@/lib/telegram';
+// Импорт из telegramResult, а НЕ из telegram: тот тянет `node:crypto` ради
+// проверки подписи, и клиентский бандл на нём не собирается.
+import { parseTgAuthResult } from '@/lib/telegramResult';
 
 /**
  * Приём ответа Telegram после возвращения с его страницы.

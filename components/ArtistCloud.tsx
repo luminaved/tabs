@@ -32,7 +32,9 @@ export function ArtistCloud({ artists }: { artists: { name: string; count: numbe
               className="artist-chip"
               title={`${a.name}: ${withPluralRu(a.count, 'разбор', 'разбора', 'разборов')}`}
             >
-              {a.name}
+              {/* Имя отдельным элементом, чтобы обрезалось именно оно, а не
+                  число рядом (см. .artist-chip-name в globals.css). */}
+              <span className="artist-chip-name">{a.name}</span>
               <span className="artist-chip-count">{a.count}</span>
             </Link>
           </li>

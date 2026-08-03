@@ -86,10 +86,10 @@ export default async function RequestsPage() {
                   {/* Обычная форма, а не кнопка на JS: голос — это запись в базу,
                       и она должна работать даже там, где скрипты не выполнились. */}
                   <form action={voteRequestAction}>
+                    {/* Только идентификатор: голос ничего не создаёт, поэтому
+                        название с исполнителем экшену больше не нужны — и тем
+                        меньше данных, которым он мог бы поверить. */}
                     <input type="hidden" name="id" value={r.id} />
-                    <input type="hidden" name="title" value={r.title} />
-                    <input type="hidden" name="artist" value={r.artist ?? ''} />
-                    <input type="hidden" name="instrument" value={r.instrument} />
                     <button
                       type="submit"
                       disabled={r.mine}

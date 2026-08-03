@@ -12,6 +12,7 @@ import {
   TITLE_MAX,
   createOrVote,
   deleteRequest,
+  voteForRequest,
   type RequesterRef,
 } from '@/lib/songRequests';
 
@@ -76,10 +77,7 @@ export async function requestSongAction(
  */
 export async function voteRequestAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
-  const title = String(formData.get('title') ?? '');
-  const artist = String(formData.get('artist') ?? '') || null;
-  const instrument = parseInstrumentId(String(formData.get('instrument') ?? ''));
-  if (!id || !title) return;
+  if (!id) return;
 
   const h = await headers();
   const ip = clientIpFrom((n) => h.get(n)) || 'no-ip';
@@ -90,9 +88,10 @@ export async function voteRequestAction(formData: FormData): Promise<void> {
   const requester = await currentRequester();
   if (!requester) return;
 
-  // Тем же путём, что и форма: ключ склейки посчитается заново и приведёт к той
-  // же заявке. Так голос не зависит от того, не удалили ли строку под нами.
-  await createOrVote({ title, artist, instrument }, requester);
+  // Именно `voteForRequest`, а НЕ `createOrVote`: тот при отсутствии заявки
+  // создаёт новую, и удаление спама админом отменялось бы первым же кликом с
+  // чужой открытой вкладки. Голос должен быть только голосом.
+  await voteForRequest(id, requester);
   revalidatePath('/requests');
 }
 

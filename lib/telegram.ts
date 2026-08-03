@@ -137,47 +137,6 @@ export function telegramAuthUrl(input: {
   return `https://oauth.telegram.org/auth?${params.toString()}`;
 }
 
-/**
- * Разбор ответа, с которым Telegram возвращает человека обратно.
- *
- * Ответ приезжает в ЯКОРЕ адреса (`#tgAuthResult=…`), а не в строке запроса, и
- * это важная деталь: якорь браузер на сервер не отправляет. Поэтому забрать его
- * может только код на странице — отсюда маленький клиентский шаг, без которого
- * не обойтись.
- *
- * Внутри — base64 от JSON с теми же полями, что даёт виджет. Кодировка
- * URL-безопасная (`-` и `_` вместо `+` и `/`), дополняющие `=` могут быть
- * срезаны — восстанавливаем и то и другое.
- */
-export function parseTgAuthResult(hash: string): Record<string, string> | null {
-  const m = /(?:^#?|&)tgAuthResult=([^&]+)/.exec(hash);
-  if (!m) return null;
-
-  try {
-    const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-
-    // `atob` отдаёт БАЙТЫ, разложенные по символам latin-1, а не текст.
-    // Скормить их прямо в JSON.parse нельзя: «Юрий» превращается в «Ð®ÑÐ¸Ð¹»,
-    // и ломается это ровно на кириллице — то есть почти на всех, кто сюда
-    // придёт. Поэтому байты собираем обратно и раскодируем как UTF-8.
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-    const json = JSON.parse(new TextDecoder().decode(bytes));
-    if (!json || typeof json !== 'object') return null;
-
-    // Значения приводим к строкам: id и auth_date приходят числами, а дальше
-    // всё уходит в поля формы и в проверку подписи, где нужны строки.
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(json)) {
-      if (v !== null && v !== undefined) out[k] = String(v);
-    }
-    return out.hash ? out : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Отображаемое имя: то, что человек ожидает увидеть в шапке. */
 export function telegramDisplayName(p: TelegramProfile): string | null {
   const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();

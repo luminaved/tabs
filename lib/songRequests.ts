@@ -125,6 +125,44 @@ export async function createOrVote(
   return { created: !before, voted, id: request.id };
 }
 
+/**
+ * Голос за СУЩЕСТВУЮЩУЮ заявку. Ничего не создаёт — и в этом весь смысл.
+ *
+ * Раньше кнопка «+1» звала `createOrVote`, а тот при отсутствии заявки заводит
+ * новую. Значит удаление спама админом отменялось первым же кликом с чужой
+ * открытой вкладки: заявка возвращалась. Голос обязан быть только голосом.
+ *
+ * Возвращает false, если заявки уже нет: страница просто обновится без неё.
+ */
+export async function voteForRequest(
+  requestId: string,
+  requester: RequesterRef,
+): Promise<boolean> {
+  const exists = await prisma.songRequest.findUnique({
+    where: { id: requestId },
+    select: { id: true },
+  });
+  if (!exists) return false;
+
+  try {
+    await prisma.songRequestVote.create({
+      data: {
+        requestId,
+        ...('userId' in requester
+          ? { userId: requester.userId }
+          : { visitorId: requester.visitorId }),
+      },
+    });
+    return true;
+  } catch (error) {
+    // Уже голосовал — не ошибка, ровно то, от чего стоит уникальный индекс.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export interface RequestRow {
   id: string;
   title: string;

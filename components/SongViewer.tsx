@@ -691,7 +691,6 @@ export function SongViewer({
                             {canAnnotate && songId ? (
                               <form action={deleteAnnotationAction} className="print-hide ml-auto">
                                 <input type="hidden" name="id" value={n.id} />
-                                <input type="hidden" name="songId" value={songId} />
                                 <button
                                   type="submit"
                                   className="cs-note-del"

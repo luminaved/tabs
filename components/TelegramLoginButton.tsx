@@ -1,6 +1,6 @@
 import { telegramBotToken, telegramEnabled } from '@/lib/auth';
 import { telegramAuthUrl } from '@/lib/telegram';
-import { absoluteUrl } from '@/lib/site';
+import { absoluteUrl, SITE_URL } from '@/lib/site';
 import { telegramSignInAction } from '@/app/(auth)/actions';
 import { TelegramAuthReturn } from './TelegramAuthReturn';
 
@@ -28,7 +28,10 @@ export function TelegramLoginButton() {
 
   const href = telegramAuthUrl({
     botToken: telegramBotToken,
-    origin: absoluteUrl(''),
+    // Именно SITE_URL, а не absoluteUrl(''): тот дописывает слэш, а Telegram
+    // сверяет источник с доменом, привязанным к боту, буквально. Виджет
+    // отправлял его без слэша — отправляем так же.
+    origin: SITE_URL,
     returnTo: absoluteUrl('/login'),
   });
   if (!href) return null;
