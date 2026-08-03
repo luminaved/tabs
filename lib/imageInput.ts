@@ -104,7 +104,16 @@ export function servableImageType(type: string): string | null {
  * профиль публичный, картинку грузит каждый посетитель, и чужой сервер собирал
  * бы их адреса. Появится ещё один провайдер входа — добавьте его хост сюда.
  */
-const AVATAR_HOSTS = ['googleusercontent.com'];
+const AVATAR_HOSTS = [
+  'googleusercontent.com',
+  // Яндекс отдаёт картинку профиля как
+  // https://avatars.yandex.net/get-yapic/<id>/islands-200 (см. providers/yandex.js).
+  // Без этой строки аватар нового пользователя молча отбрасывался бы: и при
+  // сохранении профиля, и при переносе картинки к себе (lib/remoteAvatar.ts).
+  'avatars.yandex.net',
+  // Telegram: photo_url вида https://t.me/i/userpic/320/<...>.jpg
+  't.me',
+];
 
 /**
  * Разрешён ли адрес как источник аватара. Экспортируется, потому что этим же

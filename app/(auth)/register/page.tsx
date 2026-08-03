@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AuthForm } from '@/components/AuthForm';
+import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 import { registerAction } from '../actions';
 
 // Почему тег нужен вдобавок к robots.txt — см. страницу входа.
@@ -15,6 +16,7 @@ export default function RegisterPage() {
       action={registerAction}
       title="Свой песенник"
       subtitle="Создайте аккаунт — это займёт минуту."
+      telegram={<TelegramLoginButton />}
       submitLabel="Создать аккаунт"
       withName
       footer={

@@ -59,14 +59,16 @@ function policy(nonce: string): string {
     // websocket — по нему живёт горячая перезагрузка.
     `connect-src 'self'${isDev ? ' ws: wss:' : ''}`,
 
-    // Формы уходят только к нам; accounts.google.com — на случай, если вход
-    // через Google уйдёт формой, а не редиректом.
-    "form-action 'self' https://accounts.google.com",
+    // Формы уходят только к нам. Хосты провайдеров входа — на случай, если
+    // Auth.js отправит туда форму, а не редирект (у Google так бывает).
+    "form-action 'self' https://accounts.google.com https://oauth.yandex.ru",
 
     // Показывать сайт во фрейме незачем — согласовано с X-Frame-Options: DENY
     // в next.config.mjs.
     "frame-ancestors 'none'",
-    "frame-src 'none'",
+    // Свой фрейм рисует только виджет входа Telegram: кнопку он вставляет
+    // именно фреймом, другого способа получить подписанный ответ у него нет.
+    "frame-src https://oauth.telegram.org",
 
     // <base> подменяет корень для всех относительных ссылок — сузим до своего.
     "base-uri 'self'",

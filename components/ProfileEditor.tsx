@@ -11,7 +11,8 @@ export function ProfileEditor({
   memberSince,
 }: {
   name: string;
-  email: string;
+  /** Может отсутствовать: вход через Telegram адреса не даёт. */
+  email: string | null;
   image: string | null;
   memberSince: string;
 }) {
@@ -32,7 +33,7 @@ export function ProfileEditor({
         <AvatarInput initial={image} name={name} email={email} />
         <div className="min-w-0">
           <p className="truncate text-lg font-medium">{name || 'Без имени'}</p>
-          <p className="truncate text-muted">{email}</p>
+          <p className="truncate text-muted">{email ?? 'Вход без электронной почты'}</p>
           <p className="mt-0.5 text-sm text-faint">аккаунт с {memberSince}</p>
         </div>
       </div>

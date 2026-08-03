@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import Link from 'next/link';
-import { googleSignInAction, type AuthFormState } from '@/app/(auth)/actions';
+import { googleSignInAction, yandexSignInAction, type AuthFormState } from '@/app/(auth)/actions';
 
 type Action = (prev: AuthFormState, formData: FormData) => Promise<AuthFormState>;
 
@@ -14,6 +14,7 @@ export function AuthForm({
   withName = false,
   notice,
   footer,
+  telegram,
 }: {
   action: Action;
   title: string;
@@ -22,6 +23,12 @@ export function AuthForm({
   withName?: boolean;
   notice?: string;
   footer: React.ReactNode;
+  /**
+   * Кнопка Telegram. Приходит готовым узлом от страницы, потому что рисует её
+   * серверный компонент: виджету нужен nonce из заголовков запроса, а он до
+   * клиента не доезжает.
+   */
+  telegram?: React.ReactNode;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
 
@@ -46,12 +53,25 @@ export function AuthForm({
             {notice}
           </p>
         ) : null}
+        {/* Кнопки показываются всегда, даже без настроенных кредов: экшен в
+            этом случае вернёт человека сюда с понятным объяснением. Так
+            компонент остаётся клиентским и ничего не знает про окружение —
+            тот же приём, что был заведён для Google. */}
+        <form action={yandexSignInAction}>
+          <button type="submit" className="btn btn-outline h-11 w-full gap-2.5">
+            <YandexIcon />
+            Продолжить с Яндексом
+          </button>
+        </form>
         <form action={googleSignInAction}>
           <button type="submit" className="btn btn-outline h-11 w-full gap-2.5">
             <GoogleIcon />
             Продолжить с Google
           </button>
         </form>
+        {/* Виджет Telegram рисует кнопку сам, поэтому он не в общем ряду и
+            показывается только когда бот настроен. */}
+        {telegram ? <div className="flex justify-center">{telegram}</div> : null}
         <div className="flex items-center gap-3 text-xs text-faint">
           <span className="h-px flex-1 bg-[var(--color-line)]" />
           или
@@ -114,6 +134,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-sm text-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+/** Логотип Яндекса: «Я» на фирменном красном круге. */
+function YandexIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="12" r="12" fill="#FC3F1D" />
+      <path
+        fill="#fff"
+        d="M13.06 19.2h2.2V4.8h-3.2c-3.22 0-4.92 1.65-4.92 4.09 0 1.95.93 3.1 2.58 4.28L6.85 19.2h2.38l3.18-4.75-1.1-.74c-1.34-.9-2-1.6-2-3.11 0-1.33.93-2.23 2.7-2.23h1.05V19.2z"
+      />
+    </svg>
   );
 }
 
