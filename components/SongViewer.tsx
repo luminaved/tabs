@@ -554,7 +554,7 @@ export function SongViewer({
         </div>
 
         {settingsOpen ? (
-          <div className="card mt-2 flex flex-col gap-5 p-4">
+          <div className="toolbar-panel mt-2 flex flex-col gap-5 p-4">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm text-muted">Размер текста</span>
               <div className="flex items-center gap-1.5">
