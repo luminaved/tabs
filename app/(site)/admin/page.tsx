@@ -37,6 +37,8 @@ export default async function AdminStatsPage() {
         <h1 className="display text-4xl font-medium">Статистика</h1>
       </div>
 
+      <AuthProvidersState />
+
       {/* ── Главное: числа, каждое со сравнением к прошлой неделе ────────── */}
       <section className="mb-10">
         <h2 className="mb-3 text-lg font-medium">Сейчас</h2>
@@ -166,6 +168,50 @@ export default async function AdminStatsPage() {
         скриптом.
       </p>
     </main>
+  );
+}
+
+/**
+ * Состояние способов входа: что настроено, а что нет.
+ *
+ * Заведено после того, как вход через Telegram не появлялся на боевом сервере,
+ * а понять почему было нельзя: компонент кнопки просто возвращает null, и
+ * снаружи «переменную не завели», «завели не в то окружение» и «опечатались в
+ * имени» выглядят одинаково — пустым местом. Каждая догадка стоила деплоя.
+ *
+ * Показываются ТОЛЬКО факты наличия, никогда сами значения: токен бота — это
+ * полный доступ к нему, а секрет провайдера — к входу. Страница админская, но
+ * секретам всё равно незачем появляться в разметке.
+ */
+function AuthProvidersState() {
+  const rows = [
+    { name: 'Google', vars: { AUTH_GOOGLE_ID: !!process.env.AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET: !!process.env.AUTH_GOOGLE_SECRET } },
+    { name: 'Яндекс', vars: { AUTH_YANDEX_ID: !!process.env.AUTH_YANDEX_ID, AUTH_YANDEX_SECRET: !!process.env.AUTH_YANDEX_SECRET } },
+    { name: 'Telegram', vars: { TELEGRAM_BOT_TOKEN: !!process.env.TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_NAME: !!process.env.TELEGRAM_BOT_NAME } },
+  ];
+
+  return (
+    <section className="mb-10">
+      <h2 className="mb-3 text-lg font-medium">Способы входа</h2>
+      <ul className="flex flex-col gap-2">
+        {rows.map((r) => {
+          const missing = Object.entries(r.vars).filter(([, set]) => !set);
+          const on = missing.length === 0;
+          return (
+            <li key={r.name} className="card flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+              <span className={on ? 'text-accent' : 'text-faint'}>{on ? '✓' : '—'}</span>
+              <span className="font-medium">{r.name}</span>
+              <span className="text-sm text-muted">
+                {on ? 'настроен' : `не хватает: ${missing.map(([k]) => k).join(', ')}`}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-sm text-faint">
+        Значения переменных здесь не показываются — только сам факт, что они заданы.
+      </p>
+    </section>
   );
 }
 
