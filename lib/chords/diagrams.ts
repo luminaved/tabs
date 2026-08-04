@@ -9,7 +9,7 @@
  * аппликатуру автоматически, а руками задаём только необычные.
  */
 
-import { mod12, noteToPc } from './pitch';
+import { mod12, noteToPc, pcToName, type Accidental } from './pitch';
 import {
   getInstrument,
   type Barre,
@@ -142,21 +142,98 @@ export function parseFrets(input: string, strings = 6): ChordFrets | null {
 }
 
 /**
+ * Открытые струны, на которых стоит корень квинты: 6-я (E) и 5-я (A).
+ * Отсюда считается и лад по имени аккорда, и имя аккорда по ладу.
+ */
+const SIXTH_STRING_PC = 4; // E
+const FIFTH_STRING_PC = 9; // A
+
+/**
+ * Разобранная запись квинты «лад + В/Н».
+ *
+ * Отдельным типом, а не сразу аппликатурой, потому что у этой записи два
+ * потребителя с разными нуждами: диаграмме нужны лады, а переименованию
+ * (см. `powerFifthToChordName`) — высота корня.
+ */
+export interface PowerFifthRef {
+  /** Лад, на котором стоит корень. */
+  fret: number;
+  /** Корень на 6-й струне («В») — иначе на 5-й («Н»). */
+  upper: boolean;
+}
+
+/**
  * Квинты (power chords) в нотации «лад + В/Н» — гитарная запись из русских
  * табов:
  *   NВ — верхняя квинта, корень на 6-й струне: [N, N+2, N+2, x, x, x];
  *   NН — нижняя квинта, та же форма на струну тоньше (5/4/3).
  * Принимаем кириллицу (В/Н) и латинские двойники (B/H), любой регистр.
+ *
+ * ЗАПИСЬ УСТАРЕЛА: она читается только внутри этой традиции, а главное — её не
+ * понимает разбор аккордов (см. lib/chords/chord.ts), который ждёт корень A-G.
+ * Значит такой аккорд молча НЕ транспонируется: тональность песни едет, а он
+ * стоит на месте. Правильное имя — «A5», «C5»; эта функция оставлена, чтобы
+ * вставленные откуда-то табы всё же рисовались, а редактор мог предложить
+ * замену (см. `powerFifthToChordName`).
  */
-function parsePowerFifth(name: string): ChordFrets | null {
-  const m = /^(\d{1,2})([ВНвнBHbh])$/.exec(name);
+export function parsePowerFifth(name: string): PowerFifthRef | null {
+  const m = /^(\d{1,2})([ВНвнBHbh])$/.exec(name.trim());
   if (!m) return null;
   const fret = Number(m[1]);
-  if (fret < 1 || fret > 22) return null;
-  const upper = /[ВвBb]/.test(m[2]);
+  // Ноль допустим: это открытая струна, то есть E5 («0В») и A5 («0Н») — самые
+  // ходовые квинты, какие есть. Раньше здесь стояло `fret < 1`, и они молча
+  // оставались без аппликатуры: снаружи это выглядело как «сайт не знает
+  // такого аккорда», а на деле форму приходилось рисовать руками.
+  if (fret < 0 || fret > 22) return null;
+  return { fret, upper: /[ВвBb]/.test(m[2]) };
+}
+
+/** Аппликатура ровно для той позиции, которую задаёт запись «лад + В/Н». */
+function powerFifthFrets({ fret, upper }: PowerFifthRef): ChordFrets {
   return upper
     ? [fret, fret + 2, fret + 2, -1, -1, -1]
     : [-1, fret, fret + 2, fret + 2, -1, -1];
+}
+
+/**
+ * Стандартное имя аккорда для записи «лад + В/Н»: «5В» → «A5», «7Н» → «E5».
+ * Возвращает null, если это не такая запись.
+ *
+ * Написание ноты задаётся снаружи: диез или бемоль — вопрос тональности песни,
+ * а не самого аккорда (тот же принцип, что в lib/chords/chord.ts).
+ *
+ * ВНИМАНИЕ: перевод односторонний. Имя несёт высоту корня, но не позицию, и
+ * «5В» с «17В» дают одно и то же «A5». Где позиция важна, её задают
+ * аппликатурой на песне (chordDefs) — она главнее встроенных форм.
+ */
+export function powerFifthToChordName(name: string, accidental: Accidental = 'sharp'): string | null {
+  const ref = parsePowerFifth(name);
+  if (!ref) return null;
+  const open = ref.upper ? SIXTH_STRING_PC : FIFTH_STRING_PC;
+  return pcToName(mod12(open + ref.fret), accidental) + '5';
+}
+
+/**
+ * Аппликатура квинты по высоте корня — то, чем рисуются «A5», «C5», «F#5».
+ *
+ * Струну корня выбираем так, как её берут в руки: до пятого лада — шестая
+ * струна, дальше — пятая. Выше пятого лада форма от шестой струны уводит руку
+ * в неудобную позицию, и гитаристы там переходят на струну тоньше.
+ *
+ * Порог именно 5, а не 7: на A5 обе позиции равноценны (5 лад шестой струны
+ * либо открытая пятая), и выбран первый — он звучит полнее. Побочный, но
+ * важный эффект: правило один в один воспроизводит прежнюю запись «лад + В/Н»
+ * для всех ходовых позиций, поэтому переименование старых разборов не меняет
+ * им картинки (закреплено таблицей в тестах).
+ *
+ * Отдельной веткой, а не строкой в `movableShapes`: та таблица умеет ровно одну
+ * опорную струну (`movableRootPc`), а здесь их две.
+ */
+export function powerChordFrets(rootPc: number): ChordFrets {
+  const sixth = mod12(rootPc - SIXTH_STRING_PC);
+  if (sixth <= 5) return [sixth, sixth + 2, sixth + 2, -1, -1, -1];
+  const fifth = mod12(rootPc - FIFTH_STRING_PC);
+  return [-1, fifth, fifth + 2, fifth + 2, -1, -1];
 }
 
 /**
@@ -178,8 +255,10 @@ export function getChordShape(
   if (customDefs && customDefs[base]) return customDefs[base];
 
   if (inst.powerChords) {
+    // Устаревшая запись «5В». Оставлена, чтобы вставленные табы рисовались;
+    // сохранять её в новых разборах не нужно — см. `powerFifthToChordName`.
     const power = parsePowerFifth(base);
-    if (power) return builtin(power);
+    if (power) return builtin(powerFifthFrets(power));
   }
 
   if (inst.openShapes[base]) return builtin(inst.openShapes[base]);
@@ -188,6 +267,11 @@ export function getChordShape(
   if (!m) return null;
   const rootPc = noteToPc(m[1]);
   if (rootPc === null) return null;
+
+  // Квинта («A5») — до таблицы подвижных форм: у неё корень стоит то на 6-й
+  // струне, то на 5-й, а таблица знает только одну опорную.
+  if (m[2] === '5' && inst.powerChords) return builtin(powerChordFrets(rootPc));
+
   const gen = inst.movableShapes[m[2]];
   if (!gen) return null;
 

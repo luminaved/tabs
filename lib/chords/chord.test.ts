@@ -58,6 +58,17 @@ describe('transposeChord', () => {
   it('не-аккорды проходят без изменений', () => {
     expect(transposeChord('N.C.', 5, 'sharp')).toBe('N.C.');
     expect(transposeChord('%', 2, 'flat')).toBe('%');
+    // Старая гитарная запись квинт («5В») попадает сюда же — и это ровно та
+    // причина, по которой разборы перевели на A5/C5: имя без корня A-G
+    // транспонирование не двигает, хотя выглядит как аккорд.
+    expect(transposeChord('5В', 2, 'sharp')).toBe('5В');
+  });
+
+  it('квинты транспонируются как обычные аккорды', () => {
+    expect(transposeChord('A5', 2, 'sharp')).toBe('B5');
+    expect(transposeChord('E5', -2, 'sharp')).toBe('D5');
+    expect(transposeChord('C#5', 1, 'flat')).toBe('D5');
+    expect(parseChord('A5')).toEqual({ rootPc: 9, quality: '5', bassPc: null });
   });
 
   it('сдвиг 0 возвращает нормализованное написание', () => {

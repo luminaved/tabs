@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getChordShape, parseChordDefs, parseFrets } from './diagrams';
+import {
+  getChordShape,
+  parseChordDefs,
+  parseFrets,
+  parsePowerFifth,
+  powerFifthToChordName,
+} from './diagrams';
 
 describe('getChordShape', () => {
   it('встроенные open-аккорды', () => {
@@ -62,9 +68,99 @@ describe('getChordShape', () => {
     expect(getChordShape('4B')).toEqual({ frets: [4, 6, 6, -1, -1, -1] });
   });
 
+  it('квинты по имени (A5, C5) — форма берётся автоматически', () => {
+    // Корень до 5 лада — на 6-й струне
+    expect(getChordShape('E5')).toEqual({ frets: [0, 2, 2, -1, -1, -1] });
+    expect(getChordShape('G5')).toEqual({ frets: [3, 5, 5, -1, -1, -1] });
+    expect(getChordShape('A5')).toEqual({ frets: [5, 7, 7, -1, -1, -1] });
+    // Дальше — на 5-й
+    expect(getChordShape('C5')).toEqual({ frets: [-1, 3, 5, 5, -1, -1] });
+    expect(getChordShape('D5')).toEqual({ frets: [-1, 5, 7, 7, -1, -1] });
+    // Бемоль и диез — одна и та же высота, одна и та же форма
+    expect(getChordShape('A#5')).toEqual(getChordShape('Bb5'));
+  });
+
+  it('квинты рисуются точками, без баррэ', () => {
+    expect(getChordShape('A5')?.barres).toBeUndefined();
+    expect(getChordShape('C5')?.barres).toBeUndefined();
+  });
+
+  it('на укулеле квинт нет', () => {
+    expect(getChordShape('A5', 'ukulele')).toBeNull();
+  });
+
   it('без формы — null', () => {
     expect(getChordShape('Csus4')).toBeNull();
     expect(getChordShape('Xyz')).toBeNull();
+  });
+});
+
+/**
+ * Главная страховка миграции старых разборов: переименование «5В» → «A5» не
+ * должно менять картинку. Правило выбора струны в `powerChordFrets` подобрано
+ * именно под это, и таблица ниже — то, что не даст его случайно «улучшить».
+ *
+ * Позиции выше ходовых сюда не входят намеренно: «7Н» (E5 на 7 ладу) имя не
+ * несёт, и генератор честно отдаёт открытую позицию. Такие места скрипт
+ * миграции закрепляет аппликатурой на песне.
+ */
+describe('переименование квинт не меняет аппликатуру', () => {
+  const same: [string, string][] = [
+    ['3В', 'G5'],
+    ['4В', 'G#5'],
+    ['5В', 'A5'],
+    ['1Н', 'A#5'],
+    ['2Н', 'B5'],
+    ['3Н', 'C5'],
+    ['4Н', 'C#5'],
+    ['5Н', 'D5'],
+    ['6Н', 'D#5'],
+  ];
+
+  for (const [old, standard] of same) {
+    it(`${old} → ${standard}`, () => {
+      expect(powerFifthToChordName(old)).toBe(standard);
+      expect(getChordShape(standard)).toEqual(getChordShape(old));
+    });
+  }
+});
+
+describe('powerFifthToChordName', () => {
+  it('корень считается от открытой струны', () => {
+    // Верхняя — от E (6-я струна), нижняя — от A (5-я)
+    expect(powerFifthToChordName('5В')).toBe('A5');
+    expect(powerFifthToChordName('7Н')).toBe('E5');
+    // За пределами октавы имя повторяется: позиция в нём не живёт
+    expect(powerFifthToChordName('17В')).toBe('A5');
+  });
+
+  it('написание ноты задаётся снаружи', () => {
+    expect(powerFifthToChordName('1Н', 'sharp')).toBe('A#5');
+    expect(powerFifthToChordName('1Н', 'flat')).toBe('Bb5');
+  });
+
+  it('латинские двойники и регистр', () => {
+    expect(powerFifthToChordName('4B')).toBe('G#5');
+    expect(powerFifthToChordName('4в')).toBe('G#5');
+    expect(powerFifthToChordName('3H')).toBe('C5');
+  });
+
+  it('нулевой лад — открытая струна, а не мусор', () => {
+    // Самые ходовые квинты вообще: открытая E и открытая A. Проверка
+    // `fret < 1` их отбрасывала, и они оставались без аппликатуры.
+    expect(powerFifthToChordName('0В')).toBe('E5');
+    expect(powerFifthToChordName('0Н')).toBe('A5');
+    expect(getChordShape('0В')).toEqual({ frets: [0, 2, 2, -1, -1, -1] });
+    expect(getChordShape('0Н')).toEqual({ frets: [-1, 0, 2, 2, -1, -1] });
+    // И совпадают с тем, что даёт стандартное имя
+    expect(getChordShape('E5')).toEqual(getChordShape('0В'));
+  });
+
+  it('не такая запись — null', () => {
+    expect(powerFifthToChordName('A5')).toBeNull();
+    expect(powerFifthToChordName('Am')).toBeNull();
+    expect(powerFifthToChordName('23В')).toBeNull();
+    expect(parsePowerFifth('5X')).toBeNull();
   });
 });
 

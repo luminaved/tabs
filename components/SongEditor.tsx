@@ -21,6 +21,7 @@ import { InstrumentSelect } from './InstrumentSelect';
 import { ChordDefsEditor } from './ChordDefsEditor';
 import { parseSong } from '@/lib/chordpro/parse';
 import { chordsInOrder } from '@/lib/chordpro/usedChords';
+import { normalizePowerFifths, powerFifthRenames } from '@/lib/chordpro/powerFifths';
 import { parseChordDefs } from '@/lib/chords/diagrams';
 import { parseInstrumentId, type InstrumentId } from '@/lib/chords/instruments';
 import { songPath } from '@/lib/slug';
@@ -109,6 +110,15 @@ export function SongEditor({
 
   // Уникальные аккорды, уже встречающиеся в тексте — для быстрого повтора.
   const usedChords = useMemo(() => chordsInOrder(body), [body]);
+
+  // Квинты, записанные по-старому («5В»). Такой аккорд не транспонируется —
+  // разбор аккордов ждёт корень A-G и оставляет его на месте, — поэтому
+  // редактор предлагает замену. Именно предлагает: запрещать нечего, вставленный
+  // таб и так рисуется, а лишний барьер на пути к сохранению никому не нужен.
+  const oldFifths = useMemo(
+    () => powerFifthRenames(body, songKey, instrument),
+    [body, songKey, instrument],
+  );
   // Формы разбираются под текущий инструмент: сохранённые шестиструнные к
   // укулеле не подойдут и отсеются (см. parseChordDefs).
   const initialDefs = useMemo(
@@ -402,6 +412,29 @@ export function SongEditor({
         <ChordPalette songKey={songKey} used={usedChords} onInsert={insertChord} />
       </div>
 
+      {/* Над сеткой, а не в колонке редактора: у левой и правой колонок
+          выровнены шапки (см. min-h-8 ниже), и вставка баннера внутрь увела бы
+          textarea вниз относительно превью. */}
+      {oldFifths.length > 0 ? (
+        <div className="draft-banner" role="status">
+          <FifthsIcon />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Квинты записаны по-старому</p>
+            <p className="mt-0.5 text-xs text-muted">
+              {oldFifths.map((r) => `${r.from} → ${r.to}`).join(', ')}. Такие аккорды не
+              транспонируются: сдвиг тональности их не двигает. Аппликатуры не изменятся.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBody((b) => normalizePowerFifths(b, songKey, instrument))}
+            className="btn btn-primary h-9 shrink-0 px-3 text-sm"
+          >
+            Заменить
+          </button>
+        </div>
+      ) : null}
+
       {/* Редактор + живое превью (верх textarea и превью на одном уровне) */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-1.5">
@@ -499,6 +532,16 @@ function DraftIcon() {
       <path d="M12 8v4l2.5 2.5" />
       <path d="M3.05 11a9 9 0 1 1 .5 4" />
       <path d="M3 3v5h5" />
+    </svg>
+  );
+}
+
+/** Стрелки вверх-вниз: запись меняется на другую, равную по смыслу. */
+function FifthsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="mt-0.5 shrink-0 text-accent">
+      <path d="M7 4v16m0 0-3-3m3 3 3-3" />
+      <path d="M17 20V4m0 0-3 3m3-3 3 3" />
     </svg>
   );
 }

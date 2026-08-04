@@ -9,7 +9,11 @@ coverage/
 *.db
 *.db-journal
 /prisma/dev.db*
-data-export.json
+# Со звёздочкой, а не точным именем: в выгрузке лежат живые OAuth-токены,
+# адреса и хеши паролей, и любая её копия — «data-export.2026-08-04.json»,
+# «...before-migration.json» — обязана попадать под то же правило. Точное имя
+# уже один раз пропустило такую копию в коммит (её остановила защита GitHub).
+data-export*.json
 .DS_Store
 .vercel
 next-env.d.ts
