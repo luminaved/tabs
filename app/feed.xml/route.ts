@@ -3,6 +3,9 @@ import { getInstrument } from '@/lib/chords/instruments';
 import { songSeoDescription, songSeoTitle } from '@/lib/seo';
 import { songPath } from '@/lib/slug';
 import { absoluteUrl, SITE_NAME, SITE_TAGLINE, SITE_URL } from '@/lib/site';
+// Общий с картой сайта: оба файла машинные и оба ломаются от одного сырого
+// амперсанда, поэтому правило экранирования должно быть ровно одно.
+import { xmlEscape as xml } from '@/lib/xmlEscape';
 
 /**
  * RSS свежих разборов.
@@ -78,21 +81,4 @@ export async function GET() {
       'Cache-Control': `public, max-age=0, s-maxage=${revalidate}, stale-while-revalidate=86400`,
     },
   });
-}
-
-/**
- * Экранирование для XML.
- *
- * Названия песен — свободное поле: амперсанд, угловая скобка или кавычка в нём
- * ломают ленту целиком, а не одну запись, потому что XML разбирается строго и
- * читалка при ошибке отбрасывает весь документ. Апостроф и кавычка экранируются
- * не «на всякий случай»: строки подставляются и в атрибут (`href` выше).
- */
-function xml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
