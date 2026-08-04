@@ -2,13 +2,29 @@ import type { Barre, ChordFrets } from '@/lib/chords/diagrams';
 
 // Единицы viewBox: шаг между струнами и поля по краям.
 const STRING_GAP = 8.8;
-const EDGE = 9;
+
+/**
+ * Поля слева и справа от сетки. РАЗНЫЕ, и это не небрежность: слева живёт номер
+ * начального лада, справа — ничего.
+ *
+ * Раньше поле было симметричным (9 и 9), и двузначный номер туда не влезал
+ * физически. Просвет до первой точки — это не 9 единиц, а 9 минус её радиус
+ * 3.4, то есть 5.6; «11» шрифтом 5.6 занимает 6.3 и налезало на точку. Сумма
+ * полей осталась прежней (18), поэтому ширина холста, пропорции и все размеры
+ * карточек не изменились — сетка лишь сдвинулась на две единицы вправо.
+ */
+const EDGE_LEFT = 12;
+const EDGE_RIGHT = 6;
+
+/** Радиус точки-пальца. Он же задаёт, где начинается «чернила» сетки слева. */
+const DOT_R = 3.4;
+
 /** Ширина шестиструнной диаграммы — эталон, к которому приводится `size`. */
-const REFERENCE_W = EDGE * 2 + 5 * STRING_GAP;
+const REFERENCE_W = EDGE_LEFT + EDGE_RIGHT + 5 * STRING_GAP;
 
 /** Внутренняя ширина холста для N струн. */
 function canvasWidth(strings: number): number {
-  return EDGE * 2 + (strings - 1) * STRING_GAP;
+  return EDGE_LEFT + EDGE_RIGHT + (strings - 1) * STRING_GAP;
 }
 
 /**
@@ -56,7 +72,7 @@ export function ChordDiagram({
 
   // Геометрия в единицах viewBox: шаг между струнами фиксирован, ширина
   // холста растёт от числа струн (у укулеле диаграмма уже гитарной).
-  const left = EDGE;
+  const left = EDGE_LEFT;
   const right = left + (strings - 1) * STRING_GAP;
   const top = 16;
   const bottom = 66;
@@ -81,22 +97,23 @@ export function ChordDiagram({
         <line x1={left} y1={top} x2={right} y2={top} stroke="currentColor" strokeWidth={3} />
       ) : (
         /*
-          Номер лада — ПО ЦЕНТРУ поля слева от сетки, а не прижат к ней концом
-          строки, как было. Раньше стояло `x={left - 5}` с `textAnchor="end"`,
-          то есть текст начинался на x=4 и рос влево — за нулевую границу
-          viewBox. Внешний <svg> по умолчанию обрезает всё за своими пределами,
-          и у двузначного лада срезалась первая цифра: «10» показывалось как
-          «0», «12» — как «2». На однозначных это не проявлялось, поэтому
-          прожило до первого разбора с аккордом выше девятого лада.
+          Номер лада — по центру ПРОСВЕТА слева от сетки. Просвет считается до
+          края точки (`left - DOT_R`), а не до линии струны: точка выступает за
+          неё на свой радиус, и именно на неё подпись наезжала, когда её
+          центрировали по `left / 2`.
 
-          Двузначный номер вдвое шире, а поле то же самое — поэтому ему шрифт
-          мельче. Центрирование даёт запас с обеих сторон: и от края картинки,
-          и от первой струны.
+          До этого было ещё хуже: `x={left - 5}` с `textAnchor="end"` уводил
+          текст за нулевую границу viewBox, а внешний <svg> обрезает всё за
+          своими пределами — у двузначного лада пропадала первая цифра, «10»
+          показывалось как «0».
+
+          Двузначный номер вдвое шире, а просвет один и тот же, поэтому ему
+          шрифт мельче.
         */
         <text
-          x={left / 2}
+          x={(left - DOT_R) / 2}
           y={top + fretGap * 0.7}
-          fontSize={base > 9 ? 5.6 : 7}
+          fontSize={base > 9 ? 5.4 : 7}
           textAnchor="middle"
           fill="currentColor"
           opacity="0.7"
@@ -119,7 +136,7 @@ export function ChordDiagram({
         const pos = b.fret - base + 1; // 1..FRETS
         if (pos < 1 || pos > FRETS) return null;
         const cy = y(pos) - fretGap / 2;
-        const r = 3.4;
+        const r = DOT_R;
         return (
           <rect
             key={`b${i}`}
@@ -145,7 +162,7 @@ export function ChordDiagram({
           return <circle key={s} cx={x(s)} cy={top - 6} r={2.6} fill="none" stroke="currentColor" strokeWidth={1} opacity="0.7" />;
         }
         const pos = f - base + 1; // 1..FRETS
-        return <circle key={s} cx={x(s)} cy={y(pos) - fretGap / 2} r={3.4} fill="var(--color-accent)" />;
+        return <circle key={s} cx={x(s)} cy={y(pos) - fretGap / 2} r={DOT_R} fill="var(--color-accent)" />;
       })}
     </svg>
   );
