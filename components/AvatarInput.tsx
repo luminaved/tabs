@@ -6,27 +6,39 @@ import { resizeToDataUrl } from '@/lib/resizeImage';
 
 /**
  * Аватар с загрузкой: при наведении показываются карандаш (изменить) и крестик
- * (убрать). Файл сжимается на клиенте в data URL (поле `image`).
+ * (убрать). Файл сжимается на клиенте в data URL.
+ *
+ * Поле `image` уходит на сервер, ТОЛЬКО если картинку сейчас трогали. Раньше оно
+ * стояло в форме всегда и было заполнено текущим аватаром: страница кабинета
+ * тащила из базы весь data URL (до 17 КБ), вписывала его в разметку и получала
+ * обратно при каждом сохранении — даже когда меняли одно имя. Теперь показ идёт
+ * ссылкой на /avatars/[id] (как в шапке и везде), а поле появляется только
+ * вместе с изменением; его отсутствие сервер читает как «не трогать»
+ * (см. app/(site)/account/actions.ts).
  */
 export function AvatarInput({
-  initial,
+  userId,
+  version,
   name,
   email,
   size = 96,
 }: {
-  initial?: string | null;
+  userId: string;
+  /** Отпечаток сохранённой картинки; null — аватара нет. */
+  version: string | null;
   name?: string | null;
   email?: string | null;
   size?: number;
 }) {
-  const [image, setImage] = useState(initial ?? '');
+  // null — картинку не меняли; строка — выбрали новую; '' — попросили убрать.
+  const [next, setNext] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = async (file: File) => {
     setBusy(true);
     try {
-      setImage(await resizeToDataUrl(file, 256, 0.85));
+      setNext(await resizeToDataUrl(file, 256, 0.85));
     } catch {
       /* оставляем текущий аватар */
     } finally {
@@ -34,10 +46,22 @@ export function AvatarInput({
     }
   };
 
+  // Что показываем: свежий файл — напрямую (в базе его ещё нет), иначе —
+  // сохранённый по ссылке. Убранный не показываем вовсе: останется инициал.
+  const showSaved = next === null && !!version;
+  const canRemove = next === null ? !!version : next !== '';
+
   return (
     <>
       <div className="avatar-edit" style={{ width: size, height: size }}>
-        <Avatar image={image || null} name={name} email={email} size={size} />
+        <Avatar
+          image={next || null}
+          version={showSaved ? version : null}
+          userId={showSaved ? userId : null}
+          name={name}
+          email={email}
+          size={size}
+        />
         <div className="avatar-overlay">
           <button
             type="button"
@@ -49,10 +73,10 @@ export function AvatarInput({
           >
             <PencilIcon />
           </button>
-          {image ? (
+          {canRemove ? (
             <button
               type="button"
-              onClick={() => setImage('')}
+              onClick={() => setNext('')}
               className="avatar-overlay-btn"
               title="Убрать фото"
               aria-label="Убрать фото"
@@ -63,7 +87,7 @@ export function AvatarInput({
         </div>
       </div>
 
-      <input type="hidden" name="image" value={image} />
+      {next === null ? null : <input type="hidden" name="image" value={next} />}
       <input
         ref={fileRef}
         type="file"

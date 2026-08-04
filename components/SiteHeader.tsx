@@ -45,8 +45,8 @@ export async function SiteHeader() {
                   size={24}
                   userId={session.user.id}
                 />
-                {/* У входа через Telegram нет ни адреса, ни обязательного
-                    имени — тогда подписи просто нет, остаётся аватар. */}
+                {/* Ни адреса, ни имени может не быть вовсе — тогда подписи
+                    просто нет, остаётся аватар. */}
                 <span className="hidden max-w-[9rem] truncate md:inline">
                   {displayName ?? session.user.email ?? 'Профиль'}
                 </span>

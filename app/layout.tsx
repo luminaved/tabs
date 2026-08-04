@@ -4,17 +4,37 @@ import { SITE_NAME, SITE_TITLE, SITE_URL } from '@/lib/site';
 import './globals.css';
 
 // Антиква для заголовков + гротеск Golos (заточен под кириллицу) для интерфейса.
+//
+// Набор начертаний — ровно тот, что встречается в стилях, и это не педантизм:
+// next/font кладёт КАЖДУЮ пару «начертание × алфавит» отдельным файлом и на
+// каждый ставит <link rel="preload"> в <head>. Лишнее начертание — это лишние
+// два файла (latin + cyrillic), которые борются за канал с первым экраном на
+// любой странице сайта.
 const spectral = Spectral({
   subsets: ['latin', 'cyrillic'],
   weight: ['400', '500', '600'],
-  style: ['normal', 'italic'],
   variable: '--font-spectral',
   display: 'swap',
 });
 
+/**
+ * Курсивная антиква. Отдельным объявлением, потому что нужна ровно в одном
+ * месте — комментарии внутри текста песни (`.cs-comment`), и только обычной
+ * насыщенности. В общем объявлении `style: ['normal', 'italic']` поднимал
+ * курсив для всех трёх начертаний сразу: шесть файлов вместо двух.
+ */
+const spectralItalic = Spectral({
+  subsets: ['latin', 'cyrillic'],
+  weight: ['400'],
+  style: ['italic'],
+  variable: '--font-spectral-italic',
+  display: 'swap',
+});
+
+// 700 здесь был, но в стилях не встречается ни разу (самое жирное — 600).
 const golos = Golos_Text({
   subsets: ['latin', 'cyrillic'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '500', '600'],
   variable: '--font-golos',
   display: 'swap',
 });
@@ -67,7 +87,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={`${golos.variable} ${spectral.variable}`}>
+    <html
+      lang="ru"
+      className={`${golos.variable} ${spectral.variable} ${spectralItalic.variable}`}
+    >
       <body>{children}</body>
     </html>
   );

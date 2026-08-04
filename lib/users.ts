@@ -3,13 +3,22 @@ import { prisma } from './db';
 import { AVATAR_TAIL_CHARS, avatarVersionFromParts } from './avatarUrl';
 
 /**
- * Профиль для кабинета. cache(): страница кабинета и шапка спрашивают одного
- * и того же пользователя — без дедупликации это лишний поход в БД.
+ * Профиль для кабинета: то, чего нет в публичных данных, — адрес и дата.
+ *
+ * Картинку НЕ выбираем, и это не мелочь. Кабинет отдавал её целиком (data URL,
+ * в среднем ~5 КБ, до 17 КБ) — она ехала из базы, потом в разметке страницы, а
+ * затем возвращалась обратно при каждом сохранении профиля, даже когда меняли
+ * одно имя. Показать аватар кабинету хватает того же отпечатка, что и шапке
+ * (см. `getPublicUser`), а тот вдобавок уже посчитан для этой же страницы —
+ * шапка спрашивает его раньше, и `cache()` отдаёт готовый ответ.
+ *
+ * cache(): страница кабинета и шапка спрашивают одного и того же пользователя —
+ * без дедупликации это лишний поход в БД.
  */
 export const getUserProfile = cache(function getUserProfile(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, email: true, image: true, createdAt: true },
+    select: { name: true, email: true, createdAt: true },
   });
 });
 
@@ -70,9 +79,23 @@ export const getPublicUser = cache(async function getPublicUser(
   };
 });
 
+/**
+ * Сохранение профиля.
+ *
+ * `image: undefined` — «не трогать», и это отдельное состояние, а не тот же
+ * `null`. Форма кабинета больше не возит картинку с собой: она приходит, только
+ * если её именно сейчас поменяли или убрали. Без этого различия сохранение
+ * одного имени стирало бы аватар.
+ */
 export async function updateUserProfile(
   userId: string,
-  data: { name: string | null; image: string | null },
+  data: { name: string | null; image?: string | null },
 ) {
-  await prisma.user.update({ where: { id: userId }, data });
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      name: data.name,
+      ...(data.image === undefined ? {} : { image: data.image }),
+    },
+  });
 }

@@ -14,7 +14,6 @@ export function AuthForm({
   withName = false,
   notice,
   footer,
-  telegram,
 }: {
   action: Action;
   title: string;
@@ -23,11 +22,6 @@ export function AuthForm({
   withName?: boolean;
   notice?: string;
   footer: React.ReactNode;
-  /**
-   * Кнопка Telegram. Готовым узлом от страницы, потому что собирает её
-   * серверный компонент: в адресе входа участвует токен бота, а он серверный.
-   */
-  telegram?: React.ReactNode;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
 
@@ -68,10 +62,6 @@ export function AuthForm({
             Продолжить с Google
           </button>
         </form>
-        {/* Кнопка Telegram теперь наша и той же формы, что соседние, поэтому
-            стоит в общем ряду без обёрток. Приходит готовым узлом от страницы:
-            адрес входа собирается на сервере из токена бота. */}
-        {telegram}
         <div className="flex items-center gap-3 text-xs text-faint">
           <span className="h-px flex-1 bg-[var(--color-line)]" />
           или

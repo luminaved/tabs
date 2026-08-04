@@ -56,10 +56,15 @@ function noteTypeLabel(type?: string | null): string | null {
   return TYPE_LABEL[type] ?? type;
 }
 
-// Размер шрифта текста песни (rem). Дефолт немного уменьшен по просьбе.
+// Размер шрифта текста песни (rem).
+//
+// FONT_DEFAULT — не то, чем страница рисуется по умолчанию (это делает clamp в
+// .chordsheet), а точка отсчёта для первого нажатия A− / A+: пока человек
+// размер не трогал, переменной нет, и шагать не от чего. Число держится равным
+// потолку того clamp — иначе первое нажатие давало бы скачок вместо шага.
 const FONT_MIN = 0.8;
 const FONT_MAX = 1.7;
-const FONT_DEFAULT = 1.12;
+const FONT_DEFAULT = 1.08;
 const FONT_STEP = 0.1;
 
 export function SongViewer({
@@ -148,6 +153,14 @@ export function SongViewer({
     const pinned = readBoolPref(viewerKeys.pinChords);
     if (pinned !== null) setPinChords(pinned);
 
+    // Замок экрана восстанавливаем молча: браузер разрешает взять его без
+    // нажатия, лишь бы вкладка была видна, а если откажет — эффект ниже сам
+    // повторит попытку, когда на неё вернутся. Единственное, чем можно
+    // ошибиться, — оставить кнопку «вкл» при неудаче; это честнее, чем гасить
+    // экран человеку, который просил обратного.
+    const wake = readBoolPref(viewerKeys.wakeLock);
+    if (wake !== null) setWakeOn(wake);
+
     if (songId) {
       const t = readIntPref(viewerKeys.transpose(songId), -11, 11);
       if (t !== null) setTranspose(t);
@@ -179,6 +192,11 @@ export function SongViewer({
   const changePinChords = (next: boolean) => {
     setPinChords(next);
     writePref(viewerKeys.pinChords, next);
+  };
+
+  const changeWakeOn = (next: boolean) => {
+    setWakeOn(next);
+    writePref(viewerKeys.wakeLock, next);
   };
 
   // ── Лайк и избранное без перезагрузки страницы ────────────────────────────
@@ -328,8 +346,19 @@ export function SongViewer({
     if (!wakeOn || !wakeSupported) return;
     let cancelled = false;
     const request = async () => {
+      // Уже держим — второй замок не берём: браузер отдаст ещё один объект, а
+      // ссылку мы храним одну, и прежний остался бы висеть до закрытия вкладки.
+      if (sentinelRef.current && !sentinelRef.current.released) return;
       try {
-        sentinelRef.current = await navigator.wakeLock.request('screen');
+        const sentinel = await navigator.wakeLock.request('screen');
+        // Пока ждали ответ, могли уйти со страницы или выключить настройку.
+        // Тогда замок надо не запоминать, а сразу отпускать — иначе экран
+        // остался бы гореть после ухода.
+        if (cancelled) {
+          sentinel.release().catch(() => {});
+          return;
+        }
+        sentinelRef.current = sentinel;
       } catch {
         /* отказ (например, вкладка неактивна) — молча игнорируем */
       }
@@ -604,7 +633,7 @@ export function SongViewer({
               {wakeSupported ? (
                 <button
                   type="button"
-                  onClick={() => setWakeOn((v) => !v)}
+                  onClick={() => changeWakeOn(!wakeOn)}
                   className={wakeOn ? 'btn btn-primary h-9 px-3 text-sm' : 'btn btn-outline h-9 px-3 text-sm'}
                   aria-pressed={wakeOn}
                 >

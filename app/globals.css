@@ -22,6 +22,10 @@
      галочка, кнопка модератора и отбор в каталоге должны читаться как одно.
      Раньше этот жёлтый был вписан числом в трёх местах. */
   --color-verified: #f2c14e;
+  /* Выход из аккаунта. Не «опасное» действие и красной заливки не заслуживает,
+     но и мимоходом его нажимать не должны — поэтому краска появляется только
+     при наведении (см. .btn-exit). */
+  --color-danger: #e5675f;
 
   --font-sans: var(--font-golos), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-spectral), ui-serif, Georgia, serif;
@@ -349,6 +353,16 @@
   .avatar-edit:focus-within .avatar-overlay {
     opacity: 1;
   }
+  /* Там, где наводить нечем, накладка видна всегда — приглушённо, но видна.
+     Прозрачная она кликов не отменяла, поэтому на телефоне тап по аватару и
+     раньше что-то делал: попадал в невидимую кнопку и открывал выбор файла.
+     Угадать это было нельзя — снаружи аватар выглядел просто картинкой. */
+  @media (hover: none) {
+    .avatar-overlay {
+      opacity: 1;
+      background: rgba(0, 0, 0, 0.34);
+    }
+  }
   .avatar-overlay-btn {
     display: inline-flex;
     align-items: center;
@@ -643,6 +657,100 @@
   }
   .btn-ghost:hover:not(:disabled) {
     color: var(--color-fg);
+  }
+  /* Кнопка, которая что-то раскрыла («Настройки» в кабинете): та же рамка, но
+     в акценте — видно, какая часть карточки сейчас открыта. Прежде она в
+     закрытом виде была `btn-ghost`, без рамки: в ряду это читалось, а в
+     списке на телефоне безрамочная строка между двумя обведёнными выглядела
+     недорисованной. */
+  .btn-toggled {
+    border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+
+  /* «Выйти». Рамка как у соседей — это не опасная кнопка и пугать ею незачем, —
+     но при наведении краснеет: рядом стоят «Публичный профиль» и «Настройки», и
+     промахнуться мимо них не должно быть всё равно. */
+  .btn-exit:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-danger) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-danger) 10%, transparent);
+    color: var(--color-danger);
+  }
+
+  /* Число рядом с подписью кнопки («Гитара 12»). Не в скобках: скобки внутри
+     кнопки читаются как часть названия, а это счётчик. */
+  .count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.3rem;
+    padding-inline: 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-fg) 11%, transparent);
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted);
+  }
+  .btn-primary .count-badge {
+    background: color-mix(in oklab, var(--color-accent-fg) 16%, transparent);
+    color: var(--color-accent-fg);
+  }
+
+  /* ─── Личный кабинет ──────────────────────────────────────────────────────
+     Действия над аккаунтом: «Публичный профиль», «Настройки», «Выйти».
+
+     На телефоне — список во всю ширину, по строке на действие. Раньше здесь
+     стоял `flex-wrap`, и четыре кнопки разной длины разваливались на экране в
+     360px на три ряда с рваным правым краем: сверху карточка профиля, под ней
+     облако разнокалиберных прямоугольников, дальше ещё один такой же ряд —
+     глазу не за что зацепиться, и кабинет читался как свалка кнопок. Строчки
+     одинаковой ширины с подписями от левого края читаются как меню, а меню
+     просматривают сверху вниз, не разбирая каждую кнопку по отдельности.
+
+     От `sm` возвращается обычный ряд: там ширины хватает, и четыре кнопки
+     встают в одну строку без переносов. */
+  .account-actions {
+    display: grid;
+    gap: 0.5rem;
+  }
+  /* Форма выхода — тоже элемент сетки, и кнопка внутри неё обязана тянуться
+     так же, как соседние ссылки. */
+  .account-actions .btn {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  @media (min-width: 640px) {
+    .account-actions {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .account-actions .btn {
+      width: auto;
+      justify-content: center;
+    }
+  }
+
+  /* Панель настроек профиля: раскрывается кнопкой в карточке. Отделена от неё
+     линией, а не рамкой — это продолжение той же карточки, а не вторая. */
+  .account-settings {
+    margin-top: 0.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-line);
+    animation: account-settings-in 0.2s ease;
+  }
+  @keyframes account-settings-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .account-settings {
+      animation: none;
+    }
   }
 
   /* Карточка выбора видимости (радио с иконкой) */
@@ -1316,6 +1424,86 @@
     }
   }
 
+  /* ─── «Показать ещё» под каталогом ────────────────────────────────────────
+     Была обычной кнопкой с серой рамкой — той же, что «Найти» в поиске и
+     «Гитара» в шапке, — и в конце длинного списка одинаковых строк просто не
+     читалась как продолжение: список кончился, ниже что-то серое, человек
+     уходит с мыслью «это весь каталог».
+
+     Теперь это полоса во всю ширину списка, в акценте и со стрелкой вниз.
+     Стрелка тут не украшение: она единственная говорит НАПРАВЛЕНИЕ — что за
+     кнопкой ещё список, а не переход куда-то в сторону. При наведении полоса
+     заливается целиком, а стрелка подаётся вниз.
+
+     Ширина во всю строку выбрана намеренно: любая кнопка по центру уже колонки
+     читается как подпись под списком, а не как его продолжение. */
+  .load-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    width: 100%;
+    min-height: 3.15rem;
+    padding-inline: 1.25rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 42%, var(--color-line));
+    border-radius: 0.85rem;
+    background: color-mix(in oklab, var(--color-accent) 9%, transparent);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--color-accent);
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease;
+  }
+  .load-more:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+  .load-more-arrow {
+    transition: transform 0.18s ease;
+  }
+  .load-more:hover .load-more-arrow {
+    transform: translateY(2px);
+  }
+  /* Пока грузится — кнопка гаснет и перестаёт отзываться на наведение: иначе
+     нетерпеливый клик уходил бы в пустоту, а вид у кнопки оставался бы
+     «нажми меня». */
+  .load-more[aria-disabled='true'],
+  .load-more[aria-disabled='true']:hover {
+    border-color: var(--color-line);
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+    color: var(--color-muted);
+    cursor: default;
+  }
+  .load-more[aria-disabled='true'] .load-more-arrow {
+    transform: none;
+    animation: load-more-pulse 0.9s ease-in-out infinite;
+  }
+  @keyframes load-more-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(3px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .load-more,
+    .load-more-arrow {
+      transition: none;
+    }
+    .load-more[aria-disabled='true'] .load-more-arrow {
+      animation: none;
+    }
+  }
+
   /* ─── Плитки статистики (админская страница) ──────────────────────────── */
   .stat-tile {
     display: flex;
@@ -1784,9 +1972,23 @@
     text-align: center;
     white-space: normal;
     box-shadow: 0 10px 26px rgb(0 0 0 / 0.5);
-    opacity: 0;
-    visibility: hidden;
     pointer-events: none;
+    /*
+      `display: none`, а НЕ `visibility: hidden` с прозрачностью, как было.
+      Скрытый через `visibility` элемент из раскладки не исчезает — он
+      продолжает занимать место. Подсказка центрируется по галочке
+      (`left: 50%` + сдвиг), поэтому у строки каталога, где галочка стоит
+      близко к правому краю, её невидимая правая половина вылезала за окно:
+      на экране 360px страница становилась шириной 416px. Получалась
+      горизонтальная прокрутка в пустоту — прокрутить есть куда, а смотреть
+      не на что, — и вместе с ней уезжало нижнее меню, закреплённое по окну.
+      Ограничение ширины (`max-width` выше) от этого не спасает: за край
+      выталкивало не размером, а центрированием.
+
+      Переход и задержка здесь не нужны (подсказка мгновенная), поэтому
+      смена `display` ничего не ломает.
+    */
+    display: none;
   }
   /* Хвостик подсказки */
   .verified-tip::after {
@@ -1800,9 +2002,25 @@
   }
   .verified-badge:hover .verified-tip,
   .verified-badge:focus-visible .verified-tip {
-    opacity: 1;
-    visibility: visible;
+    display: block;
   }
+  /*
+    На узком экране и там, где нечем наводить, подсказки нет вовсе.
+    Причина не в экономии, а в геометрии: подсказка центрируется по галочке, а
+    та в строке каталога стоит у правого края — вместить её половину в
+    оставшиеся ~18px отступа невозможно ни при какой ширине, поэтому в
+    показанном виде она неизбежно вылезала бы за окно. На касании наводить
+    нечем, так что и терять нечего: смысл галочки несёт `aria-label` на ней
+    самой (см. components/VerifiedBadge.tsx), и скринридеры читают его.
+  */
+  @media (hover: none), (max-width: 639.98px) {
+    .verified-badge:hover .verified-tip,
+    .verified-badge:focus-visible .verified-tip {
+      display: none;
+    }
+  }
+  /* На печати правило выше не срабатывает (наводить нечем), но оставляем явно:
+     подсказка — экранная деталь. */
   @media print {
     .verified-tip {
       display: none;
@@ -2021,8 +2239,15 @@
      на узком экране ничего не разъезжается. Без моноширинного выравнивания. */
   .chordsheet {
     /* Дефолт отзывчивый: на телефоне чуть меньше, на десктопе крупнее.
-       Кнопки A−/A+ на странице песни задают точный размер через переменную. */
-    font-size: var(--sheet-font-size, clamp(1rem, 0.9rem + 0.55vw, 1.15rem));
+       Кнопки A−/A+ на странице песни задают точный размер через переменную.
+
+       Верхняя граница — 1.08rem вместо 1.15rem: на широком экране строка и так
+       вмещается целиком, и прежний размер только гнал текст вниз, отправляя
+       песню за нижний край раньше времени. Нижняя граница не тронута — на
+       телефоне уменьшать нечего, там упирается в неё. Значение по умолчанию
+       для кнопок A−/A+ держится в паре с этим числом (FONT_DEFAULT в
+       components/SongViewer.tsx). */
+    font-size: var(--sheet-font-size, clamp(1rem, 0.9rem + 0.55vw, 1.08rem));
     line-height: 1.18;
     letter-spacing: 0.01em;
   }
@@ -2090,6 +2315,10 @@
 
   .cs-comment {
     margin: 0.55rem 0;
+    /* Единственный курсив на сайте. Семейство обычное: курсивное начертание
+       объявлено отдельным вызовом next/font (см. app/layout.tsx), но попадает
+       в то же семейство 'Spectral' — отдельным @font-face со `font-style:
+       italic`, и браузер выбирает его сам по строчке ниже. */
     font-family: var(--font-display);
     font-style: italic;
     font-size: 0.95em;

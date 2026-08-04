@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AuthForm } from '@/components/AuthForm';
-import { TelegramLoginButton } from '@/components/TelegramLoginButton';
 import { loginAction } from '../actions';
 
 // Страница входа закрыта и в robots.txt, но `noindex` здесь не дублирование:
@@ -19,13 +18,12 @@ export default async function LoginPage({
   searchParams: Promise<{
     google?: string;
     yandex?: string;
-    telegram?: string;
   }>;
 }) {
   const sp = await searchParams;
 
-  // Сюда возвращают экшены входа, когда идти к провайдеру бессмысленно (он не
-  // настроен) либо ответ провайдера не прошёл проверку.
+  // Сюда возвращают экшены входа, когда идти к провайдеру бессмысленно: он не
+  // настроен.
   const unconfigured: Record<string, string> = {
     google: 'Google — AUTH_GOOGLE_ID и AUTH_GOOGLE_SECRET',
     yandex: 'Яндекс — AUTH_YANDEX_ID и AUTH_YANDEX_SECRET',
@@ -34,16 +32,13 @@ export default async function LoginPage({
 
   const notice = missing
     ? `Этот способ входа пока не настроен: ${unconfigured[missing]} (см. .env.example). После добавления перезапустите сервер.`
-    : sp.telegram === 'failed'
-      ? 'Не удалось подтвердить вход через Telegram. Попробуйте ещё раз или войдите другим способом.'
-      : undefined;
+    : undefined;
 
   return (
     <AuthForm
       action={loginAction}
       title="С возвращением"
       subtitle="Войдите, чтобы открыть свой песенник."
-      telegram={<TelegramLoginButton />}
       submitLabel="Войти"
       notice={notice}
       footer={

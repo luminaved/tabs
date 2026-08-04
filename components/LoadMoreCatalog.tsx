@@ -6,6 +6,7 @@ import type { InstrumentId } from '@/lib/chords/instruments';
 import { catalogHref } from '@/lib/catalogUrl';
 import { loadMoreCatalogAction } from '@/app/(site)/(catalog)/actions';
 import { CatalogRow } from './CatalogRow';
+import { LoadMoreLabel } from './LoadMoreLabel';
 
 /**
  * Подгрузка следующих порций каталога.
@@ -92,7 +93,7 @@ export function LoadMoreCatalog({
       ))}
 
       {hasMore ? (
-        <li className="mt-2 flex flex-col items-center gap-2">
+        <li className="mt-4 flex flex-col items-center gap-2">
           {/* rel="next" — подсказка поисковику, что это продолжение той же
               выдачи, а не отдельная страница. Обычный <a>, поэтому уходит в
               разметку и работает без JS. */}
@@ -101,9 +102,9 @@ export function LoadMoreCatalog({
             rel="next"
             onClick={loadMore}
             aria-disabled={pending || undefined}
-            className="btn btn-outline w-full sm:w-auto sm:px-8"
+            className="load-more"
           >
-            {pending ? 'Загружаем…' : 'Показать ещё'}
+            <LoadMoreLabel pending={pending} />
           </a>
           {failed ? (
             <span className="text-sm text-muted" role="alert">

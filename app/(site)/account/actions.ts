@@ -27,10 +27,20 @@ export async function updateProfileAction(
   // Аватар: своё фото (data URL в пределах лимита) либо картинка провайдера
   // входа. Проверка размера и хоста — в lib/imageInput.ts: раньше сюда
   // проходил любой `https://`, то есть аватар мог стать чужим трекером.
-  const raw = String(formData.get('image') ?? '').trim();
-  const image = parseAvatarInput(raw);
-  if (raw && !image) {
-    return { error: 'Фото слишком большое или в неподдерживаемом формате' };
+  //
+  // Три состояния, и они разные:
+  //   поля нет вовсе — картинку не трогали (форма её и не присылает, см.
+  //                    AvatarInput: возить туда-сюда чужие 17 КБ незачем);
+  //   поле пустое    — попросили убрать;
+  //   поле с данными — поставить новую.
+  const field = formData.get('image');
+  let image: string | null | undefined;
+  if (field !== null) {
+    const raw = String(field).trim();
+    image = raw ? parseAvatarInput(raw) : null;
+    if (raw && !image) {
+      return { error: 'Фото слишком большое или в неподдерживаемом формате' };
+    }
   }
 
   await updateUserProfile(user.id, { name, image });

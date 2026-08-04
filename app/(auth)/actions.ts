@@ -48,32 +48,6 @@ export async function googleSignInAction(): Promise<void> {
   await signIn('google', { redirectTo: '/' });
 }
 
-/**
- * Вход по ответу виджета Telegram.
- *
- * Поля кладёт в форму сам виджет (см. TelegramLoginButton), проверка подписи —
- * в провайдере. Сюда они приезжают как есть, потому что подписаны целиком:
- * тронуть по дороге ничего нельзя, не сломав подпись.
- */
-export async function telegramSignInAction(formData: FormData): Promise<void> {
-  const fields = ['id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date', 'hash'];
-  const payload: Record<string, string> = {};
-  for (const key of fields) {
-    const value = formData.get(key);
-    if (typeof value === 'string' && value) payload[key] = value;
-  }
-  if (!payload.hash) redirect('/login?telegram=failed');
-
-  try {
-    await signIn('telegram', { ...payload, redirectTo: '/' });
-  } catch (error) {
-    // Неверная подпись, просроченный ответ — наружу одно сообщение: подделке
-    // незачем знать, что именно не сошлось.
-    if (error instanceof AuthError) redirect('/login?telegram=failed');
-    throw error;
-  }
-}
-
 export async function yandexSignInAction(): Promise<void> {
   // Тот же приём, что у Google: без кредов кнопка не молчит и не ломается, а
   // объясняет, чего не хватает.

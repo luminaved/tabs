@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import type { SongCard, SongListPage } from '@/lib/engagement';
 import { SongRow } from './SongRow';
+import { LoadMoreLabel } from './LoadMoreLabel';
 import { songMeta, type SongMetaKind } from '@/lib/songMeta';
 
 /**
@@ -36,6 +37,7 @@ export function LoadMoreSongs({
   const [pending, startTransition] = useTransition();
 
   const onClick = () => {
+    if (pending) return;
     const next = page + 1;
     setFailed(false);
     startTransition(async () => {
@@ -60,14 +62,18 @@ export function LoadMoreSongs({
       ))}
 
       {hasMore ? (
-        <li className="mt-2 flex flex-col items-center gap-2">
+        <li className="mt-4 flex flex-col items-center gap-2">
+          {/* aria-disabled, а не disabled: вид «идёт загрузка» задаёт CSS по
+              этому же атрибуту (см. .load-more), и он должен совпадать с
+              каталогом, где элемент — ссылка и `disabled` к ней неприменим.
+              Повторный клик отсекается проверкой в обработчике. */}
           <button
             type="button"
             onClick={onClick}
-            disabled={pending}
-            className="btn btn-outline w-full sm:w-auto sm:px-8"
+            aria-disabled={pending || undefined}
+            className="load-more"
           >
-            {pending ? 'Загружаем…' : 'Показать ещё'}
+            <LoadMoreLabel pending={pending} />
           </button>
           {failed ? (
             <span className="text-sm text-muted" role="alert">

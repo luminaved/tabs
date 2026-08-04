@@ -111,8 +111,6 @@ const AVATAR_HOSTS = [
   // Без этой строки аватар нового пользователя молча отбрасывался бы: и при
   // сохранении профиля, и при переносе картинки к себе (lib/remoteAvatar.ts).
   'avatars.yandex.net',
-  // Telegram: photo_url вида https://t.me/i/userpic/320/<...>.jpg
-  't.me',
 ];
 
 /**
