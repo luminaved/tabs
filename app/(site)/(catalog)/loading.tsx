@@ -10,14 +10,17 @@
 export default function Loading() {
   return (
     <main className="container-app py-10" aria-busy>
+      {/* Ширины тянущиеся: жёсткая полоска шире экрана растягивает документ, а
+          вместе с ним уезжает нижняя навигация — она закреплена по окну
+          (подробности в скелетоне библиотеки). */}
       <div className="mb-8 flex flex-col gap-2">
         <div className="skeleton h-4 w-24 rounded" />
-        <div className="skeleton h-10 w-56 rounded-lg" />
-        <div className="skeleton h-5 w-72 rounded" />
+        <div className="skeleton h-10 w-full max-w-56 rounded-lg" />
+        <div className="skeleton h-5 w-full max-w-72 rounded" />
       </div>
       <div className="mb-8 flex flex-col gap-3">
         <div className="skeleton h-[2.9rem] w-full rounded-[0.7rem]" />
-        <div className="skeleton h-9 w-64 rounded-[0.6rem]" />
+        <div className="skeleton h-9 w-full max-w-64 rounded-[0.6rem]" />
       </div>
       <ul className="flex flex-col gap-2">
         {Array.from({ length: 8 }).map((_, i) => (

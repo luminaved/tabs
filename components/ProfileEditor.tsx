@@ -93,14 +93,13 @@ export function ProfileEditor({
 
       {open ? (
         <form action={formAction} className="account-settings flex flex-col gap-5">
-          <div className="flex items-center gap-4">
+          {/* Подпись сверху, поле снизу — как у имени ниже. Пояснения про
+              карандаш и крестик здесь не было: обе кнопки видны прямо на
+              аватаре (на тач-устройствах — постоянно, см. .avatar-overlay), и
+              строчка текста только повторяла бы картинку словами. */}
+          <div className="flex flex-col items-start gap-2">
+            <span className="text-sm text-muted">Фото профиля</span>
             <AvatarInput userId={userId} version={avatarVersion} name={name} email={email} size={80} />
-            <div className="min-w-0 text-sm">
-              <p className="font-medium">Фото профиля</p>
-              <p className="mt-0.5 text-muted">
-                Нажмите на аватар: карандаш — выбрать файл, крестик — убрать.
-              </p>
-            </div>
           </div>
 
           <label className="flex flex-col gap-1.5">

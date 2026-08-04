@@ -4,21 +4,28 @@
  * Повторяет раскладку LibraryView: ряд «заголовок + кнопка добавить», вкладки
  * инструментов с поиском, список строк. Высоты те же, чтобы подмена не
  * толкала страницу.
+ *
+ * Ширины — ТЯНУЩИЕСЯ (`w-full max-w-*`), а не жёсткие, и это не косметика.
+ * Пока в верхнем ряду стояли `w-52` и `w-40`, они вместе с зазором требовали
+ * 384px при 338px доступных: кнопка вылезала за правый край, документ
+ * становился шире экрана — и нижняя навигация, закреплённая по ОКНУ, уезжала
+ * вместе с ним на всё время показа скелетона. Настоящая страница так не
+ * ломалась: там заголовок переносится, а кнопка короткая.
  */
 export default function Loading() {
   return (
     <main className="container-app py-10" aria-busy>
       <div className="mb-6 flex items-end justify-between gap-4">
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="skeleton h-3 w-20 rounded" />
-          <div className="skeleton h-10 w-52 rounded-lg" />
+          <div className="skeleton h-10 w-full max-w-52 rounded-lg" />
         </div>
-        {/* кнопка «Добавить разбор» */}
-        <div className="skeleton h-11 w-40 shrink-0 rounded-[0.7rem]" />
+        {/* кнопка «+ Новая» */}
+        <div className="skeleton h-11 w-28 shrink-0 rounded-[0.7rem]" />
       </div>
 
       <div className="mb-8 flex flex-col gap-3">
-        <div className="skeleton h-9 w-64 rounded-[0.6rem]" />
+        <div className="skeleton h-9 w-full max-w-64 rounded-[0.6rem]" />
         <div className="skeleton h-[2.9rem] w-full rounded-[0.7rem]" />
       </div>
 
