@@ -24,6 +24,7 @@ import { chordsInOrder } from '@/lib/chordpro/usedChords';
 import { normalizePowerFifths, powerFifthRenames } from '@/lib/chordpro/powerFifths';
 import { parseChordDefs } from '@/lib/chords/diagrams';
 import { parseInstrumentId, type InstrumentId } from '@/lib/chords/instruments';
+import { CAPO_MAX, CAPO_MIN, SONG_LIMITS, TEMPO_MAX, TEMPO_MIN } from '@/lib/songLimits';
 import { songPath } from '@/lib/slug';
 import {
   clearDraft,
@@ -45,6 +46,7 @@ export interface EditorInitial {
   artist?: string | null;
   key?: string | null;
   tempo?: number | null;
+  capo?: number | null;
   body?: string;
   note?: string | null;
   /** Ссылка на уже сохранённую обложку (/covers/[id]), а НЕ сама картинка. */
@@ -142,6 +144,10 @@ export function SongEditor({
         artist: initial?.artist ?? '',
         key: initial?.key ?? '',
         tempo: initial?.tempo != null ? String(initial.tempo) : '',
+        // Как и в поле формы: ноль — это «без капо», то есть пустая строка.
+        // Иначе базовый отпечаток разошёлся бы с собранным из формы, и баннер
+        // восстановления предлагал бы вернуть черновик сразу после открытия.
+        capo: initial?.capo ? String(initial.capo) : '',
         note: initial?.note ?? '',
         body: initial?.body ?? TEMPLATE,
         visibility: initial?.visibility ?? 'public',
@@ -171,6 +177,7 @@ export function SongEditor({
       artist: str('artist'),
       key: str('key'),
       tempo: str('tempo'),
+      capo: str('capo'),
       note: str('note'),
       body: str('body'),
       visibility: str('visibility'),
@@ -267,6 +274,7 @@ export function SongEditor({
       setFieldValue(form, 'title', draft.title);
       setFieldValue(form, 'artist', draft.artist);
       setFieldValue(form, 'tempo', draft.tempo);
+      setFieldValue(form, 'capo', draft.capo);
       setFieldValue(form, 'note', draft.note);
     }
     setBody(draft.body);
@@ -361,11 +369,27 @@ export function SongEditor({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="text-sm text-muted">Название</span>
-          <input name="title" required defaultValue={initial?.title ?? ''} className="field" placeholder="Название песни" />
+          {/* maxLength здесь — подсказка человеку, а не защита: форма уходит в
+              серверный экшен, и настоящий потолок стоит там (lib/songLimits.ts).
+              Оба берут одно и то же число, поэтому разойтись не могут. */}
+          <input
+            name="title"
+            required
+            maxLength={SONG_LIMITS.title}
+            defaultValue={initial?.title ?? ''}
+            className="field"
+            placeholder="Название песни"
+          />
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-sm text-muted">Исполнитель</span>
-          <input name="artist" defaultValue={initial?.artist ?? ''} className="field" placeholder="Необязательно" />
+          <input
+            name="artist"
+            maxLength={SONG_LIMITS.artist}
+            defaultValue={initial?.artist ?? ''}
+            className="field"
+            placeholder="Необязательно"
+          />
         </label>
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="text-sm text-muted">Инструмент</span>
@@ -384,13 +408,37 @@ export function SongEditor({
             name="key"
             value={songKey}
             onChange={(e) => setSongKey(e.target.value)}
+            maxLength={SONG_LIMITS.key}
             className="field"
             placeholder="напр. Am, Bb"
           />
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="text-sm text-muted">Темп</span>
-          <input name="tempo" type="number" min={0} defaultValue={initial?.tempo ?? ''} className="field" placeholder="bpm" />
+          <input
+            name="tempo"
+            type="number"
+            min={TEMPO_MIN}
+            max={TEMPO_MAX}
+            defaultValue={initial?.tempo ?? ''}
+            className="field"
+            placeholder="bpm"
+          />
+        </label>
+        {/* Капо. Колонка была в схеме с самого начала, но форма её не
+            заполняла, а страница не показывала — при этом описание разбора в
+            выдаче капо обещало. Пустое поле и ноль значат одно: капо нет. */}
+        <label className="flex flex-col gap-1.5 sm:col-span-2">
+          <span className="text-sm text-muted">Капо</span>
+          <input
+            name="capo"
+            type="number"
+            min={CAPO_MIN}
+            max={CAPO_MAX}
+            defaultValue={initial?.capo ? String(initial.capo) : ''}
+            className="field"
+            placeholder="лад, на котором стоит каподастр (пусто — без капо)"
+          />
         </label>
       </div>
 
@@ -401,6 +449,7 @@ export function SongEditor({
           name="note"
           defaultValue={initial?.note ?? ''}
           rows={2}
+          maxLength={SONG_LIMITS.note}
           className="field resize-y py-2 text-sm leading-relaxed"
           placeholder="Необязательно: контекст, как играть, посвящение…"
         />

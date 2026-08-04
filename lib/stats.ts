@@ -22,6 +22,24 @@ export interface DayPoint {
 }
 
 /**
+ * Начало первого дня ряда — полночь UTC.
+ *
+ * Одна граница на ДВА применения: по ней отбираются строки в запросах и по ней
+ * же строится ось графика. Раньше они считались порознь — запросы брали
+ * `now − 30 дней`, а ряд рисовался с `now − 29 дней`, — и данные за самый
+ * старый день исправно доезжали из Postgres, чтобы быть молча выброшенными
+ * при сборке ряда. Общая функция такому разъезду просто не оставляет места.
+ *
+ * Полночь, а не «время суток минус N дней»: так `+ i * DAY` попадает ровно в
+ * последовательные календарные сутки UTC, то есть в те же ключи, которые
+ * отдаёт `date_trunc('day', ...)` в запросе.
+ */
+export function trendStart(days: number, now: number = Date.now()): Date {
+  const first = new Date(now - (days - 1) * DAY);
+  return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate()));
+}
+
+/**
  * Дни без событий в GROUP BY не попадают, а ряд с дырками рисуется криво:
  * пустой вторник должен быть нулём, а не отсутствовать. Достраиваем полный
  * отрезок и заполняем пропуски нулями.
@@ -29,10 +47,14 @@ export interface DayPoint {
  * Дни считаются в UTC — как их сгруппировал Postgres. Для сводки этого хватает:
  * сдвиг границы суток на несколько часов не меняет форму тридцатидневного ряда.
  */
-function fillDays(rows: { day: string; n: number }[], days: number): DayPoint[] {
+export function fillDays(
+  rows: { day: string; n: number }[],
+  days: number,
+  now: number = Date.now(),
+): DayPoint[] {
   const byDay = new Map(rows.map((r) => [r.day, Number(r.n)]));
+  const start = trendStart(days, now).getTime();
   const out: DayPoint[] = [];
-  const start = Date.now() - (days - 1) * DAY;
   for (let i = 0; i < days; i++) {
     const day = new Date(start + i * DAY).toISOString().slice(0, 10);
     out.push({ day, value: byDay.get(day) ?? 0 });
@@ -78,7 +100,9 @@ export async function getAdminStats() {
   const week = since(7);
   const month = since(30);
   const twoWeeks = since(14);
-  const trendFrom = since(TREND_DAYS);
+  // Та же граница, по которой строится ось графиков (см. trendStart): иначе
+  // из базы приезжал лишний день, который ряд всё равно выбрасывал.
+  const trendFrom = trendStart(TREND_DAYS);
 
   const [
     users,
@@ -88,6 +112,7 @@ export async function getAdminStats() {
     admins,
     withPassword,
     googleAccounts,
+    yandexAccounts,
     songs,
     songsWeek,
     songsMonth,
@@ -102,7 +127,6 @@ export async function getAdminStats() {
     likes,
     favorites,
     annotations,
-    setlists,
     topByViews,
     topByLikes,
     authorGroups,
@@ -118,6 +142,11 @@ export async function getAdminStats() {
     prisma.user.count({ where: { role: 'admin' } }),
     prisma.user.count({ where: { passwordHash: { not: null } } }),
     prisma.account.count({ where: { provider: 'google' } }),
+    // Яндекс считаем наравне с Google. Провайдера два (см. lib/auth.ts), и
+    // блок «Способы входа» на этой же странице оба и показывает — а в разделе
+    // «Аккаунты» стоял только Google, из-за чего вошедшие через Яндекс не
+    // попадали НИ В ОДНУ плитку и выглядели так, будто их нет.
+    prisma.account.count({ where: { provider: 'yandex' } }),
 
     prisma.song.count(),
     prisma.song.count({ where: { createdAt: { gte: week } } }),
@@ -134,7 +163,6 @@ export async function getAdminStats() {
     prisma.like.count(),
     prisma.favorite.count(),
     prisma.annotation.count(),
-    prisma.setlist.count(),
 
     prisma.song.findMany({
       where: { visibility: 'public' },
@@ -212,6 +240,7 @@ export async function getAdminStats() {
       admins,
       withPassword,
       googleAccounts,
+      yandexAccounts,
     },
     songs: {
       total: songs,
@@ -245,7 +274,11 @@ export async function getAdminStats() {
       likes,
       favorites,
       annotations,
-      setlists,
+      // Сетлистов здесь нет намеренно. Модели `Setlist`/`SetlistItem` в схеме
+      // есть, но их не создаёт и не показывает НИЧЕГО — ни экрана, ни функции
+      // в lib/. Плитка на админской странице поэтому всегда показывала ноль и
+      // читалась как «сетлистами никто не пользуется», хотя правда была в том,
+      // что их негде завести. Появится раздел — вернётся и счётчик.
     },
     topByViews: toTop(topByViews),
     topByLikes: toTop(topByLikes),

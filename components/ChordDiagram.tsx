@@ -1,4 +1,4 @@
-import type { Barre, ChordFrets } from '@/lib/chords/diagrams';
+import { DIAGRAM_MIN_ROWS, fretWindow, type Barre, type ChordFrets } from '@/lib/chords/diagrams';
 
 // Единицы viewBox: шаг между струнами и поля по краям.
 const STRING_GAP = 8.8;
@@ -19,12 +19,29 @@ const EDGE_RIGHT = 6;
 /** Радиус точки-пальца. Он же задаёт, где начинается «чернила» сетки слева. */
 const DOT_R = 3.4;
 
+/** Верх сетки, шаг между ладами и поле под ней — в единицах viewBox. */
+const TOP = 16;
+const FRET_GAP = 12.5;
+const BOTTOM_PAD = 8;
+
 /** Ширина шестиструнной диаграммы — эталон, к которому приводится `size`. */
 const REFERENCE_W = EDGE_LEFT + EDGE_RIGHT + 5 * STRING_GAP;
 
 /** Внутренняя ширина холста для N струн. */
 function canvasWidth(strings: number): number {
   return EDGE_LEFT + EDGE_RIGHT + (strings - 1) * STRING_GAP;
+}
+
+/**
+ * Внутренняя высота холста для N ладов.
+ *
+ * Раньше высота была константой 74 при жёстких четырёх ладах. Теперь она
+ * растёт вместе с окном грифа, а ШАГ между ладами остаётся прежним: широкая
+ * форма получает лишний ряд, а не сплющенные. При четырёх ладах формула даёт
+ * ровно прежние 74 — то есть все обычные аккорды рисуются как рисовались.
+ */
+function canvasHeight(rows: number): number {
+  return TOP + rows * FRET_GAP + BOTTOM_PAD;
 }
 
 /**
@@ -36,9 +53,14 @@ export function diagramWidth(strings: number, size: number): number {
   return (size * canvasWidth(strings)) / REFERENCE_W;
 }
 
-/** Высота картинки для заданной ширины (пропорции холста постоянны). */
-export function diagramHeight(strings: number, size: number): number {
-  return (diagramWidth(strings, size) * 74) / canvasWidth(strings);
+/**
+ * Высота картинки для заданной ширины. `rows` — сколько ладов показывает
+ * диаграмма (см. `fretWindow`); по умолчанию обычное четырёхладовое окно,
+ * потому что вызывающий код спрашивает высоту как раз тогда, когда формы нет
+ * и рисовать нечего (пустая карточка в ChordCard).
+ */
+export function diagramHeight(strings: number, size: number, rows = DIAGRAM_MIN_ROWS): number {
+  return (diagramWidth(strings, size) * canvasHeight(rows)) / canvasWidth(strings);
 }
 
 /**
@@ -62,23 +84,22 @@ export function ChordDiagram({
   /** Размер в пикселях по мерке шестиструнной диаграммы (см. `diagramWidth`). */
   size?: number;
 }) {
-  const FRETS = 4;
   const strings = Math.max(frets.length, 2);
 
-  const positives = frets.filter((f) => f > 0);
-  const maxFret = positives.length ? Math.max(...positives) : 0;
-  const minFret = positives.length ? Math.min(...positives) : 0;
-  const base = maxFret > FRETS ? minFret : 1; // окно грифа
+  // Окно грифа считает общая функция (lib/chords/diagrams.ts): от неё же
+  // зависит проверка форм при разборе, поэтому расходиться им нельзя.
+  const { base, rows } = fretWindow(frets);
 
-  // Геометрия в единицах viewBox: шаг между струнами фиксирован, ширина
-  // холста растёт от числа струн (у укулеле диаграмма уже гитарной).
+  // Геометрия в единицах viewBox: шаг между струнами и ладами фиксирован,
+  // холст растёт от числа струн (у укулеле диаграмма уже гитарной) и от числа
+  // ладов в окне (широкой форме нужен лишний ряд).
   const left = EDGE_LEFT;
   const right = left + (strings - 1) * STRING_GAP;
-  const top = 16;
-  const bottom = 66;
+  const top = TOP;
+  const fretGap = FRET_GAP;
+  const bottom = top + rows * fretGap;
   const W = canvasWidth(strings);
-  const H = 74;
-  const fretGap = (bottom - top) / FRETS;
+  const H = canvasHeight(rows);
   const x = (s: number) => left + s * STRING_GAP;
   const y = (f: number) => top + f * fretGap;
 
@@ -123,7 +144,7 @@ export function ChordDiagram({
       )}
 
       {/* Лады */}
-      {Array.from({ length: FRETS + 1 }).map((_, i) => (
+      {Array.from({ length: rows + 1 }).map((_, i) => (
         <line key={`f${i}`} x1={left} y1={y(i)} x2={right} y2={y(i)} stroke="currentColor" strokeWidth={0.8} opacity="0.35" />
       ))}
       {/* Струны */}
@@ -133,8 +154,8 @@ export function ChordDiagram({
 
       {/* Баррэ — палка (под точками) */}
       {barres.map((b, i) => {
-        const pos = b.fret - base + 1; // 1..FRETS
-        if (pos < 1 || pos > FRETS) return null;
+        const pos = b.fret - base + 1; // 1..rows
+        if (pos < 1 || pos > rows) return null;
         const cy = y(pos) - fretGap / 2;
         const r = DOT_R;
         return (
@@ -161,7 +182,12 @@ export function ChordDiagram({
         if (f === 0) {
           return <circle key={s} cx={x(s)} cy={top - 6} r={2.6} fill="none" stroke="currentColor" strokeWidth={1} opacity="0.7" />;
         }
-        const pos = f - base + 1; // 1..FRETS
+        // Та же защита, что у баррэ. `fretWindow` уже подобрал окно под форму,
+        // а формы шире потолка отбраковываются при разборе — но проверка стоит
+        // и здесь: именно её отсутствие и роняло точку за край холста, где её
+        // молча срезал viewBox.
+        const pos = f - base + 1; // 1..rows
+        if (pos < 1 || pos > rows) return null;
         return <circle key={s} cx={x(s)} cy={y(pos) - fretGap / 2} r={DOT_R} fill="var(--color-accent)" />;
       })}
     </svg>

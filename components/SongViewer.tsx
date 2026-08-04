@@ -113,7 +113,13 @@ export function SongViewer({
   const inst = getInstrument(instrument);
 
   // Подпись под шапкой: только то, чего страница не говорит в других местах.
+  //
+  // Капо идёт первым: это единственная здесь строка, без которой песню не
+  // сыграешь как записано. Ноль означает «без капо» и не показывается —
+  // подписывать отсутствие капо не нужно никому.
+  const capo = typeof base.meta.capo === 'number' ? base.meta.capo : 0;
   const metaBits = [
+    capo > 0 ? `капо на ${capo} ладу` : null,
     base.meta.tempo ? `${base.meta.tempo} bpm` : null,
     createdLabel ? `добавлено ${createdLabel}` : null,
   ].filter(Boolean);
@@ -469,11 +475,20 @@ export function SongViewer({
                 <HeartIcon filled={optimisticEng.liked} />
                 {optimisticEng.likeCount}
               </button>
+              {/* aria-label обязателен, а не «на всякий случай»: подпись рядом
+                  скрыта до `sm`, иконка помечена aria-hidden, и на телефоне у
+                  кнопки не оставалось ВООБЩЕ никакого имени — скринридер читал
+                  просто «кнопка». У соседей имя есть: у лайка — из title и
+                  счётчика, у подтверждения — свой aria-label. */}
               <button
                 type="button"
                 onClick={onToggleFavorite}
                 className={`btn h-9 gap-1.5 px-3 text-sm ${optimisticEng.favorited ? 'btn-primary' : 'btn-outline'}`}
                 aria-pressed={optimisticEng.favorited}
+                aria-label={
+                  optimisticEng.favorited ? 'Убрать из избранного' : 'Добавить в избранное'
+                }
+                title={optimisticEng.favorited ? 'Убрать из избранного' : 'В избранное'}
               >
                 <BookmarkIcon filled={optimisticEng.favorited} />
                 <span className="hidden sm:inline">

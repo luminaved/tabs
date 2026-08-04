@@ -1,10 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import type { ChordFrets, ChordShape } from '@/lib/chords/diagrams';
+import { EDITOR_FRET_ROWS, type ChordFrets, type ChordShape } from '@/lib/chords/diagrams';
 import { getInstrument, type Instrument, type InstrumentId } from '@/lib/chords/instruments';
 
-const ROWS = 5;
+/**
+ * Число рядов ладов. Берётся из lib/chords/diagrams.ts, а не задаётся здесь
+ * своим числом: пока оно было местной константой, редактор позволял отметить
+ * лад, который диаграмма нарисовать не могла, и форма молча теряла точку.
+ * Связь двух чисел закреплена тестом.
+ */
+const ROWS = EDITOR_FRET_ROWS;
 
 /**
  * Интерактивный гриф: выбор начального лада + клик по струнам + баррэ.

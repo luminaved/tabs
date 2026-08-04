@@ -60,9 +60,22 @@ export function ChordDefsEditor({
     onEdit?.();
   };
 
+  // В форму уходят формы ТОЛЬКО тех аккордов, что сейчас есть в тексте.
+  //
+  // `defs` живёт от монтирования и накапливает всё, что успели задать. Если
+  // аккорд из песни убрали, его форма оставалась в состоянии и продолжала
+  // ездить в базу при каждом сохранении — молча, навсегда и на всё растущем
+  // объёме. Само состояние не чистим: аккорд могут вернуть в текст тем же
+  // движением, и терять из-за этого нарисованную форму было бы обидно.
+  const used = useMemo(() => {
+    const out: Record<string, ChordShape> = {};
+    for (const c of chords) if (defs[c]) out[c] = defs[c];
+    return out;
+  }, [chords, defs]);
+
   return (
     <div className="flex flex-col gap-3">
-      <input type="hidden" name="chordDefs" value={JSON.stringify(defs)} />
+      <input type="hidden" name="chordDefs" value={JSON.stringify(used)} />
 
       {needing.length > 0 ? (
         <>

@@ -24,6 +24,7 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
   // Пришла ссылка на существующую обложку — значит трогать её пока не просили.
   const [cover, setCover] = useState(initialSrc ? COVER_KEEP : '');
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Что показываем: прежнюю обложку по ссылке либо только что выбранный файл.
@@ -31,17 +32,23 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
 
   const onFile = async (file: File) => {
     setBusy(true);
+    setFailed(false);
     try {
       setCover(await resizeToDataUrl(file, 512, 0.82));
     } catch {
-      /* игнорируем — оставляем текущую обложку */
+      // Раньше здесь стояло молчаливое «игнорируем», и это был самый заметный
+      // способ выглядеть сломанным: человек выбирал файл, и НЕ ПРОИСХОДИЛО
+      // ничего — ни картинки, ни ошибки. Чаще всего так ведёт себя HEIC с
+      // айфона: браузер его не декодирует, `resizeToDataUrl` отваливается на
+      // `img.onerror`, и обложка остаётся прежней без единого слова.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-4">
       {previewSrc ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={previewSrc} alt="Обложка" className="cover cover-lg" />
@@ -83,6 +90,13 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
           }}
         />
       </div>
+
+      {failed ? (
+        <p className="basis-full text-sm text-red-300" role="alert">
+          Не удалось прочитать этот файл. Браузер понимает JPEG, PNG и WebP —
+          фотографии с айфона (HEIC) нужно сначала сохранить в JPEG.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accidentalForKey, capoShapeShift, diatonicChords, parseKey, transposeKey } from './key';
+import { accidentalForKey, diatonicChords, parseKey, transposeKey } from './key';
 
 describe('parseKey', () => {
   it('мажор и минор', () => {
@@ -73,10 +73,7 @@ describe('diatonicChords', () => {
   });
 });
 
-describe('capoShapeShift', () => {
-  it('формы аппликатур на capo полутонов ниже реального сдвига', () => {
-    expect(capoShapeShift(0, 2)).toBe(-2);
-    expect(capoShapeShift(3, 2)).toBe(1);
-    expect(capoShapeShift(0, 0)).toBe(0);
-  });
-});
+// Тест `capoShapeShift` удалён вместе с самой функцией — почему именно,
+// написано на её месте в key.ts. Коротко: она считала сдвиг от исходных
+// аккордов, а на странице имена уже транспонированы, и её подключение дало бы
+// двойной сдвиг.

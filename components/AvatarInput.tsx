@@ -33,14 +33,19 @@ export function AvatarInput({
   // null — картинку не меняли; строка — выбрали новую; '' — попросили убрать.
   const [next, setNext] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = async (file: File) => {
     setBusy(true);
+    setFailed(false);
     try {
       setNext(await resizeToDataUrl(file, 256, 0.85));
     } catch {
-      /* оставляем текущий аватар */
+      // Молча оставлять прежний аватар нельзя: снаружи это выглядит как
+      // «кнопка не работает». Тот же случай, что и у обложки (CoverInput) —
+      // чаще всего HEIC с айфона, который браузер не декодирует.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
@@ -86,6 +91,12 @@ export function AvatarInput({
           ) : null}
         </div>
       </div>
+
+      {failed ? (
+        <p className="text-sm text-red-300" role="alert">
+          Не удалось прочитать этот файл. Подойдут JPEG, PNG или WebP.
+        </p>
+      ) : null}
 
       {next === null ? null : <input type="hidden" name="image" value={next} />}
       <input

@@ -35,6 +35,7 @@ const FIELDS: SongDraftFields = {
   artist: 'демо',
   key: 'G',
   tempo: '92',
+  capo: '2',
   note: 'играть тихо',
   body: '[G]Свет за окном',
   visibility: 'public',
@@ -112,6 +113,20 @@ describe('draftSignature', () => {
     const a = draftSignature({ ...FIELDS, title: 'ab', artist: 'c' });
     const b = draftSignature({ ...FIELDS, title: 'a', artist: 'bc' });
     expect(a).not.toBe(b);
+  });
+
+  it('слово, перенесённое из названия в исполнителя, меняет отпечаток', () => {
+    // Тот же случай, но со ПРОБЕЛОМ внутри значения — и вот на нём склейка
+    // через ' ' ломалась: «a» + «b c» и «a b» + «c» давали одну строку, то
+    // есть такая правка считалась «ничего не изменилось» и черновик стирался.
+    // Проверка выше этого не ловила, потому что брала значения без пробелов.
+    const a = draftSignature({ ...FIELDS, title: 'a', artist: 'b c' });
+    const b = draftSignature({ ...FIELDS, title: 'a b', artist: 'c' });
+    expect(a).not.toBe(b);
+  });
+
+  it('правка капо меняет отпечаток', () => {
+    expect(draftSignature({ ...FIELDS, capo: '5' })).not.toBe(draftSignature(FIELDS));
   });
 
   it('аппликатуры в отпечаток не входят — их JSON пересобирается сам', () => {

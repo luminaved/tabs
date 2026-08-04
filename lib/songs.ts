@@ -2,6 +2,7 @@ import { cache } from 'react';
 import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { INSTRUMENT_IDS, parseInstrumentId, type InstrumentId } from './chords/instruments';
+import type { SongSort } from './catalogUrl';
 // Строка списка карточек определена в engagement.ts — здесь она же
 // переэкспортируется, чтобы вызывающему коду не приходилось знать, в каком из
 // двух модулей лежит нужный ему список.
@@ -18,6 +19,12 @@ export interface SongInput {
   artist?: string | null;
   key?: string | null;
   tempo?: number | null;
+  /**
+   * Лад капо, 0 — без капо. Колонка была в схеме с самого начала, но редактор
+   * её не заполнял, а страница не показывала: поле хранилось, никем не
+   * читаясь. При этом описание разбора в выдаче обещало капо (см. lib/seo.ts).
+   */
+  capo?: number | null;
   body: string;
   note?: string | null;
   /**
@@ -39,6 +46,7 @@ function normalize(input: SongInput) {
     searchText: buildSearchText({ title, artist, body: input.body }),
     key: input.key?.trim() || null,
     tempo: input.tempo ?? null,
+    capo: input.capo ?? 0,
     body: input.body,
     note: input.note?.trim() || null,
     chordDefs: input.chordDefs?.trim() || null,
@@ -128,19 +136,17 @@ export async function countOwnByInstrument(
 /** Размер порции — общий для всех списков песен, см. [paging.ts](./paging.ts). */
 export const CATALOG_PAGE_SIZE = SONGS_PAGE_SIZE;
 
-/** Порядок в каталоге: новые / популярные (просмотры) / любимые (лайки). */
-export type SongSort = 'new' | 'views' | 'likes';
+// Тип и разбор сортировки переехали в [catalogUrl.ts](./catalogUrl.ts): их
+// спрашивают и метаданные каталога, а тащить ради этого Prisma в lib/seo.ts
+// незачем. Здесь остаётся только то, что без Prisma не выразить, — порядок
+// строк в запросе.
+export { parseSort, type SongSort } from './catalogUrl';
 
 const SORT_ORDER: Record<SongSort, Prisma.SongOrderByWithRelationInput[]> = {
   new: [{ createdAt: 'desc' }],
   views: [{ viewCount: 'desc' }, { createdAt: 'desc' }],
   likes: [{ likes: { _count: 'desc' } }, { createdAt: 'desc' }],
 };
-
-/** Приводит значение из query-параметра к допустимой сортировке. */
-export function parseSort(value: string | undefined): SongSort {
-  return value === 'views' || value === 'likes' ? value : 'new';
-}
 
 // Поля строки каталога. `body` нужен, чтобы посчитать чипы аккордов, но наружу
 // не отдаётся — см. `withChordChips`. coverUrl (тяжёлый base64) не выбираем:
@@ -457,6 +463,7 @@ export const getSongForViewer = cache(async function getSongForViewer(
       artist: true,
       key: true,
       tempo: true,
+      capo: true,
       body: true,
       note: true,
       chordDefs: true,
@@ -493,6 +500,7 @@ export async function getOwnedSong(id: string, userId: string) {
       artist: true,
       key: true,
       tempo: true,
+      capo: true,
       body: true,
       note: true,
       chordDefs: true,

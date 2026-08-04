@@ -7,6 +7,28 @@ export const PASSWORD_MIN = 8;
 // поэтому явно ограничиваем, чтобы не вводить пользователя в заблуждение.
 export const PASSWORD_MAX_BYTES = 72;
 
+/**
+ * Отображаемое имя. Живёт ЗДЕСЬ, а не в экшене кабинета, потому что имя
+ * задаётся из двух мест: при регистрации и при правке профиля. Потолок стоял
+ * только во втором, поэтому обходился первым — достаточно было завести аккаунт
+ * с именем в десять тысяч символов, и оно ехало в шапку, в списки и в
+ * заголовок публичного профиля.
+ */
+export const NAME_MAX = 80;
+
+/**
+ * Приводит отображаемое имя из формы: пусто → null. Возвращает текст ошибки
+ * либо готовое значение — так оба вызывающих экшена получают одинаковый
+ * результат и не могут разойтись.
+ */
+export function parseDisplayName(raw: string): { name: string | null } | { error: string } {
+  const name = raw.trim() || null;
+  if (name && name.length > NAME_MAX) {
+    return { error: `Имя длиннее ${NAME_MAX} символов` };
+  }
+  return { name };
+}
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

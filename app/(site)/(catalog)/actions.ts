@@ -1,6 +1,7 @@
 'use server';
 
-import { listPublicSongs, parseSort, type CatalogPage } from '@/lib/songs';
+import { listPublicSongs, type CatalogPage } from '@/lib/songs';
+import { parseSort } from '@/lib/catalogUrl';
 import { parseInstrumentId } from '@/lib/chords/instruments';
 
 /**

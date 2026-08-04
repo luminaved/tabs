@@ -12,6 +12,7 @@ const SAMPLE = `{title: Тёплый вечер}
 {artist: демо}
 {key: G}
 {tempo: 92}
+{capo: 2}
 
 {start_of_verse}
 [G]Свет за [D]окном уже [Em]гаснет, дру[C]зья

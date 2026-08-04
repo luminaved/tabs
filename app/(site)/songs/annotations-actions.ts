@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/session';
 import { createAnnotation, deleteAnnotation, type AnnotationTypeValue } from '@/lib/annotations';
+import { ANNOTATION_MAX } from '@/lib/songLimits';
 
 export interface AnnotationState {
   error?: string;
@@ -23,6 +24,11 @@ export async function createAnnotationAction(
   const type = (TYPES as string[]).includes(t) ? (t as AnnotationTypeValue) : 'note';
 
   if (!text) return { error: 'Пустая заметка' };
+  // Потолок — как у полей разбора: заметка видна всем на публичной странице,
+  // а `maxLength` в форме обходится запросом мимо браузера.
+  if (text.length > ANNOTATION_MAX) {
+    return { error: `Заметка длиннее ${ANNOTATION_MAX} символов` };
+  }
 
   const created = await createAnnotation(user.id, { songId, anchor, text, type });
   if (!created) return { error: 'Нет доступа' };

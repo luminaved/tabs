@@ -7,7 +7,12 @@ import { Prisma } from '@prisma/client';
 import { googleEnabled, yandexEnabled, LOGIN_LIMIT, loginRateKey, signIn } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/password';
-import { normalizeEmail, validateEmail, validatePassword } from '@/lib/validation';
+import {
+  normalizeEmail,
+  parseDisplayName,
+  validateEmail,
+  validatePassword,
+} from '@/lib/validation';
 import { hit, retryAfter } from '@/lib/rateLimit';
 import { clientIpFrom } from '@/lib/visitor';
 
@@ -88,11 +93,17 @@ export async function registerAction(
 ): Promise<AuthFormState> {
   const email = normalizeEmail(String(formData.get('email') ?? ''));
   const password = String(formData.get('password') ?? '');
-  const name = String(formData.get('name') ?? '').trim() || null;
 
   if (!validateEmail(email)) return { error: 'Введите корректный email' };
   const passwordError = validatePassword(password);
   if (passwordError) return { error: passwordError };
+
+  // Тем же разбором, что и в кабинете. Раньше потолок стоял ТОЛЬКО там, и
+  // обойти его можно было прямо здесь: имя из формы регистрации не проверял
+  // никто, а попадает оно в шапку, в списки и в заголовок публичного профиля.
+  const parsedName = parseDisplayName(String(formData.get('name') ?? ''));
+  if ('error' in parsedName) return { error: parsedName.error };
+  const name = parsedName.name;
 
   // После проверки формы, но до bcrypt и записи: опечатку в пароле не считаем
   // за попытку регистрации, а вот дорогие шаги уже прикрываем.

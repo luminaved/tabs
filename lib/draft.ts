@@ -13,6 +13,7 @@ export interface SongDraftFields {
   artist: string;
   key: string;
   tempo: string;
+  capo: string;
   note: string;
   body: string;
   visibility: string;
@@ -49,6 +50,9 @@ export function readDraft(key: string): SongDraft | null {
       artist: d.artist ?? '',
       key: d.key ?? '',
       tempo: d.tempo ?? '',
+      // `?? ''` здесь не формальность: черновики, записанные до появления
+      // поля капо, лежат в localStorage у живых людей и обязаны читаться.
+      capo: d.capo ?? '',
       note: d.note ?? '',
       body: d.body,
       visibility: d.visibility ?? 'public',
@@ -89,7 +93,25 @@ export function clearDraft(key: string): void {
  * записанного в БД, хотя пользователь ничего не менял.
  */
 export function draftSignature(f: SongDraftFields): string {
-  return [f.title, f.artist, f.key, f.tempo, f.note, f.visibility, f.instrument, f.body].join(' ');
+  // Сериализация, а не `join(' ')`, как было.
+  //
+  // Склейка пробелом теряет границы полей: «название "a", исполнитель "b c"» и
+  // «название "a b", исполнитель "c"» давали ОДНУ подпись. Для баннера
+  // восстановления это значило, что правка, переносящая слово из названия в
+  // исполнителя, считается «ничего не изменилось», и черновик молча стирался.
+  // Перевод строки эту дыру не закрывает — в `body` переносы есть; а
+  // JSON.stringify экранирует и разделители, и кавычки, и сам себя.
+  return JSON.stringify([
+    f.title,
+    f.artist,
+    f.key,
+    f.tempo,
+    f.capo,
+    f.note,
+    f.visibility,
+    f.instrument,
+    f.body,
+  ]);
 }
 
 /** «сейчас» / «5 минут назад» / «в 14:03» — для баннера восстановления. */

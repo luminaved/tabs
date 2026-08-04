@@ -1,11 +1,93 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DIAGRAM_MAX_ROWS,
+  DIAGRAM_MIN_ROWS,
+  EDITOR_FRET_ROWS,
+  fretSpan,
+  fretWindow,
   getChordShape,
   parseChordDefs,
   parseFrets,
   parsePowerFifth,
   powerFifthToChordName,
 } from './diagrams';
+
+describe('fretSpan', () => {
+  it('открытые и заглушённые струны в размах не входят', () => {
+    expect(fretSpan([-1, 0, 2, 2, 1, 0])).toBe(2); // Am: лады 1..2
+    expect(fretSpan([-1, -1, 0, 0, 0, 0])).toBe(0); // прижатых нет вовсе
+  });
+
+  it('считает от самого нижнего прижатого лада до самого верхнего', () => {
+    expect(fretSpan([1, 3, 3, 2, 1, 1])).toBe(3); // F: лады 1..3
+    expect(fretSpan([-1, 1, 3, 3, 6, -1])).toBe(6); // 1..6
+  });
+});
+
+describe('fretWindow', () => {
+  it('обычные аккорды рисуются от порожка четырьмя ладами — как раньше', () => {
+    // Ни один встроенный аккорд не должен изменить картинку: это проверка
+    // того, что починка широких форм не задела все остальные.
+    expect(fretWindow([-1, 3, 2, 0, 1, 0])).toEqual({ base: 1, rows: DIAGRAM_MIN_ROWS }); // C
+    expect(fretWindow([1, 3, 3, 2, 1, 1])).toEqual({ base: 1, rows: DIAGRAM_MIN_ROWS }); // F
+    expect(fretWindow([-1, 2, 4, 4, 3, 2])).toEqual({ base: 1, rows: DIAGRAM_MIN_ROWS }); // Bm
+  });
+
+  it('высокая, но узкая форма сдвигает окно, не расширяя его', () => {
+    // G#m — барре на 4 ладу, лады 4..6: окно с четвёртого, ширина прежняя.
+    expect(fretWindow([4, 6, 6, 4, 4, 4])).toEqual({ base: 4, rows: DIAGRAM_MIN_ROWS });
+  });
+
+  it('широкая форма получает лишние ряды вместо потерянной точки', () => {
+    // Ровно тот случай, который редактор позволял нарисовать, а диаграмма
+    // роняла за нижний край холста.
+    expect(fretWindow([1, 3, 3, 2, 1, 5])).toEqual({ base: 1, rows: 5 });
+    expect(fretWindow([-1, 1, 3, 3, 6, -1])).toEqual({ base: 1, rows: 6 });
+  });
+
+  it('форма без прижатых струн — обычное окно от порожка', () => {
+    expect(fretWindow([0, 0, 0, 0, 0, 0])).toEqual({ base: 1, rows: DIAGRAM_MIN_ROWS });
+    expect(fretWindow([-1, -1, -1, -1, -1, -1])).toEqual({ base: 1, rows: DIAGRAM_MIN_ROWS });
+  });
+
+  it('каждая прижатая струна попадает в окно — это и есть инвариант', () => {
+    const shapes = [
+      [-1, 3, 2, 0, 1, 0],
+      [4, 6, 6, 4, 4, 4],
+      [1, 3, 3, 2, 1, 5],
+      [-1, 1, 3, 3, 6, -1],
+      [7, 9, 9, 8, 7, 7],
+      [0, 2, 2, 1, 0, 0],
+    ];
+    for (const frets of shapes) {
+      const { base, rows } = fretWindow(frets);
+      for (const f of frets.filter((n) => n > 0)) {
+        const pos = f - base + 1;
+        expect(pos, `лад ${f} в форме [${frets}]`).toBeGreaterThanOrEqual(1);
+        expect(pos, `лад ${f} в форме [${frets}]`).toBeLessThanOrEqual(rows);
+      }
+    }
+  });
+});
+
+describe('согласованность редактора и диаграммы', () => {
+  it('редактор не даёт отметить лад, который диаграмма не нарисует', () => {
+    // Из-за расхождения этих двух чисел форма, нарисованная в редакторе, молча
+    // теряла точку на странице разбора. Тест не даёт им разъехаться снова.
+    expect(EDITOR_FRET_ROWS).toBeLessThanOrEqual(DIAGRAM_MAX_ROWS);
+  });
+
+  it('окно диаграммы не у́же обычного и не шире потолка', () => {
+    expect(DIAGRAM_MIN_ROWS).toBeLessThanOrEqual(DIAGRAM_MAX_ROWS);
+  });
+
+  it('любая форма из редактора укладывается в окно диаграммы', () => {
+    // Самое широкое, что можно нарисовать: точка в первом ряду и в последнем.
+    const widest = [1, -1, -1, -1, -1, EDITOR_FRET_ROWS];
+    const { base, rows } = fretWindow(widest);
+    expect(EDITOR_FRET_ROWS - base + 1).toBeLessThanOrEqual(rows);
+  });
+});
 
 describe('getChordShape', () => {
   it('встроенные open-аккорды', () => {
@@ -170,6 +252,20 @@ describe('parseChordDefs', () => {
     // Шестиструнная форма подходит гитаре, четырёхструнная — укулеле.
     expect(Object.keys(parseChordDefs(json, 'guitar'))).toEqual(['Am']);
     expect(Object.keys(parseChordDefs(json, 'ukulele'))).toEqual(['X']);
+  });
+
+  it('формы с неигровым размахом отбрасываются', () => {
+    // Нарисовать такую диаграмму нельзя (см. DIAGRAM_MAX_ROWS), а рукой её на
+    // грифе не взять. Честнее показать «форма не задана», чем картинку с
+    // молча пропавшим пальцем.
+    const wide = JSON.stringify({ Wide: [1, -1, -1, -1, -1, 1 + DIAGRAM_MAX_ROWS] });
+    expect(parseChordDefs(wide, 'guitar')).toEqual({});
+  });
+
+  it('форма ровно в потолок размаха проходит', () => {
+    const edge = [1, -1, -1, -1, -1, DIAGRAM_MAX_ROWS];
+    const json = JSON.stringify({ Edge: edge });
+    expect(parseChordDefs(json, 'guitar')).toEqual({ Edge: { frets: edge } });
   });
 });
 

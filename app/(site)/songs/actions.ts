@@ -6,6 +6,14 @@ import { requireUser } from '@/lib/session';
 import { createSong, deleteSong, updateSong, type SongInput, type SongVisibility } from '@/lib/songs';
 import { parseInstrumentId } from '@/lib/chords/instruments';
 import { parseCoverField } from '@/lib/imageInput';
+import {
+  CAPO_MAX,
+  CAPO_MIN,
+  TEMPO_MAX,
+  TEMPO_MIN,
+  checkSongFields,
+  parseBoundedInt,
+} from '@/lib/songLimits';
 import { songPath } from '@/lib/slug';
 
 export interface SongFormState {
@@ -15,21 +23,43 @@ export interface SongFormState {
 const VISIBILITIES: SongVisibility[] = ['private', 'unlisted', 'public'];
 
 function parseForm(formData: FormData): SongInput | { error: string } {
-  const title = String(formData.get('title') ?? '').trim();
+  const str = (name: string) => String(formData.get(name) ?? '');
+
+  // Длину проверяем ДО всего остального и по сырым значениям.
+  //
+  // Обязательно на сервере: `maxLength` в редакторе — подсказка человеку, а
+  // форма уходит в серверный экшен, куда можно постучаться и мимо браузера.
+  // До этой проверки `body` не был ограничен ничем, а его тащит из базы каждая
+  // строка каталога (ради чипов аккордов) и по нему строится триграммный
+  // индекс поиска — см. lib/songLimits.ts.
+  const fields = {
+    title: str('title'),
+    artist: str('artist'),
+    key: str('key'),
+    note: str('note'),
+    body: str('body'),
+    chordDefs: str('chordDefs'),
+  };
+  const tooLong = checkSongFields(fields);
+  if (tooLong) return { error: tooLong };
+
+  const title = fields.title.trim();
   if (!title) return { error: 'Введите название' };
 
-  const v = String(formData.get('visibility') ?? 'private');
+  const v = str('visibility') || 'private';
   const visibility = (VISIBILITIES as string[]).includes(v) ? (v as SongVisibility) : 'private';
 
-  const tempoRaw = String(formData.get('tempo') ?? '').trim();
-  const tempoNum = tempoRaw ? Number(tempoRaw) : NaN;
+  // Темп и капо: целые в разумных границах, всё прочее — «не указано».
+  // Границы те же, что у полей формы, поэтому расхождения быть не может.
+  const tempo = parseBoundedInt(str('tempo'), TEMPO_MIN, TEMPO_MAX);
+  const capo = parseBoundedInt(str('capo'), CAPO_MIN, CAPO_MAX) ?? 0;
 
   // Обложка: сентинел «не трогали», пустое поле «убрать», иначе новая картинка
   // (разбор и потолок размера — в parseCoverField). Проверка обязана быть на
   // сервере: форма уходит в серверный экшен, и клиентское сжатие обойти ничего
   // не стоит. Не прошедшую картинку не выбрасываем молча — иначе сохранение
   // стёрло бы её без единого слова.
-  const cover = parseCoverField(String(formData.get('coverUrl') ?? ''));
+  const cover = parseCoverField(str('coverUrl'));
   if (cover.kind === 'invalid') {
     return { error: 'Обложка слишком большая или в неподдерживаемом формате' };
   }
@@ -38,15 +68,16 @@ function parseForm(formData: FormData): SongInput | { error: string } {
 
   return {
     title,
-    artist: String(formData.get('artist') ?? ''),
-    key: String(formData.get('key') ?? ''),
-    tempo: Number.isFinite(tempoNum) && tempoNum > 0 ? tempoNum : null,
-    body: String(formData.get('body') ?? ''),
-    note: String(formData.get('note') ?? ''),
+    artist: fields.artist,
+    key: fields.key,
+    tempo,
+    capo,
+    body: fields.body,
+    note: fields.note,
     coverUrl,
-    chordDefs: String(formData.get('chordDefs') ?? '') || null,
+    chordDefs: fields.chordDefs || null,
     visibility,
-    instrument: parseInstrumentId(String(formData.get('instrument') ?? '')),
+    instrument: parseInstrumentId(str('instrument')),
   };
 }
 

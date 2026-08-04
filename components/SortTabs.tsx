@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { catalogHref } from '@/lib/catalogUrl';
-import type { SongSort } from '@/lib/songs';
+import { catalogHref, type SongSort } from '@/lib/catalogUrl';
 
 const TABS: { value: SongSort; label: string }[] = [
   { value: 'new', label: 'Новые' },

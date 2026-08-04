@@ -1031,9 +1031,16 @@
   /* Аккорд в тексте с всплывающей аппликатурой */
   .inline-chord {
     position: relative;
+  }
+  /* Палец и подчёркивание — только у аккорда, которому ЕСТЬ что показать.
+     Аккорд без аппликатуры («N.C.», незнакомая запись) рисуется тем же
+     классом, но без role="button" (см. InlineChord), и обещать нажатие ему
+     нечем: раньше он менял курсор и подчёркивался, а по нажатию не делал
+     ничего. */
+  .inline-chord[role='button'] {
     cursor: pointer;
   }
-  .inline-chord:hover {
+  .inline-chord[role='button']:hover {
     text-decoration: underline dotted;
     text-underline-offset: 2px;
   }

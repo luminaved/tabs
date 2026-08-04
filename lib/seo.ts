@@ -13,7 +13,7 @@
  */
 
 import { absoluteUrl, SITE_NAME, SITE_TAGLINE, SITE_URL } from './site';
-import { catalogHref, parseCatalogPage } from './catalogUrl';
+import { catalogHref, isDefaultSort, parseCatalogPage } from './catalogUrl';
 import type { Instrument } from './chords/instruments';
 
 /**
@@ -87,15 +87,25 @@ export function songSeoTitle(
  * выдаче читает именно его и по нему решает, кликать ли.
  */
 export function songSeoDescription(
-  song: { title: string; artist?: string | null; key?: string | null },
+  song: { title: string; artist?: string | null; key?: string | null; capo?: number | null },
   inst: Instrument,
 ): string {
   const artist = song.artist?.trim();
+  const capo = song.capo ?? 0;
   return [
     `Разбор песни «${song.title}»${artist ? ` — ${artist}` : ''}:`,
-    `текст с аккордами над словами, аппликатуры для ${inst.forName},`,
-    'транспонирование в любую тональность и капо.',
+    `текст с аккордами над словами, аппликатуры для ${inst.forName}`,
+    'и транспонирование в любую тональность.',
     song.key ? `Тональность: ${song.key}.` : '',
+    // Капо называем, ТОЛЬКО когда оно у разбора есть.
+    //
+    // Раньше здесь стояло «транспонирование в любую тональность и капо» —
+    // безусловно, у каждого разбора. При этом капо не существовало нигде: ни
+    // поля в редакторе, ни строки на странице, — только колонка в схеме,
+    // которую никто не заполнял. То есть описание в выдаче обещало то, чего на
+    // странице не было. Теперь капо и хранится, и показывается, а обещание
+    // даётся по факту.
+    capo > 0 ? `Каподастр на ${capo} ладу.` : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -146,10 +156,26 @@ export interface CatalogFilters {
  * Канонический адрес каталога. Отдельной функцией, потому что его приходится
  * ставить в ДВУХ местах — см. `catalogCanonicalNeedsTag`.
  */
+/**
+ * Отобрана ли выдача, то есть отличается ли она от чистого каталога.
+ *
+ * Сортировка проверяется ПО ЗНАЧЕНИЮ, а не по наличию параметра. Раньше здесь
+ * стояло просто `filters.sort`, и адрес `/?sort=new` — та же самая выдача, что
+ * и голый `/`, потому что `new` и есть порядок по умолчанию, — объявлялся
+ * отобранным: получал `noindex` и canonical на чистый каталог. Внутренние
+ * ссылки такой адрес не собирают (`catalogHref` умолчание не пишет), но по
+ * внешней ссылке, из закладки или из чужого поста на него заходят, и главная
+ * страница сайта молча выпадала из индекса.
+ */
+function isFiltered(filters: CatalogFilters): boolean {
+  return !!(filters.q?.trim() || !isDefaultSort(filters.sort) || filters.verified);
+}
+
 export function catalogCanonical(path: string, filters: CatalogFilters): string {
-  const filtered = !!(filters.q?.trim() || filters.sort || filters.verified);
   // Отобранная выдача склеивается с чистым каталогом: она и так не в индексе.
-  return filtered ? path : catalogHref(path, { page: parseCatalogPage(filters.page) });
+  return isFiltered(filters)
+    ? path
+    : catalogHref(path, { page: parseCatalogPage(filters.page) });
 }
 
 /**
@@ -185,7 +211,7 @@ export function catalogMetadata(
   path: string,
   filters: CatalogFilters,
 ) {
-  const filtered = !!(filters.q?.trim() || filters.sort || filters.verified);
+  const filtered = isFiltered(filters);
   const page = parseCatalogPage(filters.page);
   // Заголовок страницы со второй обязан отличаться: одинаковые заголовки у
   // разных адресов поисковик считает признаком дублей.

@@ -35,6 +35,7 @@ export default async function EditSongPage({ params }: { params: Promise<{ id: s
           artist: song.artist,
           key: song.key,
           tempo: song.tempo,
+          capo: song.capo,
           body: song.body,
           note: song.note,
           // Ссылка, а не картинка: сам base64 в разметку больше не попадает.

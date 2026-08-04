@@ -141,7 +141,7 @@ export default async function AdminStatsPage() {
               <Tile label="Лайков" value={s.engagement.likes} />
               <Tile label="В избранном" value={s.engagement.favorites} />
               <Tile label="Заметок" value={s.engagement.annotations} />
-              <Tile label="Сетлистов" value={s.engagement.setlists} />
+              <Tile label="Просмотров" value={s.engagement.views} />
             </div>
           </div>
         </div>
@@ -150,10 +150,13 @@ export default async function AdminStatsPage() {
       {/* ── Аккаунты: состав ────────────────────────────────────────────── */}
       <section className="mb-10">
         <h2 className="mb-3 text-lg font-medium">Аккаунты</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {/* Провайдеров входа два, и оба должны быть здесь: пока стоял один
+            Google, вошедшие через Яндекс не попадали ни в одну плитку. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <Tile label="За 30 дней" value={s.users.month} />
           <Tile label="С паролем" value={s.users.withPassword} />
           <Tile label="Через Google" value={s.users.googleAccounts} />
+          <Tile label="Через Яндекс" value={s.users.yandexAccounts} />
           <Tile label="Администраторов" value={s.users.admins} />
         </div>
       </section>

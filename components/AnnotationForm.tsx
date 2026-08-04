@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from 'react';
 import { createAnnotationAction } from '@/app/(site)/songs/annotations-actions';
+import { ANNOTATION_MAX } from '@/lib/songLimits';
 
 export function AnnotationForm({
   songId,
@@ -32,8 +33,13 @@ export function AnnotationForm({
         <option value="rhythm">ритм</option>
         <option value="transition">переход</option>
       </select>
+      {/* required — чтобы пустая заметка не ездила на сервер за ответом
+          «Пустая заметка»; maxLength — тот же потолок, что проверяет экшен
+          (lib/songLimits.ts), заметка видна всем на публичной странице. */}
       <input
         name="text"
+        required
+        maxLength={ANNOTATION_MAX}
         autoFocus
         placeholder="Заметка к этой строке"
         className="field h-9 flex-1 text-sm"

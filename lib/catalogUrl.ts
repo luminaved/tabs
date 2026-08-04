@@ -13,6 +13,37 @@
 
 import { parsePage } from './paging';
 
+/** Порядок в каталоге: новые / популярные (просмотры) / любимые (лайки). */
+export type SongSort = 'new' | 'views' | 'likes';
+
+/** Порядок по умолчанию. В адрес не пишется — см. `catalogHref`. */
+export const DEFAULT_SORT: SongSort = 'new';
+
+/**
+ * Приводит значение из query-параметра к допустимой сортировке.
+ *
+ * Живёт ЗДЕСЬ, а не в lib/songs.ts, где было раньше: тот модуль тянет за собой
+ * Prisma, а разбор параметра нужен и метаданным (lib/seo.ts), которым клиент
+ * базы ни к чему. Заодно `isDefaultSort` и `catalogHref` теперь считают
+ * значение по умолчанию одним и тем же кодом и не могут разойтись.
+ */
+export function parseSort(value: string | undefined | null): SongSort {
+  return value === 'views' || value === 'likes' ? value : DEFAULT_SORT;
+}
+
+/**
+ * Задаёт ли параметр сортировку, ОТЛИЧНУЮ от порядка по умолчанию.
+ *
+ * Нужен метаданным каталога. Там стояла проверка на само наличие параметра, и
+ * из-за неё адрес `/?sort=new` — та же самая выдача, что и чистый каталог —
+ * объявлялся отобранным и получал `noindex`. Внутренние ссылки такого адреса
+ * не собирают, но по внешней ссылке или из закладки на него попасть можно, и
+ * главная страница молча уходила из индекса.
+ */
+export function isDefaultSort(value: string | undefined | null): boolean {
+  return parseSort(value) === DEFAULT_SORT;
+}
+
 export interface CatalogParams {
   /** Поисковый запрос. */
   query?: string;
@@ -35,7 +66,7 @@ export interface CatalogParams {
 export function catalogHref(basePath: string, params: CatalogParams = {}): string {
   const qs = new URLSearchParams();
   if (params.query) qs.set('q', params.query);
-  if (params.sort && params.sort !== 'new') qs.set('sort', params.sort);
+  if (params.sort && !isDefaultSort(params.sort)) qs.set('sort', params.sort);
   if (params.verified) qs.set('verified', '1');
   if (params.page && params.page > 1) qs.set('page', String(params.page));
   const s = qs.toString();

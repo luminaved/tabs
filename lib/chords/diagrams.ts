@@ -28,6 +28,72 @@ export type { ChordFrets, Barre, ChordShape } from './instruments';
  */
 type InstrumentArg = Instrument | InstrumentId | null;
 
+// ─── Окно грифа ────────────────────────────────────────────────────────────
+
+/**
+ * Сколько ладов показывает диаграмма обычному аккорду. Четыре — потому что в
+ * них укладывается всё, что играется открытыми и барре-формами.
+ */
+export const DIAGRAM_MIN_ROWS = 4;
+
+/**
+ * Потолок числа ладов на диаграмме — и заодно потолок РАЗМАХА аппликатуры.
+ *
+ * Здесь была настоящая дыра, а не запас на будущее. Редактор грифа
+ * (`EDITOR_FRET_ROWS`) позволял отметить пять ладов, а диаграмма умела ровно
+ * четыре и считала позицию точки как `f - base + 1`, никак её не ограничивая.
+ * Точка пятого лада получала `pos = 5` и уезжала за нижний край сетки, а
+ * дальше её обрезал край viewBox: при размахе 5 она была видна наполовину,
+ * при 6 исчезала совсем. Баррэ от этого было защищено (`pos > FRETS` →
+ * не рисуем), точки — нет, поэтому человек рисовал форму, видел её в
+ * редакторе и не находил на странице разбора.
+ *
+ * Шесть ладов — потолок и по физике: дальше рука не тянется, а значит форма
+ * с бо́льшим размахом либо опечатка, либо мусор из чужого JSON. Такие формы
+ * отбраковываются при разборе (см. `isValidFrets`), чтобы в базу не попадало
+ * то, что нарисовать нельзя.
+ */
+export const DIAGRAM_MAX_ROWS = 6;
+
+/**
+ * Сколько рядов ладов показывает редактор грифа.
+ *
+ * Живёт здесь, а не в самом редакторе, ровно затем, чтобы не разъехаться с
+ * `DIAGRAM_MAX_ROWS`: расхождение этих двух чисел и было багом. Соотношение
+ * закреплено тестом.
+ */
+export const EDITOR_FRET_ROWS = 5;
+
+/** Размах формы в ладах (открытые и заглушённые струны не считаются). */
+export function fretSpan(frets: ChordFrets): number {
+  const positives = frets.filter((f) => f > 0);
+  if (positives.length === 0) return 0;
+  return Math.max(...positives) - Math.min(...positives) + 1;
+}
+
+/**
+ * Окно грифа для формы: с какого лада рисовать и сколько ладов показать.
+ *
+ * Вынесено из компонента отдельной функцией, потому что от него зависит и
+ * геометрия картинки, и высота холста, и проверка «влезет ли точка» — три
+ * места, которые обязаны считать одинаково.
+ *
+ * Правила:
+ *   — форма умещается в первые четыре лада → окно от порожка (`base = 1`),
+ *     как было всегда: у обычных аккордов картинка не меняется ни на пиксель;
+ *   — иначе окно начинается с самого нижнего прижатого лада и растягивается
+ *     ровно на размах формы, но не у́же четырёх ладов и не шире потолка.
+ */
+export function fretWindow(frets: ChordFrets): { base: number; rows: number } {
+  const positives = frets.filter((f) => f > 0);
+  if (positives.length === 0) return { base: 1, rows: DIAGRAM_MIN_ROWS };
+
+  const max = Math.max(...positives);
+  const base = max > DIAGRAM_MIN_ROWS ? Math.min(...positives) : 1;
+  const rows = Math.min(DIAGRAM_MAX_ROWS, Math.max(DIAGRAM_MIN_ROWS, max - base + 1));
+  return { base, rows };
+}
+
 function resolve(arg: InstrumentArg): Instrument {
   return typeof arg === 'object' && arg ? arg : getInstrument(arg);
 }
@@ -58,12 +124,22 @@ function builtin(frets: ChordFrets): ChordShape {
   return barres.length ? { frets, barres } : { frets };
 }
 
+/**
+ * Годится ли значение как аппликатура: длина по числу струн, лады в пределах
+ * грифа И размах, который диаграмма способна показать.
+ *
+ * Проверка размаха здесь не формальность. Без неё в базу попадала форма, для
+ * которой картинки не существует: точка за пределами окна просто не рисуется
+ * (подробности у `DIAGRAM_MAX_ROWS`). Отбраковка на разборе честнее — аккорд
+ * покажется как «форма не задана», и это видно сразу, а не как диаграмма с
+ * молча пропавшим пальцем.
+ */
 function isValidFrets(v: unknown, strings: number): v is ChordFrets {
-  return (
-    Array.isArray(v) &&
-    v.length === strings &&
-    v.every((n) => Number.isInteger(n) && (n as number) >= -1 && (n as number) <= 24)
-  );
+  if (!Array.isArray(v) || v.length !== strings) return false;
+  if (!v.every((n) => Number.isInteger(n) && (n as number) >= -1 && (n as number) <= 24)) {
+    return false;
+  }
+  return fretSpan(v as ChordFrets) <= DIAGRAM_MAX_ROWS;
 }
 
 /** Нормализует баррэ из JSON (валидирует лад/струны, сортирует from<to). */
@@ -122,7 +198,15 @@ export function parseChordDefs(
   }
 }
 
-/** Разбирает ручной ввод: «x32010», «x 3 2 0 1 0», «-1 3 2 0 1 0». Иначе null. */
+/**
+ * Разбирает ручной ввод: «x32010», «x 3 2 0 1 0», «-1 3 2 0 1 0». Иначе null.
+ *
+ * Сейчас ниоткуда не вызывается — ручной ввод формы заменил редактор грифа
+ * (components/FretboardEditor.tsx). Оставлена как готовый разбор компактной
+ * записи из чужих табов, но с ТЕМ ЖЕ ограничением размаха, что и остальные
+ * пути: иначе, когда её однажды подключат, она станет вторым способом завести
+ * форму, которую диаграмма не нарисует.
+ */
 export function parseFrets(input: string, strings = 6): ChordFrets | null {
   const s = input.trim();
   if (!s) return null;
@@ -138,7 +222,8 @@ export function parseFrets(input: string, strings = 6): ChordFrets | null {
     const n = Number(p);
     return Number.isInteger(n) && n >= 0 && n <= 24 ? n : NaN;
   });
-  return frets.some((n) => Number.isNaN(n)) ? null : frets;
+  if (frets.some((n) => Number.isNaN(n))) return null;
+  return fretSpan(frets) <= DIAGRAM_MAX_ROWS ? frets : null;
 }
 
 /**

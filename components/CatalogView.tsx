@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { listPublicSongs, listTopArtists, parseSort } from '@/lib/songs';
-import { catalogHref, parseCatalogPage, parseVerifiedParam } from '@/lib/catalogUrl';
+import { listPublicSongs, listTopArtists } from '@/lib/songs';
+import { catalogHref, parseCatalogPage, parseSort, parseVerifiedParam } from '@/lib/catalogUrl';
 import { INSTRUMENTS, catalogPath, type InstrumentId } from '@/lib/chords/instruments';
 import { itemListJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';

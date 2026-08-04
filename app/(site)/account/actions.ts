@@ -4,14 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/session';
 import { updateUserProfile } from '@/lib/users';
 import { parseAvatarInput } from '@/lib/imageInput';
+import { parseDisplayName } from '@/lib/validation';
 
 export interface ProfileState {
   ok?: boolean;
   error?: string;
 }
-
-/** Отображаемое имя показывается в шапке и списках — длинному там не место. */
-const NAME_MAX = 80;
 
 export async function updateProfileAction(
   _prev: ProfileState,
@@ -19,10 +17,11 @@ export async function updateProfileAction(
 ): Promise<ProfileState> {
   const user = await requireUser();
 
-  const name = String(formData.get('name') ?? '').trim() || null;
-  if (name && name.length > NAME_MAX) {
-    return { error: `Имя длиннее ${NAME_MAX} символов` };
-  }
+  // Разбор имени общий с регистрацией (см. lib/validation.ts): потолок,
+  // стоявший только здесь, обходился формой регистрации.
+  const parsed = parseDisplayName(String(formData.get('name') ?? ''));
+  if ('error' in parsed) return { error: parsed.error };
+  const name = parsed.name;
 
   // Аватар: своё фото (data URL в пределах лимита) либо картинка провайдера
   // входа. Проверка размера и хоста — в lib/imageInput.ts: раньше сюда
