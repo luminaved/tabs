@@ -43,12 +43,20 @@ export async function requestSongAction(
   formData: FormData,
 ): Promise<RequestFormState> {
   const title = String(formData.get('title') ?? '').trim();
-  const artist = String(formData.get('artist') ?? '').trim() || null;
+  const artist = String(formData.get('artist') ?? '').trim();
   const instrument = parseInstrumentId(String(formData.get('instrument') ?? ''));
 
   if (!title) return { error: 'Введите название песни' };
   if (title.length > TITLE_MAX) return { error: `Название длиннее ${TITLE_MAX} символов` };
-  if (artist && artist.length > ARTIST_MAX) {
+  // Исполнитель обязателен, и это не придирка к форме. На нём держится склейка
+  // дублей: ключ считается из пары «название + исполнитель» (requestMatchKey),
+  // и без исполнителя заявка «Самолёты» — это заявка на любую песню с таким
+  // названием. Вдобавок `findFulfilled` без исполнителя считает заявку
+  // закрытой ЛЮБЫМ разбором с совпавшим названием, то есть чужая песня гасила
+  // бы чужую заявку. Старые записи без исполнителя в базе остаются и
+  // показываются как есть — обязательным поле стало только на ввод.
+  if (!artist) return { error: 'Укажите исполнителя' };
+  if (artist.length > ARTIST_MAX) {
     return { error: `Имя исполнителя длиннее ${ARTIST_MAX} символов` };
   }
 

@@ -2682,3 +2682,181 @@
     color: var(--color-fg);
   }
 }
+
+/* ─── Заявки на разборы ─────────────────────────────────────────────────────
+   Строка заявки устроена вокруг кнопки голоса, а не наоборот.
+
+   Раньше голос был кнопкой «+1 · 3» справа, в один ряд с крестиком удаления и
+   тем же весом, что любая второстепенная кнопка сайта. Читалась она плохо:
+   «+1» выглядело как «прибавить единицу к чему-то», число рядом — то ли
+   сколько уже, то ли сколько станет, а связь с порядком в списке не
+   прочитывалась вовсе. Между тем голос здесь — главное действие страницы: он
+   двигает песню вверх очереди, а верх очереди и есть то, что разбирают раньше.
+
+   Поэтому кнопка переехала влево, стала столбиком «стрелка → число → подпись»
+   и получила размер, соответствующий её роли. Стрелка вверх названа
+   направлением, а не значком: она сообщает смысл до того, как прочитают
+   подпись. */
+@layer components {
+  .req-row {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.7rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    transition: border-color 0.2s ease;
+  }
+  .req-row:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+  }
+
+  /* ── Кнопка голоса ── */
+  .req-vote {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.05rem;
+    width: 3.9rem;
+    padding: 0.5rem 0.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.65rem;
+    background: var(--color-raised);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      border-color 0.18s ease,
+      color 0.18s ease,
+      background-color 0.18s ease,
+      transform 0.12s ease;
+  }
+  .req-vote:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 10%, var(--color-raised));
+  }
+  /* Стрелка чуть подпрыгивает — то самое «вверх», о котором кнопка говорит. */
+  .req-vote:hover:not(:disabled) svg {
+    transform: translateY(-1px);
+  }
+  .req-vote svg {
+    transition: transform 0.15s ease;
+  }
+  .req-vote:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  /* Уже проголосовали. Заливкой и акцентом, а НЕ серым: голос учтён — это
+     успех, а выключенная серая кнопка читается как поломка. */
+  /* Селектор двойной (`.req-vote.req-vote--on`), а не одинарный: у одинарного
+     та же специфичность, что у базового `.req-vote`, и порядок решался бы
+     расположением правил в файле. Состояние не должно от этого зависеть. */
+  .req-vote.req-vote--on {
+    color: var(--color-accent);
+    cursor: default;
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 14%, var(--color-raised));
+  }
+  .req-vote:disabled {
+    /* Гасим только браузерное осветление — состояние передаётся цветом выше. */
+    opacity: 1;
+  }
+
+  .req-vote-count {
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg);
+  }
+  .req-vote.req-vote--on .req-vote-count {
+    color: var(--color-accent);
+  }
+  .req-vote-label {
+    font-size: 0.62rem;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--color-faint);
+  }
+  .req-vote.req-vote--on .req-vote-label {
+    color: color-mix(in oklab, var(--color-accent) 70%, var(--color-muted));
+  }
+
+  /* ── Содержимое строки ── */
+  .req-body {
+    min-width: 0;
+    flex: 1;
+  }
+  .req-title-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+  .req-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.05rem;
+    font-weight: 500;
+  }
+  .req-meta {
+    margin-top: 0.15rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+  }
+
+  /* ── Выполненные заявки ── */
+  .req-row--done {
+    color: inherit;
+  }
+  .req-done-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.9rem;
+    align-self: stretch;
+    min-height: 3.35rem;
+    border-radius: 0.65rem;
+    color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+  .req-open {
+    font-size: 0.85rem;
+    color: var(--color-accent);
+  }
+  .req-row--done:hover .req-open {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  /* На узком экране подпись уступает место названию — стрелка «→» в ней и так
+     дублируется самим фактом, что строка кликабельна. */
+  @media (max-width: 479.98px) {
+    .req-open {
+      display: none;
+    }
+  }
+}
+
+/* Английский блок на странице для правообладателей.
+   Отделён чертой и приглушён: это не второй по важности раздел, а тот же текст
+   для тех, кто не читает по-русски. Свой `> * + *` обязателен — правило
+   `.prose-page > * + *` действует только на ПРЯМЫХ детей, и внутри секции
+   абзацы остались бы без отступов. */
+@layer components {
+  .prose-page-alt {
+    margin-top: 3rem;
+    border-top: 1px solid var(--color-line);
+    padding-top: 1.75rem;
+  }
+  .prose-page-alt > * + * {
+    margin-top: 1rem;
+  }
+  .prose-page-alt h2 {
+    margin-top: 0;
+  }
+}

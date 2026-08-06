@@ -5,6 +5,7 @@ import { isAdminUser } from '@/lib/admin';
 import { currentVisitorKey } from '@/lib/visitor';
 import { listRequests, type RequesterRef } from '@/lib/songRequests';
 import { INSTRUMENTS } from '@/lib/chords/instruments';
+import { pluralRu } from '@/lib/plural';
 import { SITE_NAME } from '@/lib/site';
 import { RequestForm } from '@/components/RequestForm';
 import { deleteRequestAction, voteRequestAction } from './actions';
@@ -65,55 +66,70 @@ export default async function RequestsPage() {
 
       {open.length > 0 ? (
         <section className="mb-10">
-          <h2 className="eyebrow mb-3">Ждут разбора</h2>
+          <h2 className="mb-1 text-lg font-medium">Ждут разбора</h2>
+          {/* Правило сортировки названо прямо. Без него столбик чисел слева —
+              просто числа; с ним видно, что нажатие на стрелку двигает песню
+              вверх очереди, а верх очереди и есть то, что разбирают раньше. */}
+          <p className="mb-4 text-sm text-muted">
+            Сверху — то, что просят чаще. Нажмите стрелку, чтобы поднять песню в очереди.
+          </p>
           <ul className="flex flex-col gap-2">
             {open.map((r) => (
-              <li key={r.id} className="song-row">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-lg font-medium">{r.title}</span>
+              <li key={r.id} className="req-row">
+                {/* Обычная форма, а не кнопка на JS: голос — это запись в базу,
+                    и она должна работать даже там, где скрипты не выполнились. */}
+                <form action={voteRequestAction} className="shrink-0">
+                  {/* Только идентификатор: голос ничего не создаёт, поэтому
+                      название с исполнителем экшену больше не нужны — и тем
+                      меньше данных, которым он мог бы поверить. */}
+                  <input type="hidden" name="id" value={r.id} />
+                  <button
+                    type="submit"
+                    disabled={r.mine}
+                    className={r.mine ? 'req-vote req-vote--on' : 'req-vote'}
+                    aria-label={
+                      r.mine
+                        ? `Ваш голос за «${r.title}» учтён. Сейчас просят: ${r.votes}`
+                        : `Поднять «${r.title}» в очереди. Сейчас просят: ${r.votes}`
+                    }
+                    title={r.mine ? 'Ваш голос учтён' : 'Поднять в очереди — разберём раньше'}
+                  >
+                    <ArrowUpIcon />
+                    <span className="req-vote-count">{r.votes}</span>
+                    {/* Подпись под числом — чтобы столбик не читался как «+1».
+                        Слово то же, что в схеме: счётчик мерит спрос, а не
+                        число уникальных людей. */}
+                    <span className="req-vote-label">
+                      {pluralRu(r.votes, 'просит', 'просят', 'просят')}
+                    </span>
+                  </button>
+                </form>
+
+                <div className="req-body">
+                  <div className="req-title-line">
+                    <span className="req-title">{r.title}</span>
                     {r.instrument !== 'guitar' ? (
                       <span className="inst-badge shrink-0">{INSTRUMENTS[r.instrument].name}</span>
                     ) : null}
                   </div>
-                  {/* Счётчик живёт на кнопке — дублировать его здесь незачем. */}
-                  <p className="truncate text-sm text-muted">
-                    {r.artist || 'без исполнителя'}
-                  </p>
+                  {/* «без исполнителя» остаётся ради записей, заведённых до
+                      того, как поле стало обязательным. */}
+                  <p className="req-meta">{r.artist || 'без исполнителя'}</p>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-                  {/* Обычная форма, а не кнопка на JS: голос — это запись в базу,
-                      и она должна работать даже там, где скрипты не выполнились. */}
-                  <form action={voteRequestAction}>
-                    {/* Только идентификатор: голос ничего не создаёт, поэтому
-                        название с исполнителем экшену больше не нужны — и тем
-                        меньше данных, которым он мог бы поверить. */}
+                {canModerate ? (
+                  <form action={deleteRequestAction} className="shrink-0">
                     <input type="hidden" name="id" value={r.id} />
                     <button
                       type="submit"
-                      disabled={r.mine}
-                      className={`btn h-9 px-3 text-sm ${r.mine ? 'btn-ghost' : 'btn-outline'}`}
-                      title={r.mine ? 'Вы уже просили эту песню' : 'Мне тоже нужен этот разбор'}
+                      className="btn btn-ghost h-9 w-9 px-0 text-sm"
+                      title="Удалить заявку"
+                      aria-label={`Удалить заявку «${r.title}»`}
                     >
-                      {r.mine ? `✓ ${r.votes}` : `+1 · ${r.votes}`}
+                      ×
                     </button>
                   </form>
-
-                  {canModerate ? (
-                    <form action={deleteRequestAction}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <button
-                        type="submit"
-                        className="btn btn-ghost h-9 w-9 px-0 text-sm"
-                        title="Удалить заявку"
-                        aria-label="Удалить заявку"
-                      >
-                        ×
-                      </button>
-                    </form>
-                  ) : null}
-                </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -128,24 +144,32 @@ export default async function RequestsPage() {
           выглядит как заброшенная форма. Здесь видно, что просить работает. */}
       {done.length > 0 ? (
         <section>
-          <h2 className="eyebrow mb-3">Уже разобрано</h2>
+          <h2 className="mb-1 text-lg font-medium">Уже разобрано</h2>
+          <p className="mb-4 text-sm text-muted">
+            Эти песни просили — и они появились. Голосовать за них больше не нужно.
+          </p>
           <ul className="flex flex-col gap-2">
             {done.map((r) => (
               <li key={r.id}>
-                <Link href={r.fulfilledPath!} className="song-row">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-lg font-medium">{r.title}</span>
+                <Link href={r.fulfilledPath!} className="req-row req-row--done">
+                  {/* На месте кнопки голоса — галочка: строка сохраняет ту же
+                      раскладку, что и открытые заявки, и список не разъезжается
+                      на две разные сетки. */}
+                  <span className="req-done-mark" aria-hidden>
+                    <CheckIcon />
+                  </span>
+                  <div className="req-body">
+                    <div className="req-title-line">
+                      <span className="req-title">{r.title}</span>
                       {r.instrument !== 'guitar' ? (
                         <span className="inst-badge shrink-0">
                           {INSTRUMENTS[r.instrument].name}
                         </span>
                       ) : null}
                     </div>
-                    <p className="truncate text-sm text-muted">
-                      {r.artist || 'без исполнителя'} · разбор готов →
-                    </p>
+                    <p className="req-meta">{r.artist || 'без исполнителя'}</p>
                   </div>
+                  <span className="req-open shrink-0">Открыть разбор →</span>
                 </Link>
               </li>
             ))}
@@ -153,5 +177,23 @@ export default async function RequestsPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+/** Стрелка вверх — «поднять в очереди». Направление и есть смысл кнопки. */
+function ArrowUpIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="m20 6-11 11-5-5" />
+    </svg>
   );
 }

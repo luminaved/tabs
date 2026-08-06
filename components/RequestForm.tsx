@@ -44,10 +44,15 @@ export function RequestForm({ instrument = 'guitar' }: { instrument?: Instrument
         </label>
         <label className="flex flex-1 flex-col gap-1">
           <span className="text-sm text-muted">Исполнитель</span>
+          {/* Обязателен: без исполнителя заявка склеивается с любой песней того
+              же названия — и как дубль, и при проверке «а не разобрали ли уже»
+              (см. requestMatchKey и findFulfilled). Настоящая проверка стоит
+              в экшене, здесь только подсказка браузера. */}
           <input
             name="artist"
+            required
             maxLength={120}
-            placeholder="Необязательно"
+            placeholder="Кто исполняет"
             className="field"
             autoComplete="off"
           />
