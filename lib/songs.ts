@@ -156,6 +156,7 @@ const catalogSelect = {
   title: true,
   artist: true,
   key: true,
+  capo: true,
   body: true,
   hasCover: true,
   instrument: true,

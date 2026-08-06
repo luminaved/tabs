@@ -102,14 +102,24 @@ export function FretboardEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag, frets, barres, base]);
 
-  // Геометрия сетки для абсолютной палки: колонки по 2rem, gap 3px; строка
-  // «головы» 1.4rem, затем ряды ладов по 2rem. Точка 1rem по центру ячейки.
+  /**
+   * Геометрия абсолютной палки баррэ.
+   *
+   * Размеры берутся из CSS-переменных, а не повторяются числами. Раньше здесь
+   * стояло `2rem`, `3px` и `1.4rem` — те же значения, что в globals.css, но
+   * своей копией: поменять размер клетки означало поправить два файла, и любая
+   * забытая половинка молча сдвигала палку мимо точек. Теперь источник один —
+   * `.fb` в CSS.
+   */
   const barStyle = (fret: number, from: number, to: number) => {
     const row = fret - base;
+    const step = 'var(--fb-cell) + var(--fb-gap)';
+    // Палка у́же клетки, поэтому её надо вдвинуть на половину разницы.
+    const inset = '(var(--fb-cell) - var(--fb-dot)) / 2';
     return {
-      left: `calc(${from} * (2rem + 3px) + 0.5rem)`,
-      width: `calc(${to - from} * (2rem + 3px) + 1rem)`,
-      top: `calc(1.4rem + 3px + ${row} * (2rem + 3px) + 0.5rem)`,
+      left: `calc(${from} * (${step}) + ${inset})`,
+      width: `calc(${to - from} * (${step}) + var(--fb-dot))`,
+      top: `calc(var(--fb-head) + var(--fb-gap) + ${row} * (${step}) + ${inset})`,
     };
   };
 
@@ -158,7 +168,24 @@ export function FretboardEditor({
                 key={`${r}-${s}`}
                 type="button"
                 className={cls}
-                onPointerDown={() => setDrag({ row: r, from: s, to: s })}
+                /**
+                 * Отпускаем НЕЯВНЫЙ захват указателя — без этого баррэ
+                 * пальцем не ставилось вовсе.
+                 *
+                 * При касании браузер автоматически закрепляет указатель за
+                 * тем элементом, на котором начался жест: все последующие
+                 * pointer-события уходят ему одному, и `onPointerEnter` на
+                 * соседних клетках не срабатывает никогда. Протягивание вдоль
+                 * лада на телефоне поэтому всегда сводилось к одиночному тапу
+                 * по первой клетке, тогда как мышью (у неё захвата нет) всё
+                 * работало — оттого баг и не был виден при разработке.
+                 */
+                onPointerDown={(e) => {
+                  if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                  }
+                  setDrag({ row: r, from: s, to: s });
+                }}
                 onPointerEnter={() =>
                   setDrag((d) => (d && d.row === r ? { ...d, to: s } : d))
                 }

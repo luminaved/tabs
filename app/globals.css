@@ -1070,7 +1070,16 @@
   }
 
   /* Интерактивный гриф (редактор аппликатуры) */
+  /* Размеры грифа-редактора живут ЗДЕСЬ и только здесь. Их читает и разметка
+     палки баррэ (см. barStyle в components/FretboardEditor.tsx): раньше те же
+     числа были выписаны копией в JS, и поменять клетку означало поправить два
+     файла — забытая половинка сдвигала палку мимо точек. */
   .fb {
+    --fb-cell: 2.3rem;
+    --fb-gap: 3px;
+    --fb-head: 1.55rem;
+    --fb-dot: 1.15rem;
+
     display: inline-flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -1084,13 +1093,13 @@
   .fb-grid {
     position: relative;
     display: grid;
-    grid-template-columns: repeat(var(--fb-strings, 6), 2rem);
-    gap: 3px;
+    grid-template-columns: repeat(var(--fb-strings, 6), var(--fb-cell));
+    gap: var(--fb-gap);
     user-select: none;
     -webkit-user-select: none;
   }
   .fb-head {
-    height: 1.4rem;
+    height: var(--fb-head);
     display: grid;
     place-items: center;
     color: var(--color-muted);
@@ -1105,7 +1114,11 @@
     border-top-color: var(--color-fg);
   }
   .fb-cell {
-    height: 2rem;
+    height: var(--fb-cell);
+    /* pan-y, а не none: баррэ тянут ПО ГОРИЗОНТАЛИ вдоль лада, поэтому
+       горизонтальный жест забираем себе, а вертикальный оставляем браузеру —
+       иначе страницу нельзя было бы прокрутить, начав свайп с грифа. */
+    touch-action: pan-y;
     display: grid;
     place-items: center;
     border: 1px solid var(--color-line);
@@ -1121,16 +1134,16 @@
     border-color: var(--color-accent);
   }
   .fb-dot {
-    width: 1rem;
-    height: 1rem;
+    width: var(--fb-dot);
+    height: var(--fb-dot);
     border-radius: 50%;
     background: var(--color-accent);
   }
   /* Баррэ — палка поверх точек (клики проходят к ячейкам под ней) */
   .fb-barre {
     position: absolute;
-    height: 1rem;
-    border-radius: 0.5rem;
+    height: var(--fb-dot);
+    border-radius: calc(var(--fb-dot) / 2);
     background: var(--color-accent);
     pointer-events: none;
   }
@@ -2858,5 +2871,77 @@
   }
   .prose-page-alt h2 {
     margin-top: 0;
+  }
+}
+
+/* ─── Аппликатуры на телефоне ───────────────────────────────────────────────
+   Чуть мельче и по центру. Масштаб задаётся множителем `--chord-scale`, а не
+   пиксельным размером: ширина диаграммы зависит от числа струн (у укулеле она
+   уже гитарной), и любое жёсткое значение сломало бы эту пропорцию. Множитель
+   читают и сама диаграмма, и карточка-заглушка «формы нет» — см.
+   components/ChordDiagram.tsx. */
+@media (max-width: 639.98px) {
+  .chord-bar {
+    --chord-scale: 0.92;
+  }
+  /* Центрируем ТОЛЬКО открепленную панель. У закреплённой строка не
+     переносится, а прокручивается по горизонтали, и `justify-content: center`
+     на переполненном контейнере обрезает начало списка так, что до первых
+     аккордов не докрутиться. */
+  .chord-bar:not(.chord-bar--pinned) .chord-bar-strip {
+    justify-content: center;
+  }
+}
+
+/* ─── Каподастр ─────────────────────────────────────────────────────────────
+   Плашка над текстом разбора. Раньше капо стояло строчкой в ряду «92 bpm ·
+   добавлено 4 августа» и читалось как справочная мелочь — хотя это
+   единственное, что нужно сделать с гитарой ДО того, как начать играть.
+
+   В печати не скрывается (и это не забытый `print-hide`): на распечатанном
+   листе капо нужно ровно так же. Фон и акцент там заменяются на контурный
+   вид — браузеры по умолчанию не печатают заливку, и цветной текст на белом
+   вышел бы бледнее основного. */
+@layer components {
+  .song-capo {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-bottom: 1.5rem;
+    padding: 0.7rem 1rem;
+    border-radius: 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 35%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 9%, transparent);
+  }
+  .song-capo-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--color-accent);
+  }
+  .song-capo-text {
+    color: var(--color-fg);
+  }
+  .song-capo-text b {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-accent);
+  }
+
+  /* Компактный чип в строке списка: иконка и число, без слов — места на них
+     в строке каталога нет, а всплывающая подсказка объясняет. */
+  .chip-sm--capo {
+    gap: 0.25rem;
+    border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+  }
+}
+
+@media print {
+  .song-capo {
+    border-color: #999;
+    background: none;
+  }
+  .song-capo-icon,
+  .song-capo-text b {
+    color: #000;
   }
 }

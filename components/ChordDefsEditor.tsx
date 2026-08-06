@@ -80,7 +80,9 @@ export function ChordDefsEditor({
       {needing.length > 0 ? (
         <>
           <p className="text-sm text-muted">Нестандартные аккорды — задайте форму. {HINT}</p>
-          <div className="flex flex-wrap gap-5">
+          {/* justify-center: грифы переносятся по строкам, и при выключке влево
+              последний ряд повисал у края рваным хвостом. */}
+          <div className="flex flex-wrap justify-center gap-5">
             {needing.map((c) => (
               <div key={c} className="flex flex-col items-center gap-2 rounded-xl border border-line p-4">
                 <span className="text-lg font-medium text-accent">{c}</span>
@@ -101,7 +103,7 @@ export function ChordDefsEditor({
             Стандартные аккорды — форма подставляется автоматически, здесь её можно заменить своей
             (например, другой позицией на грифе). {HINT}
           </p>
-          <div className="flex flex-wrap gap-5">
+          <div className="flex flex-wrap justify-center gap-5">
             {standard.map((c) => {
               const custom = defs[c];
               const value = custom ?? getChordShape(c, inst) ?? empty;

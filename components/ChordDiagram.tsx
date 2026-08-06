@@ -104,11 +104,22 @@ export function ChordDiagram({
   const y = (f: number) => top + f * fretGap;
 
   const width = diagramWidth(strings, size ?? REFERENCE_W);
+  const height = (width * H) / W;
 
   return (
     <svg
+      // Атрибуты оставлены как запасной размер (и как пропорции для вёрстки до
+      // применения стилей), а фактический размер задаётся стилем со
+      // множителем `--chord-scale`. Так CSS может уменьшить ВСЕ диаграммы разом
+      // — например, на телефоне, — не зная ни числа струн, ни того, какой
+      // `size` передал вызывающий код. Ширина и высота множатся на одно и то же
+      // число, поэтому пропорция не едет, а viewBox всё дорисовывает сам.
       width={width}
-      height={(width * H) / W}
+      height={height}
+      style={{
+        width: `calc(${width}px * var(--chord-scale, 1))`,
+        height: `calc(${height}px * var(--chord-scale, 1))`,
+      }}
       viewBox={`0 0 ${W} ${H}`}
       role="img"
       aria-label={name ? `Аккорд ${name}` : 'Аккорд'}

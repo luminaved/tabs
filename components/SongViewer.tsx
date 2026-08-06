@@ -22,6 +22,7 @@ import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
 import { toggleFavoriteAction, toggleLikeAction } from '@/app/(site)/songs/engagement-actions';
 import { toggleVerifiedAction } from '@/app/(site)/songs/verify-actions';
 import { VerifiedBadge, VERIFIED_TITLE } from './VerifiedBadge';
+import { CapoIcon } from './CapoIcon';
 import type { SongEngagement } from '@/lib/engagement';
 import type { AnnotationView } from '@/lib/annotations';
 import {
@@ -114,12 +115,12 @@ export function SongViewer({
 
   // Подпись под шапкой: только то, чего страница не говорит в других местах.
   //
-  // Капо идёт первым: это единственная здесь строка, без которой песню не
-  // сыграешь как записано. Ноль означает «без капо» и не показывается —
-  // подписывать отсутствие капо не нужно никому.
+  // Капо отсюда УБРАНО намеренно. В ряду с темпом и датой добавления оно
+  // читалось как ещё одна справочная мелочь, хотя это единственное, без чего
+  // песню не сыграешь как записано. Теперь у него своя плашка над текстом —
+  // см. ниже.
   const capo = typeof base.meta.capo === 'number' ? base.meta.capo : 0;
   const metaBits = [
-    capo > 0 ? `капо на ${capo} ладу` : null,
     base.meta.tempo ? `${base.meta.tempo} bpm` : null,
     createdLabel ? `добавлено ${createdLabel}` : null,
   ].filter(Boolean);
@@ -690,6 +691,21 @@ export function SongViewer({
       {/* Открепленная панель стоит на своём месте в потоке страницы;
           закреплённая отрисована выше, внутри липкого блока с тулбаром. */}
       {usedChords.length > 0 && !pinChords ? chordBar : null}
+
+      {/* Каподастр — своей плашкой, а не строчкой в ряду мелочей под шапкой.
+          Стоит здесь, над заметкой от автора (и на её месте, когда заметки
+          нет): это последнее, что человек читает перед текстом, и первое, что
+          ему нужно сделать с гитарой, прежде чем начать. */}
+      {capo > 0 ? (
+        <div className="song-capo">
+          <span className="song-capo-icon">
+            <CapoIcon size={22} />
+          </span>
+          <span className="song-capo-text">
+            Каподастр на <b>{capo}</b> ладу
+          </span>
+        </div>
+      ) : null}
 
       {note ? (
         <div className="song-note">

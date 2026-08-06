@@ -24,9 +24,11 @@ export function ChordCard({
       ) : (
         <div
           className="chord-card-empty"
+          // Тот же множитель, что у самой диаграммы (см. ChordDiagram): иначе
+          // на телефоне карточка «формы нет» осталась бы крупнее соседних.
           style={{
-            width: diagramWidth(inst.strings, size),
-            height: diagramHeight(inst.strings, size),
+            width: `calc(${diagramWidth(inst.strings, size)}px * var(--chord-scale, 1))`,
+            height: `calc(${diagramHeight(inst.strings, size)}px * var(--chord-scale, 1))`,
           }}
         >
           —

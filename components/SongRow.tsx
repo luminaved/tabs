@@ -45,7 +45,7 @@ export function SongRow({ song, meta }: { song: SongCard; meta?: React.ReactNode
           </span>
         </div>
       </div>
-      <SongChordChips chords={song.chords} />
+      <SongChordChips chords={song.chords} capo={song.capo} />
     </Link>
   );
 }

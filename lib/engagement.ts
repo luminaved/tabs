@@ -18,6 +18,8 @@ export const cardSelect = {
   hasCover: true,
   instrument: true,
   verified: true,
+  // Нужен чипу каподастра в строке списка (см. SongChordChips).
+  capo: true,
   // Нужна подписи в своей библиотеке («приватная» / «по ссылке»). Строка
   // короткая, поэтому проще возить её везде, чем заводить второй набор полей.
   visibility: true,
