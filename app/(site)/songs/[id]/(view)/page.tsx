@@ -16,6 +16,7 @@ import { songIdFromParam, songPath } from '@/lib/slug';
 import { SongViewer } from '@/components/SongViewer';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { RelatedSongs } from '@/components/RelatedSongs';
+import { CopyrightNotice } from '@/components/CopyrightNotice';
 
 /**
  * Метаданные разбора. Заголовок и описание собраны под то, как люди ищут —
@@ -209,6 +210,9 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
         shareTitle={songSeoTitle(song, inst)}
       />
       <RelatedSongs songs={related} artist={song.artist} instrument={inst} />
+      {/* Приватный разбор видит один человек — его автор, и предлагать ему
+          пожаловаться на самого себя незачем. */}
+      {song.visibility !== 'private' ? <CopyrightNotice pageUrl={absoluteUrl(url)} /> : null}
     </main>
   );
 }

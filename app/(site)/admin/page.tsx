@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { currentUserIsAdmin } from '@/lib/admin';
+import { COPYRIGHT_EMAIL } from '@/lib/contact';
 import { getAdminStats, type Delta, type TopSong } from '@/lib/stats';
 import { INSTRUMENTS } from '@/lib/chords/instruments';
 import { songPath } from '@/lib/slug';
@@ -38,6 +40,7 @@ export default async function AdminStatsPage() {
       </div>
 
       <AuthProvidersState />
+      <CopyrightContactState />
 
       {/* ── Главное: числа, каждое со сравнением к прошлой неделе ────────── */}
       <section className="mb-10">
@@ -213,6 +216,43 @@ function AuthProvidersState() {
       <p className="mt-2 text-sm text-faint">
         Значения переменных здесь не показываются — только сам факт, что они заданы.
       </p>
+    </section>
+  );
+}
+
+/**
+ * Настроен ли контакт для правообладателей.
+ *
+ * Стоит рядом со «Способами входа» и по той же причине: ненастроенная
+ * переменная снаружи выглядит ровно так же, как настроенная, — пустым местом.
+ * Только цена ошибки здесь выше: страница /copyright уже проиндексирована и
+ * обещает досудебный порядок, а связаться по ней нельзя.
+ *
+ * Сам адрес показываем: он и так публичный (на этой странице он написан
+ * крупно), а видеть, ЧТО именно указано, полезно — опечатку иначе не поймать.
+ */
+function CopyrightContactState() {
+  const ok = !!COPYRIGHT_EMAIL;
+  return (
+    <section className="mb-10">
+      <h2 className="mb-3 text-lg font-medium">Контакт для правообладателей</h2>
+      <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+        <span className={ok ? 'text-accent' : 'text-faint'}>{ok ? '✓' : '—'}</span>
+        <span className="font-medium">COPYRIGHT_EMAIL</span>
+        <span className="text-sm text-muted">
+          {ok ? COPYRIGHT_EMAIL : 'не задан — на /copyright нет адреса для обращений'}
+        </span>
+        <Link href="/copyright" className="ms-auto text-sm text-accent underline-offset-4 hover:underline">
+          Открыть страницу →
+        </Link>
+      </div>
+      {!ok ? (
+        <p className="mt-2 text-sm text-faint">
+          Задайте переменную в окружении (см. .env.example) и перезапустите сервер. Пока её
+          нет, правообладателю остаётся только досудебная переписка через владельца домена —
+          то есть, скорее всего, сразу претензия.
+        </p>
+      ) : null}
     </section>
   );
 }

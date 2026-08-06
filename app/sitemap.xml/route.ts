@@ -49,6 +49,15 @@ export const revalidate = 3600;
  */
 const MAX_URLS = 45000;
 
+/**
+ * Когда последний раз менялся текст страницы «Правообладателям».
+ *
+ * Константа, а не `new Date()`: содержимое страницы не зависит от базы, и
+ * дата обязана меняться вместе с ТЕКСТОМ, а не с каждой пересборкой карты.
+ * Правите страницу — поправьте и дату здесь.
+ */
+const COPYRIGHT_PAGE_UPDATED = new Date('2026-08-05T00:00:00Z');
+
 interface Entry {
   loc: string;
   lastmod: Date;
@@ -110,6 +119,17 @@ export async function GET() {
     { loc: absoluteUrl('/'), lastmod: lastSongChange, changefreq: 'daily', priority: '1.0' },
     // Каталог укулеле — отдельная точка входа со своими запросами.
     { loc: absoluteUrl('/ukulele'), lastmod: lastSongChange, changefreq: 'daily', priority: '0.9' },
+    // Страница для правообладателей. В карте она затем, чтобы её НАШЛИ: её
+    // ищут не по ссылке из подвала, а запросом вида «<сайт> удалить текст».
+    // `lastmod` — не дата разборов: содержимое страницы от них не зависит, и
+    // подсовывать поисковику ежедневно меняющуюся дату у неизменного текста
+    // значит приучать его этой дате не верить.
+    {
+      loc: absoluteUrl('/copyright'),
+      lastmod: COPYRIGHT_PAGE_UPDATED,
+      changefreq: 'weekly',
+      priority: '0.3',
+    },
     ...songs.map(
       (s): Entry => ({
         loc: absoluteUrl(songPath(s)),
