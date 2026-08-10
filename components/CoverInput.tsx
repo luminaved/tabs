@@ -48,51 +48,52 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-4">
-      {previewSrc ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={previewSrc} alt="Обложка" className="cover cover-lg" />
-      ) : (
-        <div className="cover cover-lg cover-empty">
-          <MusicIcon />
-        </div>
-      )}
-
-      <input type="hidden" name="coverUrl" value={cover} />
-
-      <div className="flex flex-col items-start gap-2">
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-          className="btn btn-outline h-9 px-3 text-sm"
-        >
-          {busy ? '…' : previewSrc ? 'Заменить' : 'Загрузить обложку'}
-        </button>
+    // min-h-0 + flex-1: столбец шапки растянут по ряду сетки, и обложка забирает
+    // всю его высоту, оставшуюся под подписью. Без min-h-0 flex-элемент не даёт
+    // себя сжать ниже содержимого, и тянуться было бы не за чем.
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="cover-edit">
         {previewSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewSrc} alt="Обложка" className="cover-edit-img" />
+        ) : (
+          <div className="cover-edit-empty">
+            <MusicIcon />
+          </div>
+        )}
+
+        <div className="cover-edit-actions">
           <button
             type="button"
-            onClick={() => setCover('')}
-            className="btn btn-ghost h-9 px-2 text-sm"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            className="cover-edit-btn"
           >
-            Убрать
+            {busy ? '…' : previewSrc ? 'Заменить' : 'Загрузить'}
           </button>
-        ) : null}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void onFile(f);
-            e.target.value = '';
-          }}
-        />
+          {previewSrc ? (
+            <button type="button" onClick={() => setCover('')} className="cover-edit-btn">
+              Убрать
+            </button>
+          ) : null}
+        </div>
       </div>
 
+      <input type="hidden" name="coverUrl" value={cover} />
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void onFile(f);
+          e.target.value = '';
+        }}
+      />
+
       {failed ? (
-        <p className="basis-full text-sm text-red-300" role="alert">
+        <p className="text-xs text-red-300" role="alert">
           Не удалось прочитать этот файл. Браузер понимает JPEG, PNG и WebP —
           фотографии с айфона (HEIC) нужно сначала сохранить в JPEG.
         </p>

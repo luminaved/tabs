@@ -7,9 +7,11 @@ import { getPublicUser, getUserProfile } from '@/lib/users';
 import { getLibraryCounts, listFavoriteSongs, listLikedSongs } from '@/lib/engagement';
 import { isAdminUser } from '@/lib/admin';
 import { countOwnByInstrument } from '@/lib/songs';
+import { getUserStats } from '@/lib/stats';
 import { SongRow } from '@/components/SongRow';
 import { InstrumentIcon } from '@/components/InstrumentIcon';
 import { ProfileEditor } from '@/components/ProfileEditor';
+import { StatStrip } from '@/components/StatStrip';
 
 export const metadata: Metadata = {
   title: 'Личный кабинет',
@@ -25,7 +27,7 @@ export default async function AccountPage({
   const sp = await searchParams;
   const tab = sp.tab === 'liked' ? 'liked' : 'favorites';
 
-  const [profile, publicUser, counts, own, songs, isAdmin] = await Promise.all([
+  const [profile, publicUser, counts, own, songs, isAdmin, stats] = await Promise.all([
     getUserProfile(sessionUser.id),
     // Отпечаток аватара. Отдельным запросом это не выглядит, но им и не
     // является: шапка сайта спрашивает то же самое раньше, а `getPublicUser`
@@ -35,6 +37,9 @@ export default async function AccountPage({
     countOwnByInstrument(sessionUser.id),
     sp.tab === 'liked' ? listLikedSongs(sessionUser.id) : listFavoriteSongs(sessionUser.id),
     isAdminUser(sessionUser.id),
+    // Своя библиотека целиком, включая приватные: число обязано сойтись с
+    // бейджами «Гитара / Укулеле» ниже, а те считают разборы любой видимости.
+    getUserStats(sessionUser.id, false),
   ]);
 
   if (!profile) redirect('/login');
@@ -97,6 +102,13 @@ export default async function AccountPage({
           одному из инструментов, как будто относится только к нему. */}
       <section className="mt-9">
         <h2 className="mb-3 text-lg font-medium">Мои разборы</h2>
+
+        {/* Полоса стоит НАД кнопками инструментов, а не под ними: она про
+            библиотеку целиком, а кнопки уже делят её надвое. У нового человека
+            её нет вовсе — три нуля вместо приглашения написать первый разбор
+            были бы худшим, что он увидит в кабинете. */}
+        {stats.songs > 0 ? <StatStrip stats={stats} className="mb-5" /> : null}
+
         <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
           <Link href="/songs" className="btn btn-outline gap-2">
             <InstrumentIcon instrument="guitar" size={18} className="-me-0.5" />

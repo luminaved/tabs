@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pluralRu, withPluralRu } from './plural';
+import { compactRu, pluralRu, withPluralRu } from './plural';
 
 const razbor = (n: number) => pluralRu(n, 'разбор', 'разбора', 'разборов');
 
@@ -47,5 +47,44 @@ describe('pluralRu', () => {
   it('withPluralRu подставляет само число', () => {
     expect(withPluralRu(1, 'минуту', 'минуты', 'минут')).toBe('1 минуту');
     expect(withPluralRu(5, 'струна', 'струны', 'струн')).toBe('5 струн');
+  });
+});
+
+describe('compactRu', () => {
+  it('до тысячи число остаётся как есть', () => {
+    expect(compactRu(0)).toBe('0');
+    expect(compactRu(52)).toBe('52');
+    expect(compactRu(999)).toBe('999');
+  });
+
+  it('тысячи: один знак после запятой, пока меньше десяти', () => {
+    expect(compactRu(1000)).toBe('1 тыс.');
+    expect(compactRu(1234)).toBe('1,2 тыс.');
+    expect(compactRu(9990)).toBe('9,9 тыс.');
+  });
+
+  it('от десяти тысяч дробь уже не показывается', () => {
+    expect(compactRu(12_400)).toBe('12 тыс.');
+    expect(compactRu(123_900)).toBe('123 тыс.');
+  });
+
+  it('дробь отбрасывается, а не округляется', () => {
+    // 1250 — это «1,2 тыс.», а не «1,3»: счётчик не должен показывать больше,
+    // чем есть на самом деле.
+    expect(compactRu(1250)).toBe('1,2 тыс.');
+    expect(compactRu(1299)).toBe('1,2 тыс.');
+    // Край диапазона: округление дало бы бессмысленное «1000 тыс.»
+    expect(compactRu(999_999)).toBe('999 тыс.');
+  });
+
+  it('миллионы', () => {
+    expect(compactRu(1_000_000)).toBe('1 млн');
+    expect(compactRu(1_500_000)).toBe('1,5 млн');
+    expect(compactRu(3_000_000)).toBe('3 млн');
+  });
+
+  it('дробное и отрицательное', () => {
+    expect(compactRu(1234.9)).toBe('1,2 тыс.');
+    expect(compactRu(-1234)).toBe('-1,2 тыс.');
   });
 });

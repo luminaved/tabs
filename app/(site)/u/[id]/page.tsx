@@ -13,8 +13,10 @@ import { absoluteUrl, SITE_NAME } from '@/lib/site';
 import { itemListJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
 import { songPath } from '@/lib/slug';
+import { getUserStats } from '@/lib/stats';
 import { Avatar } from '@/components/Avatar';
 import { SongRow } from '@/components/SongRow';
+import { StatStrip } from '@/components/StatStrip';
 import { LoadMoreSongs } from '@/components/LoadMoreSongs';
 import { loadMoreUserSongsAction } from './actions';
 
@@ -65,10 +67,13 @@ export default async function ProfilePage({
   const instrument = sp.instrument ? parseInstrumentId(sp.instrument) : undefined;
 
   // Параллельно: запросы независимы, последовательно это лишний round-trip.
-  const [user, { songs, hasMore }, counts] = await Promise.all([
+  const [user, { songs, hasMore }, counts, stats] = await Promise.all([
     getPublicUser(id),
     listUserPublicSongs(id, { instrument, query }),
     countUserPublicByInstrument(id),
+    // Строго публичные: иначе счётчик выдал бы постороннему, сколько у автора
+    // приватных разборов, — см. getUserStats.
+    getUserStats(id, true),
   ]);
   if (!user) notFound();
 
@@ -119,11 +124,19 @@ export default async function ProfilePage({
           dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
         />
       ) : null}
-      <section className="mb-8 flex items-center gap-4">
+      {/* items-start, а не items-center: под именем теперь стоит полоса счётчиков,
+          и правый столбец стал заметно выше аватара — по центру он смотрелся бы
+          съехавшим. Строку «Публичных разборов: N» полоса заменила целиком:
+          первое же её число — то же самое, и повторять его дважды незачем. */}
+      <section className="mb-8 flex items-start gap-4">
         <Avatar version={user.avatarVersion} name={user.name} size={96} userId={id} />
         <div className="min-w-0">
           <h1 className="display truncate text-3xl font-medium">{user.name || 'Автор'}</h1>
-          <p className="text-muted">Публичных разборов: {total}</p>
+          {total > 0 ? (
+            <StatStrip stats={stats} className="mt-3" />
+          ) : (
+            <p className="mt-1 text-muted">Публичных разборов пока нет</p>
+          )}
         </div>
       </section>
 
