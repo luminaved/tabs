@@ -48,10 +48,9 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
   };
 
   return (
-    // min-h-0 + flex-1: столбец шапки растянут по ряду сетки, и обложка забирает
-    // всю его высоту, оставшуюся под подписью. Без min-h-0 flex-элемент не даёт
-    // себя сжать ниже содержимого, и тянуться было бы не за чем.
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    // Размер обложки задаёт ширина столбца в шапке редактора, высоту она берёт
+    // из своей пропорции 1:1 — тянуть этот блок по высоте ряда не нужно.
+    <div className="flex flex-col gap-2">
       <div className="cover-edit">
         {previewSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
