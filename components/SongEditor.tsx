@@ -175,6 +175,31 @@ export function SongEditor({
   // Открыты, если внутри уже что-то есть: у сохранённого разбора с капо человек
   // должен увидеть капо, не разыскивая его. У пустой формы — закрыты, и до
   // текста песни остаётся один экран вместо трёх.
+  /**
+   * Что показано в панели текста на узком экране: разметка или превью.
+   *
+   * На широком не используется вовсе — там оба поля стоят рядом, и переключать
+   * нечего. На телефоне же они шли друг за другом, и проверка «ровно ли аккорд
+   * встал над слогом» превращалась в качели прокруткой через весь экран.
+   *
+   * Спрятанное поле именно ПРЯЧЕТСЯ, а не размонтируется. Причина та же, что у
+   * складных разделов: `body` уходит на сервер и в черновик через
+   * `new FormData(form)`, и textarea, выброшенная из DOM на вкладке «Превью»,
+   * унесла бы с собой весь текст песни — сохранение затёрло бы его пустотой.
+   */
+  const [pane, setPane] = useState<'edit' | 'preview'>('edit');
+  const paneClass = (which: 'edit' | 'preview') =>
+    pane === which ? 'min-w-0' : 'hidden min-w-0 lg:block';
+
+  /**
+   * Куда уводит «Отмена». Подпись в адресе собирается из СОХРАНЁННЫХ названия и
+   * исполнителя: возвращаемся туда, откуда пришли, а не туда, что успели
+   * набрать. Считается один раз — ссылок на неё две (шапка и нижняя полоса).
+   */
+  const cancelHref = initial?.id
+    ? songPath({ id: initial.id, title: initial.title ?? '', artist: initial.artist })
+    : '/songs';
+
   const [openParams, setOpenParams] = useState(
     () => !!(initial?.key || initial?.tempo || initial?.capo),
   );
@@ -469,6 +494,33 @@ export function SongEditor({
     <form ref={formRef} action={formAction} onChange={scheduleSave} className="flex flex-col gap-5">
       {initial?.id ? <input type="hidden" name="id" value={initial.id} /> : null}
 
+      {/* ── Шапка редактора (только телефон) ─────────────────────────────────
+          «Сохранить» уезжает наверх, как «Готово» в нативных приложениях. Внизу
+          экрана ему не место: там уже была нижняя навигация (её на этих
+          страницах теперь нет, см. MobileNav) и полоса действий, а стоит тапнуть
+          в текст — выезжает клавиатура, и от самой песни остаётся щель.
+
+          Липнет под шапку сайта: та тоже sticky и высотой 3.5rem, поэтому
+          `top` ровно на неё и смещён — иначе панель уехала бы ПОД неё. */}
+      <div className="editor-topbar sm:hidden">
+        <Link href={cancelHref} className="btn btn-ghost h-8 shrink-0 px-2.5 text-sm">
+          Отмена
+        </Link>
+        {savedAt ? (
+          <span key={savedAt} className="draft-saved min-w-0" aria-live="polite">
+            <CheckIcon />
+            <span className="truncate">Черновик сохранён</span>
+          </span>
+        ) : null}
+        <button
+          type="submit"
+          disabled={pending}
+          className="btn btn-primary ms-auto h-8 shrink-0 px-3.5 text-sm"
+        >
+          {pending ? '…' : submitLabel}
+        </button>
+      </div>
+
       {foundDraft ? (
         <div className="draft-banner" role="status">
           <DraftIcon />
@@ -507,12 +559,26 @@ export function SongEditor({
           пустовало полстроки. Колонка `auto` — по содержимому обложки с её
           кнопками, вторая забирает остаток. На телефоне обе складываются. */}
       {/* Ширина столбца обложки задана числом: от неё через пропорцию 1:1
-          считается высота (см. .cover-edit). Число подобрано так, чтобы столбец
-          вышел вровень с соседним: подпись (1.25rem) + отступ (0.375) + квадрат
-          (8.5) ≈ два поля с подписями справа. */}
-      <div className="grid gap-4 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-5">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted">Обложка</span>
+          считается высота (см. .cover-edit). Число не на глаз — оно ровняет
+          столбец с соседним, чтобы шапка была прямоугольником без ступеньки:
+
+            справа: 2 × (подпись 1.25 + отступ 0.375 + поле 2.9) + зазор 0.75
+                    = 9.8rem
+            слева:  подпись 1.25 + отступ 0.375 + квадрат 8.175 = 9.8rem
+
+          Если поменяется высота `.field` или размер подписи — пересчитать.
+
+          На телефоне столбец уже — 7rem (112px) против 8.175rem. Тянуть его во
+          всю ширину, как было сначала, нельзя: квадрат съедал первый экран, и до
+          названия песни приходилось прокручивать. Но и 5rem оказалось мало —
+          обложка читалась значком, а не картинкой. 7rem оставляет полям 222px
+          из 338 на экране 375px, чего хватает плейсхолдеру «Название песни». */}
+      <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 sm:grid-cols-[8.175rem_minmax(0,1fr)] sm:gap-5">
+        <div className="flex flex-col justify-center gap-1.5 sm:justify-start">
+          {/* Подпись на телефоне только для читалок экрана: рядом с 80-пиксельным
+              квадратом слово «Обложка» занимало бы строку шириной с сам квадрат,
+              а карандаш с нотой и без неё говорят, что это такое. */}
+          <span className="sr-only text-sm text-muted sm:not-sr-only">Обложка</span>
           <CoverInput initialSrc={initial?.coverSrc} />
         </div>
         <div className="flex flex-col gap-3">
@@ -547,12 +613,25 @@ export function SongEditor({
         </div>
       </div>
 
-      {/* Инструмент — не в складном разделе: от него зависят и аппликатуры, и
-          каталог, в котором песня окажется, а выбор из двух карточек стоит одну
-          строку. Прятать решение такого веса ради одной строки незачем. */}
+      {/* Инструмент и видимость стоят парой, и не случайно: оба отвечают на один
+          вопрос — куда попадёт разбор. Инструмент выбирает каталог, видимость
+          решает, будет ли он в каталоге вообще. Рядом их и держим.
+
+          Ни тот ни другой не складываются: от инструмента зависят аппликатуры,
+          а видимость по умолчанию «публичная», и спрятать её значило бы дать
+          человеку опубликовать песню, не показав ему этого. Стоит каждый одну
+          строку — прятать решения такого веса ради строки незачем. */}
       <div className="flex flex-col gap-1.5">
         <span className="text-sm text-muted">Инструмент</span>
         <InstrumentSelect value={instrument} onChange={setInstrument} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm text-muted">Видимость</span>
+        <VisibilitySelect
+          key={`vis-${restoreNonce}`}
+          initial={restored?.visibility ?? initial?.visibility}
+        />
       </div>
 
       <FormSection
@@ -605,46 +684,24 @@ export function SongEditor({
         </div>
       </FormSection>
 
-      <FormSection
-        title="Заметка от автора"
-        hint={note.trim() || 'нет'}
-        open={openNote}
-        onOpenChange={setOpenNote}
-      >
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm text-muted">Показывается над текстом песни, видна всем</span>
-          {/* Ручной ползунок убран, высоту ведёт содержимое (см. эффект выше).
-              На телефоне тянуть угол неудобно физически, а промахнувшись —
-              вместо растягивания прокручиваешь страницу; поле же короткое и
-              заранее знает, сколько ему нужно. Потолок в 14rem не даёт длинной
-              заметке вытеснить с экрана всё остальное — дальше своя прокрутка. */}
-          <textarea
-            ref={noteRef}
-            name="note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            maxLength={SONG_LIMITS.note}
-            className="field min-h-[4.5rem] max-h-[14rem] resize-none overflow-y-auto py-2 text-sm leading-relaxed"
-            placeholder="Необязательно: контекст, как играть, посвящение…"
-          />
-        </label>
-      </FormSection>
-
       {/* ── Текст песни ──────────────────────────────────────────────────────
           Главный блок формы, и единственный, который никогда не складывается:
-          ради него редактор и открывают. Кнопка импорта переехала сюда из шапки
-          левой колонки — она относится ко всему разделу, а не к одному полю. */}
+          ради него редактор и открывают. Поэтому же он стоит сразу за
+          параметрами — всё необязательное (аппликатуры, заметка) убрано ПОД
+          него, чтобы до работы можно было добраться одним экраном.
+
+          Заголовок «Текст песни», а не «Разметка ChordPro»: сюда приходят
+          записать песню, а не отредактировать разметку. Само слово ChordPro
+          осталось, но в справке под полем — тому, кто его ищет, оно там и
+          нужно, а остальных на входе не встречает техническим термином. */}
       <section className="flex flex-col gap-3">
         <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-medium">Текст песни</h2>
           <ImportTextDialog onImport={importText} />
         </div>
 
-        <ChordPalette songKey={songKey} used={usedChords} onInsert={insertChord} />
-
-        {/* Над сеткой, а не в колонке редактора: у левой и правой колонок
-            выровнены шапки, и вставка баннера внутрь увела бы textarea вниз
-            относительно превью. */}
+        {/* Над панелью, а не внутри неё: баннер появляется и исчезает по мере
+            правок, и внутри он дёргал бы высоту поля вместе с превью. */}
         {oldFifths.length > 0 ? (
           <div className="draft-banner" role="status">
             <FifthsIcon />
@@ -673,46 +730,94 @@ export function SongEditor({
           </div>
         ) : null}
 
-        {/* Редактор + живое превью (верх textarea и превью на одном уровне:
-            подписи у обеих колонок одинаковые, поэтому выравниваются сами). */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted">Разметка ChordPro</span>
-            <ChordProInput
-              ref={textareaRef}
-              name="body"
-              value={body}
-              onChange={setBody}
-              onScroll={onEditorScroll}
-              className="min-h-[24rem] lg:h-[34rem] lg:min-h-0 lg:resize-none"
-            />
-            <span className="text-xs text-faint">
-              Аккорды в квадратных скобках: <code>[Am]сло[C]во</code>. Серый текст:{' '}
-              <code>%текст%</code>. Секции: <code>{'{start_of_chorus}'}</code>,{' '}
-              <code>{'{comment: ...}'}</code>.
-            </span>
+        {/* Тулбар, поле и превью — одна коробка с общей рамкой. Палитра
+            перестала быть самостоятельным блоком где-то сверху и стала тем, чем
+            она и является: панелью инструментов того поля, куда вставляет. */}
+        <div className="editor-panel">
+          {/* Переключатель — только там, где поля не помещаются рядом. */}
+          <div className="editor-tabs lg:hidden">
+            <button
+              type="button"
+              onClick={() => setPane('edit')}
+              aria-pressed={pane === 'edit'}
+              className={pane === 'edit' ? 'editor-tab editor-tab--on' : 'editor-tab'}
+            >
+              Редактирование
+            </button>
+            <button
+              type="button"
+              onClick={() => setPane('preview')}
+              aria-pressed={pane === 'preview'}
+              className={pane === 'preview' ? 'editor-tab editor-tab--on' : 'editor-tab'}
+            >
+              Превью
+            </button>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm text-muted">Превью</span>
+          {/* Палитра — инструмент разметки, на вкладке превью ей делать нечего.
+              На широком экране видна всегда: там нет и самих вкладок. */}
+          <div className={pane === 'preview' ? 'hidden lg:block' : ''}>
+            <ChordPalette used={usedChords} onInsert={insertChord} />
+          </div>
+
+          <div className="editor-cols">
+            <div className={paneClass('edit')}>
+              <ChordProInput
+                ref={textareaRef}
+                name="body"
+                value={body}
+                onChange={setBody}
+                onScroll={onEditorScroll}
+                className="h-[20rem] resize-none sm:h-[22rem] lg:h-[32rem]"
+              />
+            </div>
+            <div className={paneClass('preview')}>
             <div
               ref={previewRef}
               onScroll={onPreviewScroll}
-              // Аккорды в превью крупнее обычного: лист здесь ужат до 0.9rem, и
-              // на 0.64em от него имена аккордов читались с трудом.
+              // Лист здесь мельче, чем на странице разбора: превью — не чтение,
+              // а сверка, и в него важнее уместить больше строк за раз.
+              //
+              // Синхронной прокрутке это не мешает: она считает не пиксели, а
+              // ДОЛЮ прокрученного (см. syncScroll), поэтому разная высота слоёв
+              // — её штатный случай, ради него доли и заведены. Единственный
+              // побочный эффект в другую сторону: чем мельче текст, тем чаще
+              // превью помещается целиком, а тогда прокручивать в нём нечего —
+              // на этот случай в syncScroll стоит проверка `dstRange <= 0`.
+              //
+              // Аккорды крупнее обычной доли: на 0.64em от такого листа имена
+              // читались с трудом, поэтому подняли до 0.9em.
               style={
-                { '--sheet-font-size': '0.9rem', '--sheet-chord-size': '0.88em' } as CSSProperties
+                { '--sheet-font-size': '0.82rem', '--sheet-chord-size': '0.9em' } as CSSProperties
               }
-              // Высота фиксирована и на телефоне тоже, со своей прокруткой —
-              // как у поля разметки слева. Раньше здесь стоял только `min-h`, и
-              // превью росло под длину песни: на телефоне под разметкой
-              // разворачивалась вторая копия всего текста, и до аппликатур с
-              // кнопкой «Сохранить» приходилось листать её целиком.
-              className="card scroll-thin h-[24rem] overflow-auto px-5 py-5 lg:h-[34rem]"
+              // Высота фиксирована и на телефоне тоже, со своей прокруткой — как
+              // у поля слева. С одним лишь `min-h` превью росло под длину песни,
+              // и на телефоне под разметкой разворачивалась вторая копия всего
+              // текста, которую приходилось листать до кнопки «Сохранить».
+              className="scroll-thin h-[20rem] overflow-auto px-4 py-4 sm:h-[22rem] lg:h-[32rem]"
             >
               <ChordSheet song={preview} />
             </div>
+            </div>
           </div>
+        </div>
+
+        {/* div, а не p: внутри лежит <details>, а он не является inline-содержимым —
+            браузер закрыл бы абзац перед ним и разорвал строку надвое. */}
+        <div className="text-xs text-faint">
+          Аккорды — в квадратных скобках перед нужным слогом: <code>[Am]сло[C]во</code>.{' '}
+          <details className="hint-pop hint-pop--text">
+            <summary>Как это работает?</summary>
+            <span className="hint-pop-body">
+              Формат называется ChordPro. Кроме аккордов он понимает служебные строки:{' '}
+              <code>%текст%</code> — серая пометка (проигрыш, «× 2»);{' '}
+              <code>{'{start_of_chorus}'}</code> и <code>{'{end_of_chorus}'}</code> — границы
+              припева; <code>{'{comment: ...}'}</code> — подпись над строчкой. Всё, что не
+              распознано, остаётся обычным текстом, поэтому испортить песню разметкой нельзя.
+              Готовый таб «аккорды над словами» можно вставить кнопкой сверху — он
+              переведётся сам.
+            </span>
+          </details>
         </div>
       </section>
 
@@ -737,15 +842,32 @@ export function SongEditor({
         />
       </FormSection>
 
-      {/* Видимость стоит вплотную к «Сохранить» и не складывается: это последнее
-          решение перед отправкой — куда именно уйдёт разбор. */}
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm text-muted">Видимость</span>
-        <VisibilitySelect
-          key={`vis-${restoreNonce}`}
-          initial={restored?.visibility ?? initial?.visibility}
-        />
-      </div>
+      {/* Заметка уехала под текст: она про песню, а не про её набор, и стоя
+          выше отделяла параметры от самой работы. */}
+      <FormSection
+        title="Заметка от автора"
+        hint={note.trim() || 'нет'}
+        open={openNote}
+        onOpenChange={setOpenNote}
+      >
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm text-muted">Показывается над текстом песни, видна всем</span>
+          {/* Ручной ползунок убран, высоту ведёт содержимое (см. эффект выше).
+              На телефоне тянуть угол неудобно физически, а промахнувшись —
+              вместо растягивания прокручиваешь страницу; поле же короткое и
+              заранее знает, сколько ему нужно. Потолок в 14rem не даёт длинной
+              заметке вытеснить с экрана всё остальное — дальше своя прокрутка. */}
+          <textarea
+            ref={noteRef}
+            name="note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={SONG_LIMITS.note}
+            className="field min-h-[4.5rem] max-h-[14rem] resize-none overflow-y-auto py-2 text-sm leading-relaxed"
+            placeholder="Необязательно: контекст, как играть, посвящение…"
+          />
+        </label>
+      </FormSection>
 
       {state.error ? (
         <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
@@ -753,20 +875,14 @@ export function SongEditor({
         </p>
       ) : null}
 
-      <div className="flex items-center gap-3">
+      {/* Липкая полоса: форма длинная, и «Сохранить» уезжало под нижний край,
+          стоило раскрыть пару разделов. Sticky, а не fixed, — элемент остаётся
+          последним в потоке и внизу страницы садится на своё место. */}
+      <div className="editor-actions">
         <button type="submit" disabled={pending} className="btn btn-primary">
           {pending ? '…' : submitLabel}
         </button>
-        {/* Подпись в адресе собирается из СОХРАНЁННЫХ названия и исполнителя:
-            «Отмена» ведёт туда, откуда пришли, а не туда, что успели набрать. */}
-        <Link
-          href={
-            initial?.id
-              ? songPath({ id: initial.id, title: initial.title ?? '', artist: initial.artist })
-              : '/songs'
-          }
-          className="btn btn-ghost"
-        >
+        <Link href={cancelHref} className="btn btn-ghost">
           Отмена
         </Link>
         {savedAt ? (

@@ -5,13 +5,40 @@ import { FretboardEditor } from './FretboardEditor';
 import { getChordShape, type ChordShape } from '@/lib/chords/diagrams';
 import { getInstrument, type InstrumentId } from '@/lib/chords/instruments';
 
-const HINT = (
-  <>
-    Выберите начальный лад и отметьте кнопкой струны, которые зажимаются. Кнопка сверху струны
-    переключает открытую (○) / заглушённую (×). Для <b>баррэ</b> — зажмите и протяните мышью
-    вдоль одного лада; клик по палке убирает её.
-  </>
-);
+/**
+ * Как рисовать форму. Три строки текста, и стояли они ДВАЖДЫ — над каждой из
+ * двух групп аккордов. Прочитать их нужно один раз в жизни, а место они
+ * занимали при каждом открытии редактора, отодвигая сами грифы вниз. Теперь
+ * лежат под знаком вопроса.
+ *
+ * Раскрывается через <details>, а не всплывает по наведению: подсказка на
+ * hover'е на телефоне недостижима, а это ровно тот текст, без которого там не
+ * догадаешься, что баррэ ставится протягиванием.
+ */
+function HowTo() {
+  return (
+    <details className="hint-pop">
+      <summary aria-label="Как рисовать аппликатуру" title="Как рисовать аппликатуру">
+        <QuestionIcon />
+      </summary>
+      <p className="hint-pop-body">
+        Выберите начальный лад и отметьте кнопкой струны, которые зажимаются. Кнопка сверху
+        струны переключает открытую (○) / заглушённую (×). Для <b>баррэ</b> — зажмите и
+        протяните мышью вдоль одного лада; клик по палке убирает её.
+      </p>
+    </details>
+  );
+}
+
+function QuestionIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 2-2.8 2.5-2.8 4" />
+      <path d="M12 17.5h.01" />
+    </svg>
+  );
+}
 
 /**
  * Аппликатуры аккордов песни. Нестандартные (без встроенной формы) — сверху,
@@ -79,12 +106,17 @@ export function ChordDefsEditor({
 
       {needing.length > 0 ? (
         <>
-          <p className="text-sm text-muted">Нестандартные аккорды — задайте форму. {HINT}</p>
-          {/* justify-center: грифы переносятся по строкам, и при выключке влево
-              последний ряд повисал у края рваным хвостом. */}
-          <div className="flex flex-wrap justify-center gap-5">
+          {/* div, а не p: внутри <details>, который в абзац класть нельзя. */}
+          <div className="chord-defs-lead">
+            Нестандартные аккорды — задайте форму. <HowTo />
+          </div>
+          {/* Сетка, а не flex-wrap: на широком экране грифы встают в три столбца
+              вместо двух, и блок перестаёт быть простынёй на пол-экрана.
+              `auto-fill` сам решает, сколько поместилось, — от телефона в один
+              столбец до десктопа. */}
+          <div className="chord-defs-grid">
             {needing.map((c) => (
-              <div key={c} className="flex flex-col items-center gap-2 rounded-xl border border-line p-4">
+              <div key={c} className="flex flex-col items-center gap-2 rounded-xl border border-line p-3">
                 <span className="text-lg font-medium text-accent">{c}</span>
                 <FretboardEditor
                   value={defs[c] ?? empty}
@@ -99,18 +131,18 @@ export function ChordDefsEditor({
 
       {standard.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted">
-            Стандартные аккорды — форма подставляется автоматически, здесь её можно заменить своей
-            (например, другой позицией на грифе). {HINT}
-          </p>
-          <div className="flex flex-wrap justify-center gap-5">
+          <div className="chord-defs-lead">
+            Стандартные — форма автоматическая, но её можно заменить своей: например, другой
+            позицией на грифе. <HowTo />
+          </div>
+          <div className="chord-defs-grid">
             {standard.map((c) => {
               const custom = defs[c];
               const value = custom ?? getChordShape(c, inst) ?? empty;
               return (
                 <div
                   key={c}
-                  className={`flex flex-col items-center gap-2 rounded-xl border p-4 ${
+                  className={`flex flex-col items-center gap-2 rounded-xl border p-3 ${
                     custom ? 'border-accent' : 'border-line'
                   }`}
                 >

@@ -75,7 +75,18 @@ export async function CatalogView({
       </div>
 
       <div className="mb-8 flex flex-col gap-3">
-        <InstrumentTabs current={instrument} query={query} verified={verified} />
+        {/* Переключатель инструментов — только на телефоне, и это не полумера.
+            От `sm` то же самое стоит в шапке сайта («Гитара» / «Укулеле»), и на
+            странице каталога он был вторым таким же в полутора сантиметрах.
+
+            А вот НИЖЕ `sm` шапочная навигация скрыта (см. SiteHeader), в нижней
+            панели каталог — один пункт на оба инструмента, и пятый туда не
+            влезает (см. MobileNav). Убери эти вкладки совсем — и с телефона на
+            укулельный каталог не попасть вообще ниоткуда, кроме как набрав
+            /ukulele руками. */}
+        <div className="sm:hidden">
+          <InstrumentTabs current={instrument} query={query} verified={verified} />
+        </div>
 
         <form className="flex gap-2" method="get">
           <input

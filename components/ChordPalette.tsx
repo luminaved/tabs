@@ -1,25 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { diatonicChords } from '@/lib/chords/key';
 
 /**
  * Быстрая вставка аккордов: клик по чипу вставляет [Аккорд] в позицию курсора.
- * Показывает аккорды текущей тональности + уже использованные в песне + поле
- * для произвольного. Убирает печать скобок и переключение раскладки.
+ * Избавляет от печати скобок и переключения раскладки.
+ *
+ * Показываются только аккорды, УЖЕ встречающиеся в тексте, — то есть повтор
+ * того, что человек набрал сам. Подсказки по тональности («в Am играют Am, Dm,
+ * E7…») здесь были и убраны: разбор пишут с конкретной песни, а не сочиняют по
+ * теории, поэтому предложенное почти никогда не совпадало с нужным, но занимало
+ * первую и самую заметную половину тулбара.
  */
 export function ChordPalette({
-  songKey,
   used,
   onInsert,
 }: {
-  songKey: string;
   used: string[];
   onInsert: (chord: string) => void;
 }) {
   const [custom, setCustom] = useState('');
-  const diatonic = diatonicChords(songKey);
-  const extra = used.filter((c) => !diatonic.includes(c));
 
   const addCustom = () => {
     const c = custom.trim();
@@ -30,62 +30,62 @@ export function ChordPalette({
   };
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line bg-[color-mix(in_oklab,var(--color-surface)_45%,transparent)] p-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        {diatonic.length ? (
-          <>
-            <span className="mr-1 text-xs text-muted">Тональность:</span>
-            {diatonic.map((c) => (
-              <button
-                type="button"
-                key={c}
-                className="chip"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onInsert(c)}
-              >
-                {c}
-              </button>
-            ))}
-          </>
-        ) : (
-          <span className="text-xs text-muted">Укажите тональность выше — покажу её аккорды.</span>
-        )}
-      </div>
-
-      {extra.length ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs text-muted">В песне:</span>
-          {extra.map((c) => (
-            <button type="button" key={c} className="chip" onClick={() => onInsert(c)}>
+    // Один ряд с переносом: чипы и поле «свой» лежат в общем потоке и занимают
+    // столько строк, сколько нужно, а разделитель показывает, где кончается
+    // список аккордов и начинается ручной ввод.
+    <div className="editor-toolbar">
+      {used.length ? (
+        <>
+          <span className="editor-toolbar-label">В песне</span>
+          {used.map((c) => (
+            <button
+              type="button"
+              key={c}
+              className="chip"
+              // Гасим mousedown, иначе нажатие уводит фокус из textarea и
+              // схлопывает выделение — а вставка идёт именно в него
+              // (см. insertChord). Раньше это стояло только у половины чипов.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onInsert(c)}
+            >
               {c}
             </button>
           ))}
-        </div>
+          <span className="editor-toolbar-sep" aria-hidden />
+        </>
       ) : null}
 
-      <div className="flex items-center gap-1.5">
-        <input
-          value={custom}
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              addCustom();
-            }
-          }}
-          placeholder="свой, напр. F#m7"
-          className="field h-8 w-40 text-sm"
-        />
-        <button
-          type="button"
-          className="btn btn-outline h-8 px-3 text-sm"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={addCustom}
-        >
+      {/* На телефоне поле уже, а подпись кнопки сжимается до «+»: вдвоём они
+          занимали почти всю строку тулбара, то есть целый лишний ряд на экране,
+          где каждый ряд на счету. Смысл читается из плейсхолдера рядом. */}
+      <input
+        value={custom}
+        onChange={(e) => setCustom(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustom();
+          }
+        }}
+        placeholder="свой аккорд"
+        aria-label="Свой аккорд"
+        className="field h-7 w-24 px-2.5 text-sm sm:w-36"
+      />
+      <button
+        type="button"
+        className="btn btn-outline h-7 px-2.5 text-sm"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={addCustom}
+        title="Вставить в позицию курсора"
+        aria-label="Вставить в позицию курсора"
+      >
+        <span className="sm:hidden" aria-hidden>
+          +
+        </span>
+        <span className="hidden sm:inline" aria-hidden>
           Вставить
-        </button>
-        <span className="ml-1 text-xs text-faint">вставка в позицию курсора</span>
-      </div>
+        </span>
+      </button>
     </div>
   );
 }
