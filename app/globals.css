@@ -342,7 +342,10 @@
     line-height: 1;
   }
 
-  /* Загрузка аватара: карандаш/крестик поверх при наведении */
+  /* Загрузка картинки: карандаш/крестик поверх при наведении.
+     Отсюда же берёт оформление обложка в редакторе (.cover-edit) — разница
+     между ними только в форме выреза, поэтому селекторы общие, а не вторая
+     копия тех же чисел. Своё у обложки — в её собственном блоке ниже. */
   .avatar-edit {
     position: relative;
     display: inline-block;
@@ -353,20 +356,27 @@
        не было, так что сплющивало именно её вместе с круглой накладкой). */
     flex-shrink: 0;
   }
-  .avatar-overlay {
+  .avatar-overlay,
+  .cover-edit-overlay {
     position: absolute;
     inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: 50%;
     background: rgba(0, 0, 0, 0.5);
     opacity: 0;
     transition: opacity 0.15s ease;
   }
+  /* Круг только у аватара: обложку обрезает по своему радиусу сама .cover-edit
+     (у неё overflow: hidden), и накладке скругляться незачем. */
+  .avatar-overlay {
+    border-radius: 50%;
+  }
   .avatar-edit:hover .avatar-overlay,
-  .avatar-edit:focus-within .avatar-overlay {
+  .avatar-edit:focus-within .avatar-overlay,
+  .cover-edit:hover .cover-edit-overlay,
+  .cover-edit:focus-within .cover-edit-overlay {
     opacity: 1;
   }
   /* Там, где наводить нечем, накладка видна всегда — приглушённо, но видна.
@@ -374,12 +384,14 @@
      раньше что-то делал: попадал в невидимую кнопку и открывал выбор файла.
      Угадать это было нельзя — снаружи аватар выглядел просто картинкой. */
   @media (hover: none) {
-    .avatar-overlay {
+    .avatar-overlay,
+    .cover-edit-overlay {
       opacity: 1;
       background: rgba(0, 0, 0, 0.34);
     }
   }
-  .avatar-overlay-btn {
+  .avatar-overlay-btn,
+  .cover-edit-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -391,8 +403,17 @@
     cursor: pointer;
     transition: background-color 0.15s ease;
   }
-  .avatar-overlay-btn:hover {
+  .avatar-overlay-btn:hover,
+  .cover-edit-btn:hover {
     background: rgba(255, 255, 255, 0.3);
+  }
+  /* Пока файл читается и жмётся, кнопка нажатий не принимает — и должна это
+     показывать. Раньше состояние держалось на подписи («…» вместо «Заменить»),
+     а у значка подписи нет. */
+  .avatar-overlay-btn:disabled,
+  .cover-edit-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   /* Вкладки (кабинет) */
@@ -2671,39 +2692,21 @@
     justify-content: center;
     color: var(--color-faint);
   }
-  /* Кнопки лежат НА обложке, а не под ней: под ней они забирали бы у картинки
-     ровно ту высоту, ради которой всё и затевалось. Подложка — градиент, а не
-     сплошная заливка: снизу у обложек чаще всего темнее, и сплошная полоса
-     резала бы картинку пополам. */
-  .cover-edit-actions {
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    display: flex;
-    justify-content: center;
-    gap: 0.3rem;
-    padding: 0.75rem 0.4rem 0.4rem;
-    background: linear-gradient(to top, color-mix(in oklab, #000 78%, transparent), transparent);
-  }
-  .cover-edit-btn {
-    border: 1px solid rgb(255 255 255 / 0.25);
-    border-radius: 0.45rem;
-    background: color-mix(in oklab, #000 45%, transparent);
-    padding: 0.25rem 0.5rem;
-    color: #fff;
-    font-size: 0.75rem;
-    line-height: 1.2;
-    backdrop-filter: blur(4px);
-    transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease;
-  }
-  .cover-edit-btn:hover {
-    border-color: var(--color-accent);
-    background: color-mix(in oklab, #000 65%, transparent);
-  }
-  .cover-edit-btn:disabled {
-    opacity: 0.6;
+  /* Накладка с карандашом и крестиком — общая с аватаром, см. .avatar-overlay.
+     Здесь только то, что у обложки своё.
+
+     Прежний вариант — полоса снизу с подписанными кнопками «Заменить» и
+     «Убрать» — не пережил встречи с настоящим размером: две подписи с полями и
+     рамками шире квадрата в 8.5rem, и кнопки упирались в оба края. Значки
+     решают это не подгонкой отступов, а тем, что перестают зависеть от длины
+     слова: 2rem + 2rem + зазор укладываются в любую обложку с запасом. */
+
+  /* У пустой обложки накладка видна всегда. Показывать по наведению нечего:
+     за ней не картинка, а серый квадрат со значком, и без кнопок он выглядит
+     не «наведи меня», а «здесь ничего нет и не будет». */
+  .cover-edit--empty .cover-edit-overlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.28);
   }
 
   /* Обложка на странице песни — квадрат фиксированного размера. На узких

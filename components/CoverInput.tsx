@@ -51,7 +51,9 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
     // Размер обложки задаёт ширина столбца в шапке редактора, высоту она берёт
     // из своей пропорции 1:1 — тянуть этот блок по высоте ряда не нужно.
     <div className="flex flex-col gap-2">
-      <div className="cover-edit">
+      {/* Карандаш и крестик поверх картинки — тот же приём, что у аватара в
+          кабинете (AvatarInput), вплоть до общих правил в globals.css. */}
+      <div className={previewSrc ? 'cover-edit' : 'cover-edit cover-edit--empty'}>
         {previewSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={previewSrc} alt="Обложка" className="cover-edit-img" />
@@ -61,18 +63,26 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
           </div>
         )}
 
-        <div className="cover-edit-actions">
+        <div className="cover-edit-overlay">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={busy}
             className="cover-edit-btn"
+            title={previewSrc ? 'Заменить обложку' : 'Загрузить обложку'}
+            aria-label={previewSrc ? 'Заменить обложку' : 'Загрузить обложку'}
           >
-            {busy ? '…' : previewSrc ? 'Заменить' : 'Загрузить'}
+            <PencilIcon />
           </button>
           {previewSrc ? (
-            <button type="button" onClick={() => setCover('')} className="cover-edit-btn">
-              Убрать
+            <button
+              type="button"
+              onClick={() => setCover('')}
+              className="cover-edit-btn"
+              title="Убрать обложку"
+              aria-label="Убрать обложку"
+            >
+              <CrossIcon />
             </button>
           ) : null}
         </div>
@@ -98,6 +108,26 @@ export function CoverInput({ initialSrc }: { initialSrc?: string | null }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/* Карандаш и крестик повторяют значки из AvatarInput: это одно и то же действие
+   в двух местах, и выглядеть оно обязано одинаково. Общего модуля значков в
+   проекте нет — каждый компонент держит свои, — поэтому пути продублированы. */
+function PencilIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function CrossIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
   );
 }
 
