@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { transposeChord } from './chord';
 import {
   DIAGRAM_MAX_ROWS,
   DIAGRAM_MIN_ROWS,
@@ -10,6 +11,8 @@ import {
   parseFrets,
   parsePowerFifth,
   powerFifthToChordName,
+  transposeChordDefs,
+  transposeShape,
 } from './diagrams';
 
 describe('fretSpan', () => {
@@ -167,8 +170,13 @@ describe('getChordShape', () => {
     expect(getChordShape('C5')?.barres).toBeUndefined();
   });
 
-  it('на укулеле квинт нет', () => {
-    expect(getChordShape('A5', 'ukulele')).toBeNull();
+  it('на укулеле у квинты своя форма, не гитарная', () => {
+    // Раньше здесь стояло «на укулеле квинт нет», и это была не оговорка в
+    // тесте, а поведение: A5 на укулеле не рисовался вовсе. Форму приходилось
+    // задавать руками каждому такому аккорду — а при транспонировании она
+    // пропадала вместе со старым именем.
+    expect(getChordShape('A5', 'ukulele')?.frets).toEqual([2, 4, 0, 0]);
+    expect(getChordShape('A5', 'guitar')?.frets).toEqual([5, 7, 7, -1, -1, -1]);
   });
 
   it('без формы — null', () => {
@@ -179,7 +187,7 @@ describe('getChordShape', () => {
 
 /**
  * Главная страховка миграции старых разборов: переименование «5В» → «A5» не
- * должно менять картинку. Правило выбора струны в `powerChordFrets` подобрано
+ * должно менять картинку. Правило выбора струны в `guitarPowerChord` (instruments.ts) подобрано
  * именно под это, и таблица ниже — то, что не даст его случайно «улучшить».
  *
  * Позиции выше ходовых сюда не входят намеренно: «7Н» (E5 на 7 ладу) имя не
@@ -243,6 +251,121 @@ describe('powerFifthToChordName', () => {
     expect(powerFifthToChordName('Am')).toBeNull();
     expect(powerFifthToChordName('23В')).toBeNull();
     expect(parsePowerFifth('5X')).toBeNull();
+  });
+});
+
+describe('transposeShape', () => {
+  it('форма без открытых струн едет по грифу вместе с песней', () => {
+    expect(transposeShape({ frets: [-1, 2, 4, 4, 3, 2] }, 2)).toEqual({
+      frets: [-1, 4, 6, 6, 5, 4],
+    });
+  });
+
+  it('баррэ едет вместе с формой', () => {
+    expect(
+      transposeShape({ frets: [1, 3, 3, 2, 1, 1], barres: [{ fret: 1, from: 0, to: 5 }] }, 3),
+    ).toEqual({ frets: [4, 6, 6, 5, 4, 4], barres: [{ fret: 4, from: 0, to: 5 }] });
+  });
+
+  it('форма с открытой струной не едет — её двигать нельзя', () => {
+    // Открытая струна звучит своей нотой независимо от того, куда переехала
+    // рука: сдвинутый C дал бы не D, а созвучие ни на что не похожее.
+    expect(transposeShape({ frets: [-1, 3, 2, 0, 1, 0] }, 2)).toBeNull();
+  });
+
+  it('нулевой сдвиг возвращает ту же форму', () => {
+    const shape = { frets: [-1, 3, 2, 0, 1, 0] };
+    expect(transposeShape(shape, 0)).toBe(shape);
+  });
+
+  it('уехавшая за гриф форма возвращается октавой ниже', () => {
+    // Bm с 10 лада + 4 = 14-й, играть неудобно; та же форма на 2-м звучит тем
+    // же аккордом.
+    expect(transposeShape({ frets: [-1, 10, 12, 12, 11, 10] }, 4)?.frets).toEqual([
+      -1, 2, 4, 4, 3, 2,
+    ]);
+  });
+
+  it('сдвиг вниз за порожек — октавой выше', () => {
+    expect(transposeShape({ frets: [-1, 2, 4, 4, 3, 2] }, -4)?.frets).toEqual([
+      -1, 10, 12, 12, 11, 10,
+    ]);
+  });
+
+  it('форма, которой не хватает грифа ни в одной октаве, не отдаётся', () => {
+    // D5 на укулеле (баррэ на 2 ладу, точки на 5-м) плюс восемь полутонов —
+    // это 10 и 13 лады, а октавой ниже упирается в порожек. Пусть лучше
+    // возьмут встроенную: она посчитана для нового имени и лежит внизу.
+    expect(transposeShape({ frets: [2, 2, 5, 5] }, 8)).toBeNull();
+  });
+});
+
+describe('transposeChordDefs', () => {
+  const uke = 'ukulele';
+
+  it('своя форма переезжает под новое имя аккорда', () => {
+    // Ровно тот случай, ради которого всё написано: разбор для укулеле, где
+    // квинты нарисованы руками. До этого при нажатии «+» диаграмма исчезала.
+    const defs = { D5: { frets: [2, 2, 5, 5], barres: [{ fret: 2, from: 0, to: 3 }] } };
+    expect(transposeChordDefs(defs, 1, 'sharp')).toEqual({
+      'D#5': { frets: [3, 3, 6, 6], barres: [{ fret: 3, from: 0, to: 3 }] },
+    });
+  });
+
+  it('написание нот берётся из целевой тональности', () => {
+    const defs = { A5: { frets: [4, -1, 2, 2] } };
+    expect(Object.keys(transposeChordDefs(defs, 1, 'flat'))).toEqual(['Bb5']);
+    expect(Object.keys(transposeChordDefs(defs, 1, 'sharp'))).toEqual(['A#5']);
+  });
+
+  it('форма с открытой струной отдаётся встроенной', () => {
+    // Своей формы у нового имени не остаётся — и это правильно: её место
+    // занимает встроенная, посчитанная для нужной высоты.
+    const defs = { C5: { frets: [0, 0, 3, 3] } };
+    expect(transposeChordDefs(defs, 2, 'sharp')).toEqual({});
+    expect(getChordShape('D5', uke, {})?.frets).toEqual([2, 2, 5, 5]);
+  });
+
+  it('не-аккорд остаётся под своим именем', () => {
+    // «5В» в тексте песни тоже не транспонируется (разбор ждёт корень A-G),
+    // поэтому и форма обязана остаться на месте — иначе она потерялась бы.
+    const defs = { '5В': { frets: [5, 7, 7, -1, -1, -1] } };
+    expect(transposeChordDefs(defs, 3, 'sharp')).toEqual(defs);
+  });
+
+  it('нулевой сдвиг ничего не трогает', () => {
+    const defs = { D5: { frets: [2, 2, 5, 5] } };
+    expect(transposeChordDefs(defs, 0, 'sharp')).toBe(defs);
+  });
+
+  it('разбор на квинтах не теряет аппликатур ни на одном сдвиге', () => {
+    // Формы и аккорды — из настоящего разбора для укулеле, где все четыре
+    // квинты были нарисованы руками (встроенных на укулеле тогда не было).
+    // Ровно эта песня и показывала баг: «+» стирал все диаграммы разом.
+    // Проверяем весь диапазон, который даёт кнопка (см. SongViewer): часть
+    // форм переезжает вместе с песней, часть уступает встроенным, но пустой
+    // карточки не остаётся ни на одном полутоне.
+    const defs = parseChordDefs(
+      JSON.stringify({
+        B5: { frets: [4, -1, 2, 2] },
+        G5: { frets: [0, 2, 3, 5] },
+        D5: { frets: [2, 2, 5, 5], barres: [{ fret: 2, from: 0, to: 3 }] },
+        A5: { frets: [2, 4, 0, 0] },
+      }),
+      'ukulele',
+    );
+
+    for (let n = -11; n <= 11; n++) {
+      const moved = transposeChordDefs(defs, n, 'sharp');
+      for (const c of ['B5', 'G5', 'D5', 'A5']) {
+        const name = transposeChord(c, n, 'sharp');
+        const shape = getChordShape(name, 'ukulele', moved);
+        expect(shape, `${c} → ${name} (сдвиг ${n})`).not.toBeNull();
+        expect(Math.max(...shape!.frets), `${name} [${shape!.frets}]: за гриф`).toBeLessThanOrEqual(
+          12,
+        );
+      }
+    }
   });
 });
 

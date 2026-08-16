@@ -100,8 +100,9 @@ let pinned = 0;
 const skipped = [];
 
 for (const song of songs) {
-  // Квинты в этой записи — гитарная вещь; на укулеле их не играют, и там
-  // такие имена всё равно ничего не рисуют (powerChords: false).
+  // Запись «лад + В/Н» считает лады от 6-й и 5-й струн, которых на укулеле
+  // нет, — там такие имена ничего не рисуют (Instrument.fifthShorthand).
+  // Сами квинты на укулеле есть и форму получают по имени («A5»).
   const guitar = song.instrument !== 'ukulele';
 
   const tokens = [...song.body.matchAll(/\[([^\]\n]+)\]/g)]

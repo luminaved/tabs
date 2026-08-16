@@ -10,6 +10,7 @@
  */
 
 import { mod12, noteToPc, pcToName, type Accidental } from './pitch';
+import { parseChord, transposeChord } from './chord';
 import {
   getInstrument,
   type Barre,
@@ -227,8 +228,10 @@ export function parseFrets(input: string, strings = 6): ChordFrets | null {
 }
 
 /**
- * Открытые струны, на которых стоит корень квинты: 6-я (E) и 5-я (A).
- * Отсюда считается и лад по имени аккорда, и имя аккорда по ладу.
+ * Открытые струны, от которых запись «лад + В/Н» считает корень квинты:
+ * 6-я (E) и 5-я (A). Сами формы квинт живут у инструмента
+ * ([instruments.ts](./instruments.ts), поле `powerChord`) — здесь только разбор
+ * этой записи, а она гитарная по устройству: других струн у неё нет.
  */
 const SIXTH_STRING_PC = 4; // E
 const FIFTH_STRING_PC = 9; // A
@@ -299,26 +302,87 @@ export function powerFifthToChordName(name: string, accidental: Accidental = 'sh
 }
 
 /**
- * Аппликатура квинты по высоте корня — то, чем рисуются «A5», «C5», «F#5».
- *
- * Струну корня выбираем так, как её берут в руки: до пятого лада — шестая
- * струна, дальше — пятая. Выше пятого лада форма от шестой струны уводит руку
- * в неудобную позицию, и гитаристы там переходят на струну тоньше.
- *
- * Порог именно 5, а не 7: на A5 обе позиции равноценны (5 лад шестой струны
- * либо открытая пятая), и выбран первый — он звучит полнее. Побочный, но
- * важный эффект: правило один в один воспроизводит прежнюю запись «лад + В/Н»
- * для всех ходовых позиций, поэтому переименование старых разборов не меняет
- * им картинки (закреплено таблицей в тестах).
- *
- * Отдельной веткой, а не строкой в `movableShapes`: та таблица умеет ровно одну
- * опорную струну (`movableRootPc`), а здесь их две.
+ * Докуда переносится своя аппликатура (см. `transposeShape`). Двенадцатый лад —
+ * октава: выше него на укулеле грифа попросту нет, а на гитаре начинается вырез
+ * корпуса.
  */
-export function powerChordFrets(rootPc: number): ChordFrets {
-  const sixth = mod12(rootPc - SIXTH_STRING_PC);
-  if (sixth <= 5) return [sixth, sixth + 2, sixth + 2, -1, -1, -1];
-  const fifth = mod12(rootPc - FIFTH_STRING_PC);
-  return [-1, fifth, fifth + 2, fifth + 2, -1, -1];
+const SHIFT_MAX_FRET = 12;
+
+/**
+ * Та же форма, сдвинутая на `semitones` ладов, — аппликатура для песни,
+ * которую транспонировали.
+ *
+ * Возвращает null для форм с ОТКРЫТЫМИ струнами, и это главное здесь. Открытая
+ * струна звучит той нотой, на которую настроена, и вместе с рукой никуда не
+ * едет: подвинув C-форму с открытой струной на два лада, получишь не D, а
+ * созвучие, которого никто не заказывал. Такие формы отдаём встроенным —
+ * `getChordShape` найдёт для нового имени свою.
+ *
+ * Уехавшую за гриф форму возвращаем октавой ниже (или выше — если сдвиг вниз
+ * увёл её за порожек): звучит она тем же аккордом, а рукой берётся.
+ *
+ * А вот когда и октавой ниже не получается — упирается в порожек, — форму не
+ * отдаём вовсе (null), и это осознанный выбор в пользу встроенной. Так «D5» с
+ * баррэ на 2 ладу, поднятый на восемь полутонов, не превращается в баррэ на
+ * 10-м с точками на 13-м (на укулеле такого лада просто нет): встроенная форма
+ * посчитана для нового имени и лежит внизу грифа.
+ */
+export function transposeShape(shape: ChordShape, semitones: number): ChordShape | null {
+  if (semitones === 0) return shape;
+  if (shape.frets.some((f) => f === 0)) return null;
+
+  const positives = shape.frets.filter((f) => f > 0);
+  if (positives.length === 0) return shape; // всё заглушено — двигать нечего
+
+  const min = Math.min(...positives);
+  const max = Math.max(...positives);
+
+  let shift = semitones;
+  while (min + shift < 1) shift += 12;
+  while (max + shift > SHIFT_MAX_FRET && min + shift - 12 >= 1) shift -= 12;
+  if (max + shift > SHIFT_MAX_FRET) return null;
+
+  const frets = shape.frets.map((f) => (f < 0 ? -1 : f + shift));
+  // Баррэ у своей формы задаёт человек, и его лад в общем случае не обязан
+  // совпадать с прижатыми струнами — уехавшую за порожек палку просто убираем.
+  const barres = shape.barres?.map((b) => ({ ...b, fret: b.fret + shift })).filter((b) => b.fret >= 1);
+  return barres && barres.length ? { frets, barres } : { frets };
+}
+
+/**
+ * Свои аппликатуры песни, перенесённые вместе с ней на `semitones` полутонов:
+ * ключи получают новые имена аккордов, формы — новые лады.
+ *
+ * Без этого транспонирование ломало ровно те разборы, ради которых свои формы
+ * и рисуют. Формы лежат под именем аккорда («D5»), а транспонирование это имя
+ * меняет («E5») — и страница переставала находить форму вовсе: диаграмма
+ * молча исчезала, стоило нажать «+». Особенно заметно это было на укулеле, где
+ * до появления встроенных квинт своими были ВСЕ формы power-аккордов.
+ *
+ * Написание нот (диез/бемоль) задаётся снаружи — тем же, каким подписаны
+ * аккорды в тексте (см. `songAccidental` в lib/chordpro/transform.ts): иначе
+ * форма осталась бы под «A#5», когда в песне уже «Bb5».
+ */
+export function transposeChordDefs(
+  defs: Record<string, ChordShape>,
+  semitones: number,
+  accidental: Accidental,
+): Record<string, ChordShape> {
+  if (semitones === 0) return defs;
+
+  const out: Record<string, ChordShape> = {};
+  for (const [name, shape] of Object.entries(defs)) {
+    // Не аккорд («5В», «N.C.») — в тексте песни такое имя тоже остаётся на
+    // месте, значит и форма остаётся под ним же.
+    if (!parseChord(name)) {
+      out[name] = shape;
+      continue;
+    }
+    const moved = transposeShape(shape, semitones);
+    if (!moved) continue; // с открытыми струнами — пусть берётся встроенная
+    out[transposeChord(name, semitones, accidental)] = moved;
+  }
+  return out;
 }
 
 /**
@@ -339,7 +403,7 @@ export function getChordShape(
   const base = trimmed.split('/')[0]; // бас в slash-аккорде для диаграммы игнорируем
   if (customDefs && customDefs[base]) return customDefs[base];
 
-  if (inst.powerChords) {
+  if (inst.fifthShorthand) {
     // Устаревшая запись «5В». Оставлена, чтобы вставленные табы рисовались;
     // сохранять её в новых разборах не нужно — см. `powerFifthToChordName`.
     const power = parsePowerFifth(base);
@@ -353,9 +417,9 @@ export function getChordShape(
   const rootPc = noteToPc(m[1]);
   if (rootPc === null) return null;
 
-  // Квинта («A5») — до таблицы подвижных форм: у неё корень стоит то на 6-й
-  // струне, то на 5-й, а таблица знает только одну опорную.
-  if (m[2] === '5' && inst.powerChords) return builtin(powerChordFrets(rootPc));
+  // Квинта («A5») — до таблицы подвижных форм: опорная струна у неё меняется
+  // вместе с корнем, а таблица знает только одну (см. `Instrument.powerChord`).
+  if (m[2] === '5' && inst.powerChord) return inst.powerChord(rootPc);
 
   const gen = inst.movableShapes[m[2]];
   if (!gen) return null;

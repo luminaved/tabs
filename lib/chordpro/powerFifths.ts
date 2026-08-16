@@ -45,7 +45,7 @@ export function powerFifthRenames(
   key?: string | null,
   instrument?: InstrumentId | null,
 ): PowerFifthRename[] {
-  if (!getInstrument(instrument).powerChords) return [];
+  if (!getInstrument(instrument).fifthShorthand) return [];
   const accidental = accidentalFor(key);
 
   const seen = new Set<string>();
@@ -74,7 +74,7 @@ export function normalizePowerFifths(
   key?: string | null,
   instrument?: InstrumentId | null,
 ): string {
-  if (!getInstrument(instrument).powerChords) return body;
+  if (!getInstrument(instrument).fifthShorthand) return body;
   const accidental = accidentalFor(key);
   return body.replace(CHORD_TOKEN_RE, (full, inner: string) => {
     const to = powerFifthToChordName(inner.trim(), accidental);
@@ -115,7 +115,7 @@ export function powerFifthPins(
   instrument?: InstrumentId | null,
 ): Record<string, ChordShape> {
   const inst = getInstrument(instrument);
-  if (!inst.powerChords) return defs;
+  if (!inst.fifthShorthand) return defs;
 
   const renames = powerFifthRenames(body, key, instrument);
   if (renames.length === 0) return defs;
@@ -128,7 +128,7 @@ export function powerFifthPins(
     const auto = getChordShape(to, inst);
     // Встроенная форма под новым именем совпадает с нынешней — закреплять
     // нечего. Так происходит со всеми ходовыми позициями: правило выбора струны
-    // в `powerChordFrets` нарочно повторяет прежнюю запись (см. там же).
+    // в `guitarPowerChord` (lib/chords/instruments.ts) нарочно повторяет прежнюю запись.
     if (!current || !auto || sameFrets(current.frets, auto.frets)) continue;
     // Своя форма уже задана под новым именем — не перебиваем. Сюда же попадает
     // столкновение вида «5В и 17В оба дают A5»: закрепится позиция первого по

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mod12, noteToPc } from './pitch';
-import { getChordShape } from './diagrams';
+import { DIAGRAM_MIN_ROWS, fretSpan, getChordShape } from './diagrams';
 import {
   INSTRUMENTS,
   INSTRUMENT_IDS,
@@ -16,6 +16,8 @@ import {
  * взяты из кода — иначе проверка была бы круговой. Каждая встроенная форма
  * разбирается обратно в звучащие ноты и сверяется с тем, что обещает название.
  */
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
 const INTERVALS: Record<string, number[]> = {
   '': [0, 4, 7],
   m: [0, 3, 7],
@@ -83,11 +85,33 @@ describe.each(INSTRUMENT_IDS)('инструмент %s', (id) => {
     for (const [quality, build] of Object.entries(inst.movableShapes)) {
       for (let pc = 0; pc < 12; pc++) {
         const frets = build(mod12(pc - inst.movableRootPc));
-        const name = `${['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][pc]}${quality}`;
+        const name = `${NOTE_NAMES[pc]}${quality}`;
         expect(frets).toHaveLength(inst.strings);
         expect(Math.min(...frets), `${name}: отрицательный лад`).toBeGreaterThanOrEqual(0);
         expectSoundsLike(inst, name, frets);
       }
+    }
+  });
+
+  it('квинта есть на каждой из двенадцати высот и звучит корнем с квинтой', () => {
+    const build = inst.powerChord;
+    if (!build) return;
+    for (let pc = 0; pc < 12; pc++) {
+      const name = `${NOTE_NAMES[pc]}5`;
+      const shape = build(pc);
+      const label = `${inst.id} ${name} [${shape.frets.join(' ')}]`;
+
+      expect(shape.frets, `${label}: не та длина формы`).toHaveLength(inst.strings);
+      // Квинта — это ровно две высоты: корень и пятая ступень. Ни терции, ни
+      // случайно попавшей открытой струны в ней быть не должно.
+      expect(soundingPcs(inst, shape.frets), label).toEqual(
+        [mod12(pc), mod12(pc + 7)].sort((a, b) => a - b),
+      );
+      // …и её должно быть видно на диаграмме и можно взять рукой.
+      expect(fretSpan(shape.frets), `${label}: неигровой размах`).toBeLessThanOrEqual(
+        DIAGRAM_MIN_ROWS,
+      );
+      expect(Math.min(...shape.frets), `${label}: лад ниже нуля`).toBeGreaterThanOrEqual(-1);
     }
   });
 
@@ -120,6 +144,43 @@ describe('укулеле', () => {
   it('квинты «лад + В/Н» — гитарная запись, на укулеле не действует', () => {
     expect(getChordShape('8В', uke)).toBeNull();
     expect(getChordShape('8В', 'guitar')).not.toBeNull();
+  });
+
+  /**
+   * Формы взяты из уже сохранённых разборов — их рисовали руками, потому что
+   * встроенных квинт на укулеле не было. Теперь они встроенные, и таблица
+   * обязана совпасть с привычной картинкой: разбор, открытый после обновления,
+   * должен выглядеть ровно так же, как выглядел.
+   */
+  it('квинты стоят там же, где их рисовали руками', () => {
+    const drawn: [string, number[]][] = [
+      ['C5', [0, 0, 3, 3]],
+      ['D5', [2, 2, 5, 5]],
+      ['D#5', [3, 3, 6, 6]],
+      ['E5', [4, 4, 0, 2]],
+      ['F#5', [-1, 1, 2, 4]],
+      ['G5', [0, 2, 3, 5]],
+      ['A5', [2, 4, 0, 0]],
+      ['A#5', [3, -1, 1, 1]],
+      ['B5', [4, -1, 2, 2]],
+    ];
+    for (const [name, frets] of drawn) {
+      expect(getChordShape(name, uke)?.frets, name).toEqual(frets);
+    }
+  });
+
+  it('квинта не уезжает за середину грифа ни на одной высоте', () => {
+    // Ради этого таблица и заведена: одна подвижная форма к седьмому корню
+    // забиралась бы на двенадцатый лад, куда на сопрано уже не дотянуться.
+    for (let pc = 0; pc < 12; pc++) {
+      const frets = getChordShape(`${NOTE_NAMES[pc]}5`, uke)!.frets;
+      expect(Math.max(...frets), `${NOTE_NAMES[pc]}5 [${frets.join(' ')}]`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('бемоль и диез — одна высота, одна форма', () => {
+    expect(getChordShape('Bb5', uke)).toEqual(getChordShape('A#5', uke));
+    expect(getChordShape('Eb5', uke)).toEqual(getChordShape('D#5', uke));
   });
 
   it('подвижная форма даёт баррэ там, где оно реально есть', () => {

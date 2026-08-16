@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Spectral, Golos_Text } from 'next/font/google';
+import { ScrollToTop } from '@/components/ScrollToTop';
 import { SITE_NAME, SITE_TITLE, SITE_URL } from '@/lib/site';
 import './globals.css';
 
@@ -91,7 +92,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="ru"
       className={`${golos.variable} ${spectral.variable} ${spectralItalic.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {/* Общий для всех разделов сброс прокрутки при переходах */}
+        <ScrollToTop />
+        {children}
+      </body>
     </html>
   );
 }

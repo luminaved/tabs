@@ -16,7 +16,7 @@ import { InlineChord } from './InlineChord';
 import { AnnotationForm } from './AnnotationForm';
 import { ShareButton } from './ShareButton';
 import { chordsFromSong } from '@/lib/chordpro/usedChords';
-import type { ChordShape } from '@/lib/chords/diagrams';
+import { transposeChordDefs, type ChordShape } from '@/lib/chords/diagrams';
 import { getInstrument, type InstrumentId } from '@/lib/chords/instruments';
 import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
 import { toggleFavoriteAction, toggleLikeAction } from '@/app/(site)/songs/engagement-actions';
@@ -33,7 +33,7 @@ import {
   writePref,
 } from '@/lib/viewerPrefs';
 import { songFromRecord, type SongRecordLike } from '@/lib/chordpro/fromRecord';
-import { transposeSong } from '@/lib/chordpro/transform';
+import { songAccidental, transposeSong } from '@/lib/chordpro/transform';
 import { transposeKey } from '@/lib/chords/key';
 
 const TYPE_LABEL: Record<string, string> = {
@@ -286,6 +286,15 @@ export function SongViewer({
   const realKey = base.meta.key ? transposeKey(base.meta.key, transpose) : null;
   const usedChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
 
+  // Свои аппликатуры едут вместе с песней: они лежат под именем аккорда, а
+  // транспонирование это имя меняет. Без переноса диаграмма пропадала с первым
+  // же нажатием «+» — у аккорда, форму которого нарисовали руками, под новым
+  // именем не находилось ничего.
+  const shapeDefs = useMemo(
+    () => transposeChordDefs(chordDefs ?? {}, transpose, songAccidental(base.meta.key, transpose)),
+    [chordDefs, base.meta.key, transpose],
+  );
+
   const offsetLabel = transpose > 0 ? `+${transpose}` : transpose < 0 ? `${transpose}` : '±0';
 
   // Панель аккордов. Когда закреплена — рендерится ВНУТРИ липкого блока с
@@ -301,7 +310,7 @@ export function SongViewer({
             key={c}
             name={c}
             instrument={inst}
-            customDefs={chordDefs}
+            customDefs={shapeDefs}
             size={pinChords ? 62 : 96}
           />
         ))}
@@ -725,7 +734,7 @@ export function SongViewer({
           song={shapeSong}
           showChords={showChords}
           renderChord={(c) => (
-            <InlineChord name={c} instrument={inst.id} customDefs={chordDefs} />
+            <InlineChord name={c} instrument={inst.id} customDefs={shapeDefs} />
           )}
           interaction={
             interactive
