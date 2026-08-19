@@ -11,6 +11,7 @@ import { LoadMoreCatalog } from './LoadMoreCatalog';
 import { InstrumentTabs } from './InstrumentTabs';
 import { SortTabs } from './SortTabs';
 import { VerifiedFilter } from './VerifiedFilter';
+import { FilterBar } from './FilterBar';
 import { ArtistCloud } from './ArtistCloud';
 
 /**
@@ -66,16 +67,71 @@ export async function CatalogView({
         />
       ) : null}
 
-      <div className="mb-6">
-        <p className="eyebrow mb-2">Каталог</p>
-        <h1 className="display text-4xl font-medium">Аккорды для {inst.forName}</h1>
-        <p className="mt-2 text-muted">
+      {/*
+        Порядок блоков — поиск, потом навигация, потом содержимое, — и он
+        собран под телефон, а не под широкий экран.
+
+        Раньше до первой песни стояли надзаголовок «КАТАЛОГ», крупный h1, абзац
+        описания, переключатель инструмента, поле поиска с кнопкой и ДВА ряда
+        отбора. На телефоне это половина экрана, отданная объяснению того, что
+        человек и так уже нашёл: он пришёл искать песню, а не читать про
+        каталог. Поэтому надзаголовок и описание ниже `sm` спрятаны, поиск
+        поднят к самому верху, а отбор сведён в одну ленту.
+
+        Описание при этом остаётся В РАЗМЕТКЕ (`hidden`, а не удалено): текст
+        нужен поисковику, и прятать его показом — обычная адаптивная вёрстка, а
+        не подмена содержимого.
+      */}
+      <div className="mb-5 sm:mb-6">
+        <p className="eyebrow mb-2 hidden sm:block">Каталог</p>
+        <h1 className="display text-3xl font-medium sm:text-4xl">Аккорды для {inst.forName}</h1>
+        <p className="mt-2 hidden text-muted sm:block">
           Тексты песен с аккордами над словами, аппликатуры и транспонирование в любую
           тональность. Публичные разборы со всех аккаунтов.
         </p>
       </div>
 
-      <div className="mb-8 flex flex-col gap-3">
+      <div className="mb-6 flex flex-col gap-3 sm:mb-8">
+        <form className="search" method="get" role="search">
+          <SearchIcon />
+          <input
+            name="q"
+            type="search"
+            defaultValue={query ?? ''}
+            placeholder="Найти песню или исполнителя"
+            className="field field--search"
+            autoComplete="off"
+            // Подписывает клавишу отправки на мобильной клавиатуре «Поиском»
+            // вместо «Ввода» — без неё исчезнувшая кнопка «Найти» не заменяется
+            // ничем очевидным.
+            enterKeyHint="search"
+            aria-label="Поиск по каталогу"
+          />
+          {/* Сортировка и отбор переживают поиск: форма отправляется методом
+              GET и заменяет строку запроса целиком, поэтому всё, что человек
+              уже выбрал, надо унести с собой скрытыми полями. */}
+          {sort !== 'new' ? <input type="hidden" name="sort" value={sort} /> : null}
+          {verified ? <input type="hidden" name="verified" value="1" /> : null}
+          {/* Крестик очистки — ссылка, а не сброс поля: он возвращает к полной
+              выдаче, а не просто стирает буквы. Виден, только когда есть что
+              снимать. */}
+          {query ? (
+            <Link
+              href={catalogHref(basePath, { sort, verified })}
+              className="search-clear"
+              aria-label="Очистить поиск"
+            >
+              <CloseIcon />
+            </Link>
+          ) : null}
+          {/* Видимой кнопки «Найти» больше нет — отправка по Enter. Но submit
+              обязан существовать: без него форму не отправить с клавиатуры
+              предсказуемым способом, а скринридер не назовёт действие. */}
+          <button type="submit" className="sr-only">
+            Найти
+          </button>
+        </form>
+
         {/* Переключатель инструментов — только на телефоне, и это не полумера.
             От `sm` то же самое стоит в шапке сайта («Гитара» / «Укулеле»), и на
             странице каталога он был вторым таким же в полутора сантиметрах.
@@ -89,27 +145,12 @@ export async function CatalogView({
           <InstrumentTabs current={instrument} query={query} verified={verified} />
         </div>
 
-        <form className="flex gap-2" method="get">
-          <input
-            name="q"
-            defaultValue={query ?? ''}
-            placeholder="Поиск по названию или исполнителю"
-            className="field flex-1"
-            autoComplete="off"
-          />
-          {/* Сортировка и отбор переживают поиск: форма отправляется методом
-              GET и заменяет строку запроса целиком, поэтому всё, что человек
-              уже выбрал, надо унести с собой скрытыми полями. */}
-          {sort !== 'new' ? <input type="hidden" name="sort" value={sort} /> : null}
-          {verified ? <input type="hidden" name="verified" value="1" /> : null}
-          <button type="submit" className="btn btn-outline">
-            Найти
-          </button>
-        </form>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Сортировка и отбор — одним рядом; на телефоне он прокручивается
+            вбок, и о продолжении говорит стрелка у края (см. FilterBar). */}
+        <FilterBar label="Порядок и отбор">
           <SortTabs sort={sort} query={query} verified={verified} basePath={basePath} />
           <VerifiedFilter on={verified} query={query} sort={sort} basePath={basePath} />
-        </div>
+        </FilterBar>
       </div>
 
       {songs.length === 0 ? (
@@ -222,5 +263,43 @@ export async function CatalogView({
         </p>
       ) : null}
     </main>
+  );
+}
+
+/** Лупа внутри поля поиска — вместо исчезнувшей кнопки «Найти». */
+function SearchIcon() {
+  return (
+    <svg
+      className="search-ico"
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+/** Крестик очистки поиска. */
+function CloseIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
   );
 }

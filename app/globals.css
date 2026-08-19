@@ -275,8 +275,11 @@
     position: relative;
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.75rem;
+    /* Отступы подрезаны (было 1rem / 0.75rem): строка стала ~77px вместо ~82,
+       и на первый экран телефона помещается на одну песню больше. Дальше
+       ужимать нельзя — обложка 3.5rem, и поля просто схлопнутся вплотную. */
+    gap: 0.85rem;
+    padding: 0.6rem 0.7rem;
     border: 1px solid var(--color-line);
     border-radius: 0.75rem;
     /* Обрезки по границе здесь нет намеренно: она срезала бы подсказку у
@@ -1860,68 +1863,177 @@
     }
   }
 
-  /* ─── Компактная сортировка каталога ──────────────────────────────────── */
-  .sort-tabs {
-    display: inline-flex;
-    align-self: flex-start;
-    gap: 0.15rem;
-    padding: 0.2rem;
-    border: 1px solid var(--color-line);
-    border-radius: 0.6rem;
-    background: color-mix(in oklab, var(--color-surface) 45%, transparent);
+  /* ─── Поиск по каталогу ───────────────────────────────────────────────────
+     Раньше здесь было поле плюс отдельная кнопка «Найти» — на телефоне это
+     полстроки, отданные слову, которое дублирует клавишу Enter. Теперь кнопки
+     нет: лупа слева объясняет, что это поиск, отправка идёт по Enter
+     (`enterKeyHint="search"` подписывает клавишу на мобильной клавиатуре), а
+     submit остаётся в разметке скрытым — для клавиатуры и скринридеров. */
+  .search {
+    position: relative;
+    display: block;
   }
-  .sort-tab {
-    padding: 0.3rem 0.7rem;
-    border-radius: 0.45rem;
-    font-size: 0.82rem;
-    color: var(--color-muted);
-    white-space: nowrap;
-    transition:
-      color 0.15s ease,
-      background 0.15s ease;
+  .search-ico {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0.9rem;
+    margin-block: auto;
+    color: var(--color-faint);
+    /* Иначе лупа перехватывала бы клик, который должен ставить курсор в поле */
+    pointer-events: none;
   }
-  .sort-tab:hover {
-    color: var(--color-fg);
+  .field--search {
+    /* Место слева под лупу, справа — под крестик очистки */
+    padding-inline: 2.7rem;
   }
-  .sort-tab--on {
-    color: var(--color-accent-fg);
-    background: var(--color-accent);
-    font-weight: 600;
+  /* Свой крестик у WebKit убираем: он появляется только там, дублирует наш и
+     всего лишь чистит поле, тогда как наш возвращает к полной выдаче. */
+  .field--search::-webkit-search-cancel-button {
+    display: none;
   }
-
-  /* ─── Отбор «только подтверждённые» ───────────────────────────────────────
-     Стоит рядом с сортировкой и совпадает с ней по высоте и радиусу, но это
-     не вкладка, а выключатель — поэтому отдельная рамка, а не общий поддон.
-     Включённое состояние берёт краску галочки: и так понятно, про что отбор. */
-  .filter-chip {
+  .search-clear {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0.45rem;
+    margin-block: auto;
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--color-line);
-    border-radius: 0.6rem;
-    background: color-mix(in oklab, var(--color-surface) 45%, transparent);
-    font-size: 0.82rem;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    color: var(--color-faint);
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+  .search-clear:hover {
+    color: var(--color-fg);
+    background: color-mix(in oklab, var(--color-raised) 70%, transparent);
+  }
+
+  /* ─── Ряд сортировки и отбора ─────────────────────────────────────────────
+     Сортировка и «только подтверждённые» раньше стояли двумя этажами: поддон с
+     вкладками и отдельная кнопка-выключатель под ним. На телефоне это два ряда
+     интерфейса до первой песни, причём оба — про настройку выдачи, а не про неё
+     саму. Теперь они в одном ряду.
+
+     ── Прокрутка вбок и почему у неё есть стрелка ────────────────────────────
+
+     Ряд не всегда помещается в узкий экран и прокручивается. Само по себе это
+     нормальный мобильный приём, но опознаётся он по обрезанному у края пункту
+     — а обрезанное «⊘ Про» читается не как «здесь есть ещё», а как сломанная
+     вёрстка. Угадывать, прокрутка это или баг, пользователь не должен.
+
+     Поэтому у края стоит явная стрелка с затуханием под ней: она говорит, что
+     ряд продолжается, и по нажатию доматывает его. Как только домотали до
+     конца — пропадает (логика в components/FilterBar.tsx).
+
+     Стрелку рисует клиентский компонент, и это тоже осознанно: без JS она не
+     появится вовсе — вместо мёртвой кнопки останется ряд, который по-прежнему
+     прокручивается пальцем. Всё остальное на этой странице (сортировка, отбор,
+     поиск) работает без JS, и ломать это ради подсказки не стоит.
+
+     От `sm` прокрутки нет: там место есть, и ряд просто переносится по словам.
+
+     ВАЖНО: `overflow-x: auto` здесь ещё и страхует раскладку. Ряд, который шире
+     экрана, без него растянул бы весь документ, а вместе с ним уехала бы
+     нижняя навигация — она закреплена по окну (см. .mnav). */
+  .filter-bar-wrap {
+    position: relative;
+  }
+  .filter-bar {
+    display: flex;
+    gap: 0.3rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Доматывание по стрелке — плавное, а не рывком */
+    scroll-behavior: smooth;
+  }
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Стрелка «есть ещё». Затухание — под цвет страницы, поэтому последний пункт
+     не обрывается, а уходит в фон. */
+  .filter-more {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 3.4rem;
+    padding-inline-end: 0.1rem;
+    color: var(--color-muted);
+    background: linear-gradient(to left, var(--color-bg) 50%, transparent);
+    cursor: pointer;
+    animation: filter-more-in 0.18s ease-out;
+  }
+  .filter-more:hover {
+    color: var(--color-fg);
+  }
+  @keyframes filter-more-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (min-width: 640px) {
+    .filter-bar {
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+    /* На широком экране ряд переносится, доматывать нечего */
+    .filter-more {
+      display: none;
+    }
+  }
+  .filter-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: none;
+    padding: 0.4rem 0.7rem;
+    border-radius: 0.55rem;
+    font-size: 0.85rem;
     color: var(--color-muted);
     white-space: nowrap;
     transition:
       color 0.15s ease,
-      border-color 0.15s ease,
       background 0.15s ease;
   }
-  .filter-chip:hover {
-    color: var(--color-fg);
-    border-color: color-mix(in oklab, var(--color-verified) 40%, var(--color-line));
+  /* Отбор — не третий вариант сортировки, а выключатель рядом с ней. Отделяем
+     его лишним просветом: рамка или разделитель развалились бы при переносе. */
+  .filter-tab--verified {
+    margin-inline-start: 0.3rem;
   }
-  .filter-chip--on {
+  .filter-tab:hover {
+    color: var(--color-fg);
+  }
+  /* Выбранное — тихой заливкой, без рамки и без акцентной краски: это
+     второстепенный переключатель, спорить с обложками и названиями ему нечем.
+     Акцент на этой странице принадлежит переключателю инструмента. */
+  .filter-tab--on {
+    color: var(--color-fg);
+    background: color-mix(in oklab, var(--color-raised) 85%, transparent);
+    font-weight: 500;
+  }
+  /* Отбор подтверждённых — единственный, кто берёт свою краску: она совпадает
+     с галочкой в строках, и связь читается без подписи. */
+  .filter-tab--verified.filter-tab--on {
     color: var(--color-verified);
-    border-color: color-mix(in oklab, var(--color-verified) 50%, var(--color-line));
-    background: color-mix(in oklab, var(--color-verified) 12%, transparent);
-    font-weight: 600;
+    background: color-mix(in oklab, var(--color-verified) 14%, transparent);
   }
   @media (prefers-reduced-motion: reduce) {
-    .filter-chip {
+    .filter-tab,
+    .search-clear {
       transition: none;
+    }
+    /* Доматывание рывком вместо плавного, стрелка без проявления */
+    .filter-bar {
+      scroll-behavior: auto;
+    }
+    .filter-more {
+      animation: none;
     }
   }
 

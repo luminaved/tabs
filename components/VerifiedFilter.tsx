@@ -6,6 +6,12 @@ import { VERIFIED_TITLE } from './VerifiedBadge';
  * Отбор «только подтверждённые». Как сортировка — обычная ссылка-переключатель:
  * работает без JS, состояние видно в адресе и им можно поделиться. Повторный
  * клик снимает отбор (ссылка ведёт на тот же каталог без параметра).
+ *
+ * Стоит последним пунктом в общей ленте с сортировкой (см. CatalogView) и
+ * выглядит так же, отличаясь только краской во включённом состоянии — она
+ * совпадает с галочкой в строках списка. Подпись сокращена до «Проверенные»:
+ * в ленте, которая на телефоне прокручивается вбок, каждое слово занимает
+ * место, а прежнее «Только подтверждённые» съедало её половину.
  */
 export function VerifiedFilter({
   on,
@@ -21,12 +27,14 @@ export function VerifiedFilter({
   return (
     <Link
       href={catalogHref(basePath, { query, sort, verified: !on })}
-      className={on ? 'filter-chip filter-chip--on' : 'filter-chip'}
+      className={
+        on ? 'filter-tab filter-tab--verified filter-tab--on' : 'filter-tab filter-tab--verified'
+      }
       aria-pressed={on}
       title={on ? 'Показать все разборы' : VERIFIED_TITLE}
     >
       <CheckCircleIcon />
-      Только подтверждённые
+      Проверенные
     </Link>
   );
 }
