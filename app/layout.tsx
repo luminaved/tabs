@@ -161,6 +161,12 @@ export const viewport: Viewport = {
   themeColor: '#0e0d0b',
   width: 'device-width',
   initialScale: 1,
+  // Пускает контент под системные полосы (жесты снизу на Android, «чёлка»
+  // сверху на iOS). Без этого env(safe-area-inset-*) везде равен нулю, и
+  // между нижней навигацией сайта и областью жестов ОС виден шов другого
+  // оттенка. .mnav и body уже дают отступ через env(safe-area-inset-bottom),
+  // так что фон панели с backdrop-blur теперь заливает и область жестов.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
