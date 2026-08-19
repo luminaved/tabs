@@ -59,10 +59,16 @@ function noteTypeLabel(type?: string | null): string | null {
 
 // Размер шрифта текста песни (rem).
 //
-// FONT_DEFAULT — не то, чем страница рисуется по умолчанию (это делает clamp в
-// .chordsheet), а точка отсчёта для первого нажатия A− / A+: пока человек
-// размер не трогал, переменной нет, и шагать не от чего. Число держится равным
-// потолку того clamp — иначе первое нажатие давало бы скачок вместо шага.
+// Страница рисуется НЕ этими числами: пока человек размер не трогал, его задаёт
+// clamp в .chordsheet, и зависит он от ширины экрана. Отсюда FONT_DEFAULT —
+// только запасной вариант для первого нажатия A− / A+, когда замерить нечего
+// (см. measuredFont): до монтирования или если разметка неожиданно пуста.
+//
+// Раньше это число обязано было совпадать с потолком того clamp, и совпадение
+// приходилось держать руками в двух файлах. Хватало его всё равно только на
+// десктоп: на телефоне clamp даёт меньше потолка, поэтому первый шаг вниз там
+// был короче остальных, а после того как телефонный размер опустили — стал бы
+// вовсе незаметным. Теперь шагают от замеренного размера, и связка не нужна.
 const FONT_MIN = 0.8;
 const FONT_MAX = 1.7;
 const FONT_DEFAULT = 1.08;
@@ -137,6 +143,34 @@ export function SongViewer({
   const [pinChords, setPinChords] = useState(false);
 
   const clampFont = (v: number) => Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(v * 100) / 100));
+
+  // Текст песни — чтобы спросить у него фактический размер шрифта.
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * От какого размера шагать по A− / A+.
+   *
+   * Если человек уже задавал размер — от него. Если нет, размер задан clamp'ом
+   * в .chordsheet и зависит от ширины экрана, поэтому его именно ЗАМЕРЯЕМ, а не
+   * повторяем формулу здесь: два описания одного числа разъезжаются, и разошлись
+   * бы ровно в тот день, когда телефонный размер поменяли.
+   *
+   * Считаем в rem, потому что в них хранится настройка: браузер отдаёт
+   * вычисленный размер в пикселях, а корневой может быть не 16px — человек мог
+   * укрупнить шрифт в настройках браузера, и делить на константу значило бы
+   * молча отменять это при первом же нажатии.
+   */
+  const measuredFont = (): number => {
+    const sheet = sheetRef.current?.querySelector('.chordsheet');
+    if (!sheet) return FONT_DEFAULT;
+    const px = parseFloat(getComputedStyle(sheet).fontSize);
+    const root = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(root) || root <= 0) return FONT_DEFAULT;
+    return Math.round((px / root) * 100) / 100;
+  };
+
+  /** Размер, от которого отсчитывается следующий шаг кнопок. */
+  const fontStepFrom = () => fontSize ?? measuredFont();
 
   // ── Настройки читалки: восстановление и сохранение ────────────────────────
   // Читаем после монтирования, а не при инициализации состояния: на сервере
@@ -625,7 +659,7 @@ export function SongViewer({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => changeFontSize(clampFont((fontSize ?? FONT_DEFAULT) - FONT_STEP))}
+                  onClick={() => changeFontSize(clampFont(fontStepFrom() - FONT_STEP))}
                   className="icon-btn h-9 w-9 text-sm"
                   aria-label="Меньше"
                 >
@@ -642,7 +676,7 @@ export function SongViewer({
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => changeFontSize(clampFont((fontSize ?? FONT_DEFAULT) + FONT_STEP))}
+                  onClick={() => changeFontSize(clampFont(fontStepFrom() + FONT_STEP))}
                   className="icon-btn h-9 w-9 text-lg"
                   aria-label="Больше"
                 >
@@ -736,6 +770,7 @@ export function SongViewer({
 
 
       <div
+        ref={sheetRef}
         className="print-area"
         style={
           fontSize !== null ? ({ '--sheet-font-size': `${fontSize}rem` } as CSSProperties) : undefined
