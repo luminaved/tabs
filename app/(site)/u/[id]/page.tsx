@@ -16,6 +16,7 @@ import { songPath } from '@/lib/slug';
 import { getUserStats } from '@/lib/stats';
 import { Avatar } from '@/components/Avatar';
 import { SongRow } from '@/components/SongRow';
+import { EAGER_THUMBS } from '@/components/SongThumb';
 import { StatStrip } from '@/components/StatStrip';
 import { LoadMoreSongs } from '@/components/LoadMoreSongs';
 import { loadMoreUserSongsAction } from './actions';
@@ -192,9 +193,9 @@ export default async function ProfilePage({
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
-          {songs.map((song) => (
+          {songs.map((song, i) => (
             <li key={song.id}>
-              <SongRow song={song} />
+              <SongRow song={song} priority={i < EAGER_THUMBS} />
             </li>
           ))}
           {/* key: смена вкладки инструмента или поиска сбрасывает подгруженное */}

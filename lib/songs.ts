@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import { Prisma } from '@prisma/client';
 import { prisma } from './db';
+import { SONGS_TAG, cachedByKey, reviveDates, songTag } from './cache';
 import { INSTRUMENT_IDS, parseInstrumentId, type InstrumentId } from './chords/instruments';
 import type { SongSort } from './catalogUrl';
 // Строка списка карточек определена в engagement.ts — здесь она же
@@ -10,7 +11,7 @@ import { cardSelect, type SongCard, type SongListPage } from './engagement';
 export type { SongListPage } from './engagement';
 import { SONGS_PAGE_SIZE, pageSkip, pageTake, parsePage, splitPage } from './paging';
 import { buildSearchText, searchQueryForLike } from './chordpro/searchText';
-import { withChordChips } from './chordpro/usedChords';
+import { chordsInOrder } from './chordpro/usedChords';
 
 export type SongVisibility = 'private' | 'unlisted' | 'public';
 
@@ -44,6 +45,9 @@ function normalize(input: SongInput) {
     title,
     artist,
     searchText: buildSearchText({ title, artist, body: input.body }),
+    // Денормализованные чипы аккордов. Считаются здесь, при сохранении, — а не
+    // в каждом списке из текста песни (см. колонку `chords` в схеме).
+    chords: chordsInOrder(input.body),
     key: input.key?.trim() || null,
     tempo: input.tempo ?? null,
     capo: input.capo ?? 0,
@@ -113,7 +117,7 @@ export async function listSongs(
     select: cardSelect,
   });
   const { page, hasMore } = splitPage(rows);
-  return { songs: page.map(withChordChips), hasMore };
+  return { songs: page, hasMore };
 }
 
 /** Сколько своих разборов у пользователя по каждому инструменту. */
@@ -148,16 +152,17 @@ const SORT_ORDER: Record<SongSort, Prisma.SongOrderByWithRelationInput[]> = {
   likes: [{ likes: { _count: 'desc' } }, { createdAt: 'desc' }],
 };
 
-// Поля строки каталога. `body` нужен, чтобы посчитать чипы аккордов, но наружу
-// не отдаётся — см. `withChordChips`. coverUrl (тяжёлый base64) не выбираем:
-// картинку отдаёт отдельный маршрут /covers/[id].
+// Поля строки каталога. Текст песни (`body`) здесь НЕ выбирается: чипы
+// аккордов лежат готовыми в колонке `chords`, а гонять ради них всю песню из
+// базы — это десятки килобайт на страницу (см. схему). coverUrl (тяжёлый
+// base64) не выбираем по той же причине — картинку отдаёт /covers/[id].
 const catalogSelect = {
   id: true,
   title: true,
   artist: true,
   key: true,
   capo: true,
-  body: true,
+  chords: true,
   hasCover: true,
   instrument: true,
   verified: true,
@@ -167,10 +172,8 @@ const catalogSelect = {
   _count: { select: { likes: true } },
 } satisfies Prisma.SongSelect;
 
-type CatalogRecord = Prisma.SongGetPayload<{ select: typeof catalogSelect }>;
-
 /** Строка каталога, как она уходит в разметку и на клиент: без текста песни. */
-export type CatalogSong = Omit<CatalogRecord, 'body'> & { chords: string[] };
+export type CatalogSong = Prisma.SongGetPayload<{ select: typeof catalogSelect }>;
 
 export interface CatalogPage {
   songs: CatalogSong[];
@@ -234,6 +237,43 @@ export async function listPublicSongs(filters: {
   /** Только подтверждённые модератором разборы. */
   verified?: boolean;
 }): Promise<CatalogPage> {
+  // Поиск идёт в базу напрямую: `query` задаёт посетитель, и кэш по нему — это
+  // неограниченное множество ключей (см. lib/cache.ts).
+  if (filters.query?.trim()) return fetchPublicSongs(filters);
+
+  const page = parsePage(filters.page ?? 0);
+  const cached = await cachedByKey(
+    // Ключ перечисляет ровно то, от чего зависит выдача. Множество конечное и
+    // небольшое: 2 инструмента × 3 сортировки × 2 отбора × номер страницы.
+    [
+      'catalog',
+      filters.instrument ?? 'all',
+      filters.sort ?? 'new',
+      filters.verified ? 'verified' : 'all',
+      String(page),
+    ],
+    [SONGS_TAG],
+    () => fetchPublicSongs({ ...filters, page }),
+  );
+
+  // Копия, а не правка на месте: значение может прийти из кэша в памяти
+  // процесса, и его нельзя портить следующему читателю.
+  return { ...cached, songs: cached.songs.map(reviveCatalogSong) };
+}
+
+/** Строка каталога после кэша: `updatedAt` приезжает строкой, см. reviveDates. */
+function reviveCatalogSong(song: CatalogSong): CatalogSong {
+  return reviveDates({ ...song }, ['updatedAt']);
+}
+
+/** Сам запрос каталога, без кэша. */
+async function fetchPublicSongs(filters: {
+  query?: string;
+  sort?: SongSort;
+  page?: number;
+  instrument?: InstrumentId;
+  verified?: boolean;
+}): Promise<CatalogPage> {
   const page = parsePage(filters.page ?? 0);
   const where: Prisma.SongWhereInput = {
     visibility: 'public',
@@ -254,7 +294,7 @@ export async function listPublicSongs(filters: {
 
   if (rows.length > 0) {
     const { page: rowsPage, hasMore } = splitPage(rows);
-    return { songs: rowsPage.map(withChordChips), hasMore };
+    return { songs: rowsPage, hasMore };
   }
 
   // Точных совпадений нет — пробуем понять, что человек имел в виду.
@@ -276,10 +316,7 @@ export async function listPublicSongs(filters: {
   });
   // findMany не сохраняет порядок из `in` — восстанавливаем его по близости.
   const byId = new Map(found.map((s) => [s.id, s]));
-  const songs = ids
-    .map((id) => byId.get(id))
-    .filter((s): s is CatalogRecord => !!s)
-    .map(withChordChips);
+  const songs = ids.map((id) => byId.get(id)).filter((s): s is CatalogSong => !!s);
 
   return { songs, hasMore: false, fuzzy: true };
 }
@@ -294,15 +331,34 @@ export async function listSongsByArtist(
 ): Promise<SongListPage> {
   const name = artist.trim();
   if (!name) return { songs: [], hasMore: false };
-  const rows = await prisma.song.findMany({
-    where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
-    orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-    skip: pageSkip(filters.page ?? 0),
-    take: pageTake(),
-    select: cardSelect,
-  });
-  const { page, hasMore } = splitPage(rows);
-  return { songs: page.map(withChordChips), hasMore };
+  const pageNo = parsePage(filters.page ?? 0);
+
+  // Имя исполнителя приходит из адреса, то есть его задаёт посетитель, — но в
+  // отличие от строки поиска это не произвольный текст, а ключ, по которому
+  // страница либо существует, либо отдаёт 404. Множество ключей ограничено
+  // числом исполнителей в каталоге, и набить его нечем.
+  const cached = await cachedByKey(
+    ['artist-songs', name.toLowerCase(), String(pageNo)],
+    [SONGS_TAG],
+    async () => {
+      const rows = await prisma.song.findMany({
+        where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
+        orderBy: [{ viewCount: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        skip: pageSkip(pageNo),
+        take: pageTake(),
+        select: cardSelect,
+      });
+      const { page, hasMore } = splitPage(rows);
+      return { songs: page, hasMore };
+    },
+  );
+
+  return { ...cached, songs: cached.songs.map(reviveSongCard) };
+}
+
+/** Карточка списка после кэша: `updatedAt` приезжает строкой, см. reviveDates. */
+function reviveSongCard(song: SongCard): SongCard {
+  return reviveDates({ ...song }, ['updatedAt']);
 }
 
 /**
@@ -312,37 +368,43 @@ export async function listSongsByArtist(
  * страницы «13 разборов» превратилось бы в «24», а укулеле, оказавшись на
  * второй странице, пропало бы из заголовка.
  *
- * cache(): страница и generateMetadata спрашивают одно и то же.
+ * Два слоя кэша, и они про разное: `cache()` из React дедуплицирует вызов
+ * внутри ОДНОГО запроса (страница и generateMetadata спрашивают одно и то же),
+ * `cachedByKey` переживает запрос и снимает обращение к базе целиком.
  */
 export const getArtistSummary = cache(async function getArtistSummary(artist: string) {
   const name = artist.trim();
   const empty = { total: 0, instruments: [] as InstrumentId[] };
   if (!name) return empty;
 
-  const rows = await prisma.song.groupBy({
-    by: ['instrument'],
-    where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
-    _count: { _all: true },
+  return cachedByKey(['artist-summary', name.toLowerCase()], [SONGS_TAG], async () => {
+    const rows = await prisma.song.groupBy({
+      by: ['instrument'],
+      where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
+      _count: { _all: true },
+    });
+
+    const counts: Record<InstrumentId, number> = { guitar: 0, ukulele: 0 };
+    for (const r of rows) counts[parseInstrumentId(r.instrument)] += r._count._all;
+
+    return {
+      total: counts.guitar + counts.ukulele,
+      instruments: INSTRUMENT_IDS.filter((id) => counts[id] > 0),
+    };
   });
-
-  const counts: Record<InstrumentId, number> = { guitar: 0, ukulele: 0 };
-  for (const r of rows) counts[parseInstrumentId(r.instrument)] += r._count._all;
-
-  return {
-    total: counts.guitar + counts.ukulele,
-    instruments: INSTRUMENT_IDS.filter((id) => counts[id] > 0),
-  };
 });
 
 /** Точное написание имени исполнителя, как оно хранится (для заголовка). */
 export const findArtistName = cache(async function findArtistName(artist: string) {
   const name = artist.trim();
   if (!name) return null;
-  const row = await prisma.song.findFirst({
-    where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
-    select: { artist: true },
+  return cachedByKey(['artist-name', name.toLowerCase()], [SONGS_TAG], async () => {
+    const row = await prisma.song.findFirst({
+      where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
+      select: { artist: true },
+    });
+    return row?.artist ?? null;
   });
-  return row?.artist ?? null;
 });
 
 /**
@@ -360,6 +422,21 @@ export const findArtistName = cache(async function findArtistName(artist: string
 export async function listRelatedSongs(
   song: { id: string; artist: string | null; instrument: string },
   limit = 6,
+): Promise<SongCard[]> {
+  // Блок соседей — до двух запросов к базе на КАЖДОЙ загрузке страницы разбора,
+  // а зависит он только от самого разбора и от того, что вообще есть в
+  // каталоге. То есть ровно то, что должно жить в общем кэше.
+  const cached = await cachedByKey(
+    ['related', song.id, String(limit)],
+    [SONGS_TAG, songTag(song.id)],
+    () => fetchRelatedSongs(song, limit),
+  );
+  return cached.map(reviveSongCard);
+}
+
+async function fetchRelatedSongs(
+  song: { id: string; artist: string | null; instrument: string },
+  limit: number,
 ): Promise<SongCard[]> {
   const base: Prisma.SongWhereInput = { visibility: 'public', id: { not: song.id } };
   const popular: Prisma.SongOrderByWithRelationInput[] = [
@@ -379,7 +456,7 @@ export async function listRelatedSongs(
     : [];
 
   // У исполнителя набралось на весь блок — второй запрос не нужен.
-  if (sameArtist.length >= limit) return sameArtist.map(withChordChips);
+  if (sameArtist.length >= limit) return sameArtist;
 
   const rest = await prisma.song.findMany({
     where: {
@@ -392,7 +469,7 @@ export async function listRelatedSongs(
     select: cardSelect,
   });
 
-  return [...sameArtist, ...rest].map(withChordChips);
+  return [...sameArtist, ...rest];
 }
 
 /**
@@ -414,16 +491,20 @@ export async function listTopArtists(
   // человек просто пролистывает.
   limit = 12,
 ): Promise<{ name: string; count: number }[]> {
-  const rows = await prisma.song.groupBy({
-    by: ['artist'],
-    where: { visibility: 'public', instrument, artist: { not: null } },
-    _count: { _all: true },
-    orderBy: { _count: { artist: 'desc' } },
-    take: limit,
+  // Кэшируется целиком: блок одинаков для всех, дат в ответе нет, а меняется он
+  // только когда появляется или уходит разбор — то есть по тегу.
+  return cachedByKey(['top-artists', instrument, String(limit)], [SONGS_TAG], async () => {
+    const rows = await prisma.song.groupBy({
+      by: ['artist'],
+      where: { visibility: 'public', instrument, artist: { not: null } },
+      _count: { _all: true },
+      orderBy: { _count: { artist: 'desc' } },
+      take: limit,
+    });
+    return rows
+      .filter((r): r is typeof r & { artist: string } => !!r.artist?.trim())
+      .map((r) => ({ name: r.artist, count: r._count._all }));
   });
-  return rows
-    .filter((r): r is typeof r & { artist: string } => !!r.artist?.trim())
-    .map((r) => ({ name: r.artist, count: r._count._all }));
 }
 
 /**
@@ -445,39 +526,66 @@ export async function listPublicArtists(): Promise<string[]> {
   return rows.map((r) => r.artist).filter((a): a is string => !!a?.trim());
 }
 
+/** Поля разбора для страницы просмотра. coverUrl (тяжёлый base64) не выбираем
+ *  — картинку отдаёт /covers/[id]. */
+const viewerSelect = {
+  id: true,
+  title: true,
+  artist: true,
+  key: true,
+  tempo: true,
+  capo: true,
+  body: true,
+  note: true,
+  chordDefs: true,
+  hasCover: true,
+  instrument: true,
+  verified: true,
+  visibility: true,
+  viewCount: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.SongSelect;
+
 /**
  * Просмотр с учётом видимости: private — только владельцу.
- * coverUrl (тяжёлый base64) не выбираем — картинку отдаёт /covers/[id].
  *
- * Обёрнуто в cache(): страница и generateMetadata запрашивают одну и ту же
- * песню, без дедупликации это лишний поход в БД на каждую загрузку.
+ * ── Почему кэш смотрит только на открытые разборы ───────────────────────────
+ *
+ * Соблазн был закэшировать выборку по `id` целиком, а видимость проверить
+ * после — ключ короче и промахов меньше. Но тогда текст ПРИВАТНОГО разбора
+ * лежал бы в общем кэше данных (на Vercel — во внешнем хранилище), и защищала
+ * бы его только строчка проверки ниже. Черновик, который человек не показывал
+ * никому, не должен уезжать туда вообще: цена ошибки несопоставима с одним
+ * сэкономленным запросом.
+ *
+ * Поэтому в кэш ходит выборка, которая приватные не возвращает В ПРИНЦИПЕ
+ * (`visibility: { not: 'private' }`). Гость и поисковик — а это почти весь
+ * поток — обслуживаются из неё без единого обращения к базе. Владелец
+ * приватного разбора получает из кэша null и доплачивает один прямой запрос:
+ * такую страницу открывает ровно один человек, и экономить там нечего.
+ *
+ * Обёрнуто ещё и в `cache()` из React: страница и generateMetadata запрашивают
+ * одну и ту же песню, без дедупликации это лишняя работа на каждую загрузку.
  */
 export const getSongForViewer = cache(async function getSongForViewer(
   id: string,
   viewerId?: string,
 ) {
-  const song = await prisma.song.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      title: true,
-      artist: true,
-      key: true,
-      tempo: true,
-      capo: true,
-      body: true,
-      note: true,
-      chordDefs: true,
-      hasCover: true,
-      instrument: true,
-      verified: true,
-      visibility: true,
-      viewCount: true,
-      userId: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  const shared = await cachedByKey(['song', id], [SONGS_TAG, songTag(id)], () =>
+    prisma.song.findFirst({
+      where: { id, visibility: { not: 'private' } },
+      select: viewerSelect,
+    }),
+  );
+  if (shared) return reviveDates({ ...shared }, ['createdAt', 'updatedAt']);
+
+  // Либо разбора нет, либо он приватный. Второе имеет смысл проверять, только
+  // если есть кому его показать.
+  if (!viewerId) return null;
+
+  const song = await prisma.song.findUnique({ where: { id }, select: viewerSelect });
   if (!song) return null;
   if (song.visibility === 'private' && song.userId !== viewerId) return null;
   return song;

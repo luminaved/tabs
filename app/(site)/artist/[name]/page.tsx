@@ -10,6 +10,7 @@ import { jsonLdScript } from '@/lib/jsonLd';
 import { songPath } from '@/lib/slug';
 import { catalogPath } from '@/lib/chords/instruments';
 import { SongRow } from '@/components/SongRow';
+import { EAGER_THUMBS } from '@/components/SongThumb';
 import { LoadMoreSongs } from '@/components/LoadMoreSongs';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { loadMoreArtistSongsAction } from './actions';
@@ -140,9 +141,13 @@ export default async function ArtistPage({ params }: { params: Promise<{ name: s
       </div>
 
       <ul className="flex flex-col gap-2">
-        {songs.map((song) => (
+        {songs.map((song, i) => (
           <li key={song.id}>
-            <SongRow song={song} meta={songMeta(song, 'artist')} />
+            <SongRow
+              song={song}
+              meta={songMeta(song, 'artist')}
+              priority={i < EAGER_THUMBS}
+            />
           </li>
         ))}
         <LoadMoreSongs

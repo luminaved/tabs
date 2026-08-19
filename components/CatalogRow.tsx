@@ -13,10 +13,15 @@ import { VerifiedBadge } from './VerifiedBadge';
  * Вынесена из страницы каталога, потому что те же строки дорисовывает
  * подгрузка следующей порции ([LoadMoreCatalog](./LoadMoreCatalog.tsx)).
  */
-export function CatalogRow({ song }: { song: CatalogSong }) {
+export function CatalogRow({ song, priority }: { song: CatalogSong; priority?: boolean }) {
   return (
     <div className="song-row">
-      <SongThumb songId={song.id} hasCover={song.hasCover} updatedAt={song.updatedAt} />
+      <SongThumb
+        songId={song.id}
+        hasCover={song.hasCover}
+        updatedAt={song.updatedAt}
+        priority={priority}
+      />
       <div className="min-w-0 flex-1">
         {/* gap-1: галочка относится к названию, поэтому жмётся к нему вплотную,
             а бейдж инструмента отделён своим отступом (ms-1). */}

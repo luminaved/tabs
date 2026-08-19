@@ -6,6 +6,7 @@ import { itemListJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
 import { songPath } from '@/lib/slug';
 import { CatalogRow } from './CatalogRow';
+import { EAGER_THUMBS } from './SongThumb';
 import { LoadMoreCatalog } from './LoadMoreCatalog';
 import { InstrumentTabs } from './InstrumentTabs';
 import { SortTabs } from './SortTabs';
@@ -168,9 +169,10 @@ export async function CatalogView({
               По запросу «{query}» ничего не нашлось. Показаны похожие.
             </li>
           ) : null}
-          {songs.map((song) => (
+          {songs.map((song, i) => (
             <li key={song.id}>
-              <CatalogRow song={song} />
+              {/* Первые строки видны сразу — их обложки не откладываем. */}
+              <CatalogRow song={song} priority={i < EAGER_THUMBS} />
             </li>
           ))}
           {/* key: при смене запроса/сортировки/отбора/страницы подгруженные

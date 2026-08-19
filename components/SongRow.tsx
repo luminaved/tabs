@@ -12,11 +12,25 @@ import { VerifiedBadge } from './VerifiedBadge';
  * Инструмент помечается бейджем только когда он НЕ гитара: гитара — основной
  * случай, и подпись в каждой строке была бы шумом, а укулеле важно отличить.
  */
-export function SongRow({ song, meta }: { song: SongCard; meta?: React.ReactNode }) {
+export function SongRow({
+  song,
+  meta,
+  priority,
+}: {
+  song: SongCard;
+  meta?: React.ReactNode;
+  /** Строка на первом экране — обложка грузится сразу (см. EAGER_THUMBS). */
+  priority?: boolean;
+}) {
   const instrument = parseInstrumentId(song.instrument);
   return (
     <Link href={songPath(song)} className="song-row">
-      <SongThumb songId={song.id} hasCover={song.hasCover} updatedAt={song.updatedAt} />
+      <SongThumb
+        songId={song.id}
+        hasCover={song.hasCover}
+        updatedAt={song.updatedAt}
+        priority={priority}
+      />
       <div className="min-w-0 flex-1">
         {/* Отступы — как в каталоге: галочка вплотную к названию, бейдж дальше */}
         <div className="flex items-center gap-1">

@@ -4,6 +4,7 @@ import { countOwnByInstrument, listSongs } from '@/lib/songs';
 import { songMeta } from '@/lib/songMeta';
 import { INSTRUMENTS, INSTRUMENT_IDS, type InstrumentId } from '@/lib/chords/instruments';
 import { SongRow } from '@/components/SongRow';
+import { EAGER_THUMBS } from '@/components/SongThumb';
 import { LoadMoreSongs } from '@/components/LoadMoreSongs';
 import { loadMoreLibraryAction } from '@/app/(site)/songs/list-actions';
 
@@ -101,9 +102,13 @@ export async function LibraryView({
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
-          {songs.map((song) => (
+          {songs.map((song, i) => (
             <li key={song.id}>
-              <SongRow song={song} meta={songMeta(song, 'library')} />
+              <SongRow
+                song={song}
+                meta={songMeta(song, 'library')}
+                priority={i < EAGER_THUMBS}
+              />
             </li>
           ))}
           {/* key: при смене инструмента/поиска подгруженные строки сбрасываются */}

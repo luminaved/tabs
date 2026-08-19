@@ -409,10 +409,21 @@ export function SongViewer({
                   Миниатюры в списках так НЕ подписаны (alt="") — там название
                   стоит вплотную, и подпись читалась бы дважды. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
+              {/* fetchPriority="high": самая крупная картинка страницы и первое,
+                  что видно над текстом, — то есть кандидат в LCP. По умолчанию
+                  браузер даёт картинкам низкий приоритет и ставит их в очередь
+                  за скриптами, хотя весит она пару килобайт.
+
+                  width/height — не ради резерва места (его держит .cover-fill
+                  через aspect-ratio, сдвига нет и без них), а чтобы размер был
+                  известен до применения стилей. */}
               <img
                 src={coverUrl}
                 alt={`Обложка: ${base.meta.title ?? 'без названия'}${base.meta.artist ? ` — ${base.meta.artist}` : ''}`}
                 className="cover-fill-img"
+                width={136}
+                height={136}
+                fetchPriority="high"
                 decoding="async"
               />
             </div>

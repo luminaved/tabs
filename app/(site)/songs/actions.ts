@@ -1,7 +1,8 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { SONGS_TAG, songTag } from '@/lib/cache';
 import { requireUser } from '@/lib/session';
 import { createSong, deleteSong, updateSong, type SongInput, type SongVisibility } from '@/lib/songs';
 import { parseInstrumentId } from '@/lib/chords/instruments';
@@ -87,6 +88,10 @@ export async function createSongAction(_prev: SongFormState, formData: FormData)
   if ('error' in parsed) return parsed;
 
   const song = await createSong(user.id, parsed);
+  // Каталог, блок исполнителей и «похожие» лежат в кэше данных (см. lib/cache.ts)
+  // и без сброса показывали бы прежний список до конца срока годности. Здесь
+  // это ничего не стоит: экшен всё равно заканчивается redirect'ом.
+  revalidateTag(SONGS_TAG);
   revalidatePath('/songs');
   // Сразу на канонический адрес с подписью — иначе первый же переход после
   // сохранения ловил бы 308 из layout'а просмотра.
@@ -106,6 +111,11 @@ export async function updateSongAction(_prev: SongFormState, formData: FormData)
   // после правки собранный адрес мог измениться, и перечислять оба варианта
   // руками — лишний способ ошибиться.
   const path = songPath(updated);
+  // Свой тег у разбора — чтобы правка одной песни не выбрасывала из кэша весь
+  // каталог. Но списки её тоже показывают (название, исполнитель, обложка),
+  // поэтому общий тег сбрасываем следом.
+  revalidateTag(songTag(updated.id));
+  revalidateTag(SONGS_TAG);
   revalidatePath('/songs');
   revalidatePath('/songs/[id]', 'page');
   redirect(path);
@@ -124,6 +134,10 @@ export async function deleteSongAction(formData: FormData): Promise<void> {
   const deleted = await deleteSong(id, user.id);
   if (!deleted) throw new Error('Песня не найдена или нет доступа');
 
+  // Без сброса удалённый разбор оставался бы в каталоге и в блоке «похожие» до
+  // конца срока годности — и вёл бы на 404.
+  revalidateTag(songTag(id));
+  revalidateTag(SONGS_TAG);
   revalidatePath('/songs');
   redirect('/songs');
 }

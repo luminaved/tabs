@@ -2,14 +2,13 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import type { InstrumentId } from './chords/instruments';
 import { searchQueryForLike } from './chordpro/searchText';
-import { withChordChips } from './chordpro/usedChords';
 import { pageSkip, pageTake, splitPage } from './paging';
 
 // Поля песни для строки списка (каталог/кабинет).
 // Внимание: coverUrl (тяжёлый base64) здесь НЕ выбирается — списки берут только
 // флаг hasCover, а картинка приходит отдельным кэшируемым запросом /covers/[id].
-// `body` нужен только чтобы посчитать чипы аккордов, наружу уходит уже готовый
-// список (см. `withChordChips`).
+// Текста песни (`body`) здесь тоже нет: чипы аккордов лежат готовыми в колонке
+// `chords`, и тащить ради них всю песню из базы незачем (см. схему).
 export const cardSelect = {
   id: true,
   title: true,
@@ -24,15 +23,13 @@ export const cardSelect = {
   // короткая, поэтому проще возить её везде, чем заводить второй набор полей.
   visibility: true,
   updatedAt: true,
-  body: true,
+  chords: true,
   viewCount: true,
   _count: { select: { likes: true } },
 } satisfies Prisma.SongSelect;
 
-type SongCardRecord = Prisma.SongGetPayload<{ select: typeof cardSelect }>;
-
 /** Строка списка, как её получает разметка: со списком аккордов вместо текста. */
-export type SongCard = Omit<SongCardRecord, 'body'> & { chords: string[] };
+export type SongCard = Prisma.SongGetPayload<{ select: typeof cardSelect }>;
 
 /** Порция списка карточек: сама страница и есть ли продолжение. */
 export interface SongListPage {
@@ -52,7 +49,7 @@ export async function listFavoriteSongs(userId: string): Promise<SongCard[]> {
     orderBy: { createdAt: 'desc' },
     select: { song: { select: cardSelect } },
   });
-  return rows.map((r) => withChordChips(r.song));
+  return rows.map((r) => r.song);
 }
 
 /** Лайкнутые песни пользователя. */
@@ -62,7 +59,7 @@ export async function listLikedSongs(userId: string): Promise<SongCard[]> {
     orderBy: { createdAt: 'desc' },
     select: { song: { select: cardSelect } },
   });
-  return rows.map((r) => withChordChips(r.song));
+  return rows.map((r) => r.song);
 }
 
 /**
@@ -91,7 +88,7 @@ export async function listUserPublicSongs(
     select: cardSelect,
   });
   const { page, hasMore } = splitPage(rows);
-  return { songs: page.map(withChordChips), hasMore };
+  return { songs: page, hasMore };
 }
 
 /**
