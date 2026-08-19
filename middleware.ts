@@ -98,13 +98,16 @@ export const config = {
      *   _next/static, _next/image — сборка и оптимизатор картинок;
      *   covers, avatars — наши маршруты картинок (у них свои заголовки, и
      *     лишний разбор на каждую обложку в каталоге ни к чему);
-     *   favicon.ico, icon.svg, robots.txt, sitemap.xml, feed.xml — статика и
+     *   favicon.ico, icon.svg, apple-icon.png, icon-192.png, icon-512.png —
+     *     иконки приложения (см. scripts/make-icons.mjs);
+     *   splash/ — заставки запуска на iOS (scripts/make-splash.mjs);
+     *   manifest.webmanifest, robots.txt, sitemap.xml, feed.xml — статика и
      *     машинные форматы: скриптов там нет, а CSP на XML только мешал бы
      *     читалкам и валидаторам.
      */
     {
       source:
-        '/((?!_next/static|_next/image|covers/|avatars/|favicon.ico|icon.svg|robots.txt|sitemap.xml|feed.xml).*)',
+        '/((?!_next/static|_next/image|covers/|avatars/|favicon.ico|icon.svg|apple-icon.png|icon-192.png|icon-512.png|splash/|manifest.webmanifest|robots.txt|sitemap.xml|feed.xml).*)',
       missing: [{ type: 'header', key: 'next-router-prefetch' }],
     },
   ],

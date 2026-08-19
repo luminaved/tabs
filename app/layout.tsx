@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Spectral, Golos_Text } from 'next/font/google';
+import { AppleSplashLinks } from '@/components/AppleSplashLinks';
 import { ScrollToTop } from '@/components/ScrollToTop';
 import { SITE_NAME, SITE_TITLE, SITE_URL } from '@/lib/site';
 import './globals.css';
@@ -108,6 +109,42 @@ export const metadata: Metadata = {
       : {}),
     ...(process.env.YANDEX_VERIFICATION ? { yandex: process.env.YANDEX_VERIFICATION } : {}),
   },
+  /**
+   * «На экран „Домой“» на iOS.
+   *
+   * Дублирует то, что уже сказано в манифесте (app/manifest.ts), и это не
+   * лишнее: манифест Safari читает только с iOS 16.4, а до неё понимает
+   * исключительно эти мета-теги. Вместе они покрывают и старые айфоны, и новые.
+   *
+   * `statusBarStyle: 'black'`, а не 'black-translucent': полупрозрачная строка
+   * состояния пускает содержимое под чёлку, и шапка сайта уехала бы под часы —
+   * вёрстка на это не рассчитана. С 'black' система оставляет полосу своей, и
+   * по цвету она совпадает с фоном (--color-bg).
+   *
+   * `title` — подпись под иконкой, поэтому здесь короткое имя, а не SITE_TITLE:
+   * длинное система всё равно обрежет многоточием.
+   */
+  appleWebApp: {
+    capable: true,
+    title: SITE_NAME,
+    statusBarStyle: 'black',
+  },
+  /**
+   * `apple-mobile-web-app-capable` руками — и это не дубль.
+   *
+   * На `capable: true` выше Next (15.x) выводит ТОЛЬКО современный
+   * `mobile-web-app-capable`: apple-версия считается устаревшей, и её он больше
+   * не ставит. Но именно её читает Safari до iOS 16.4 — а без неё ярлык с
+   * домашнего экрана открывается обычной вкладкой, с адресной строкой, то есть
+   * ровно без того, ради чего всё и делалось. С 16.4 и новее этот тег не нужен
+   * (там работает манифест), но и не мешает.
+   *
+   * Если Next однажды начнёт выводить оба — строку убрать: два одинаковых мета
+   * лучше не плодить.
+   */
+  other: {
+    'apple-mobile-web-app-capable': 'yes',
+  },
   openGraph: {
     type: 'website',
     siteName: SITE_NAME,
@@ -133,6 +170,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${golos.variable} ${spectral.variable} ${spectralBold.variable} ${spectralItalic.variable}`}
     >
       <body>
+        {/* Заставки для запуска с домашнего экрана на iOS. React поднимает эти
+            <link> в <head> сам — Metadata API их выразить не умеет. */}
+        <AppleSplashLinks />
         {/* Общий для всех разделов сброс прокрутки при переходах */}
         <ScrollToTop />
         {children}
