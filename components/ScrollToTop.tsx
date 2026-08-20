@@ -25,16 +25,26 @@ export function ScrollToTop() {
   // такие переходы пропускаем. Флаг ставится в popstate — он приходит раньше,
   // чем роутер успевает сменить pathname.
   const pop = useRef(false);
+  // Путь, который сейчас показан. Нужен обработчику popstate ниже: к моменту
+  // события `window.location` уже новый, а этот ref — ещё прежний.
+  const shown = useRef(pathname);
 
   useEffect(() => {
     const onPopState = () => {
-      pop.current = true;
+      // Флаг взводится, только если «назад»/«вперёд» действительно уводят на
+      // ДРУГОЙ путь. Иначе (переход по якорю, смена строки запроса — а каталог
+      // весь на ?q=/?sort=/?page=) pathname не меняется, эффект ниже не
+      // выполняется, снять флаг некому — и следующий настоящий переход молча
+      // остаётся на прежней прокрутке.
+      if (window.location.pathname !== shown.current) pop.current = true;
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   useEffect(() => {
+    shown.current = pathname;
+
     if (first.current) {
       first.current = false;
       return;

@@ -632,18 +632,35 @@ export function createSong(userId: string, input: SongInput) {
   });
 }
 
+/**
+ * Правка разбора. `null` — разбора нет либо он чужой.
+ *
+ * Владелец проверяется УСЛОВИЕМ ЗАПИСИ (`where: { id, userId }`), а не
+ * отдельным чтением перед ней. Читать, сравнивать и потом писать — это две
+ * операции с зазором между ними: за этот зазор разбор успевает быть удалённым
+ * (тогда `update` падал бы исключением вместо честного «не найдено») или
+ * переданным другому владельцу. Одно условие в самом UPDATE закрывает и то, и
+ * другое, а заодно снимает лишний поход в базу.
+ *
+ * P2025 — «под условие ничего не подошло». Для вызывающего это ровно тот же
+ * ответ, что и «чужой разбор», поэтому превращаем в `null`, а не в падение.
+ */
 export async function updateSong(id: string, userId: string, input: SongInput) {
-  const existing = await prisma.song.findUnique({ where: { id }, select: { userId: true } });
-  if (!existing || existing.userId !== userId) return null;
-  return prisma.song.update({
-    where: { id },
-    data: { ...normalize(input), ...coverFields(input.coverUrl) },
-  });
+  try {
+    return await prisma.song.update({
+      where: { id, userId },
+      data: { ...normalize(input), ...coverFields(input.coverUrl) },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      return null;
+    }
+    throw error;
+  }
 }
 
+/** Удаление разбора. false — разбора нет либо он чужой (см. `updateSong`). */
 export async function deleteSong(id: string, userId: string) {
-  const existing = await prisma.song.findUnique({ where: { id }, select: { userId: true } });
-  if (!existing || existing.userId !== userId) return false;
-  await prisma.song.delete({ where: { id } });
-  return true;
+  const { count } = await prisma.song.deleteMany({ where: { id, userId } });
+  return count > 0;
 }

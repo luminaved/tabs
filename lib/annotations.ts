@@ -42,12 +42,17 @@ export async function createAnnotation(userId: string, input: AnnotationInput) {
   });
 }
 
+/**
+ * Удаление заметки. false — заметки нет либо песня под ней чужая.
+ *
+ * Владелец проверяется условием самого DELETE, а не отдельным чтением перед
+ * ним: между чтением и удалением заметка успевает исчезнуть (параллельная
+ * вкладка, удаление песни каскадом), и тогда `delete` падал бы исключением
+ * вместо честного «не найдено».
+ */
 export async function deleteAnnotation(userId: string, id: string) {
-  const ann = await prisma.annotation.findUnique({
-    where: { id },
-    select: { song: { select: { userId: true } } },
+  const { count } = await prisma.annotation.deleteMany({
+    where: { id, song: { userId } },
   });
-  if (!ann || ann.song.userId !== userId) return false;
-  await prisma.annotation.delete({ where: { id } });
-  return true;
+  return count > 0;
 }

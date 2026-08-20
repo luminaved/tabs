@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { coverVersion } from '@/lib/coverUrl';
 import { createTtlCache } from '@/lib/ttlCache';
+import { createLruCache } from '@/lib/lruCache';
 import { servableImageType } from '@/lib/imageInput';
 
 /**
@@ -23,7 +24,7 @@ type SizeKey = keyof typeof SIZES;
 // формат. Нужен на случай, если перед приложением нет CDN — иначе одна и та же
 // картинка пережималась бы на каждый запрос.
 const CACHE_LIMIT = 200;
-const cache = new Map<string, { body: Buffer; type: string }>();
+const cache = createLruCache<{ body: Buffer; type: string }>(CACHE_LIMIT);
 
 /**
  * Короткие колонки разбора — отдельным кэшем со сроком годности. Именно он
@@ -38,14 +39,6 @@ const meta = createTtlCache<{
   /** Нужен, чтобы отдать приватную обложку автору и никому больше. */
   userId: string;
 }>(META_TTL_MS, 500);
-
-function remember(key: string, value: { body: Buffer; type: string }) {
-  if (cache.size >= CACHE_LIMIT) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
-  }
-  cache.set(key, value);
-}
 
 /**
  * WebP при поддержке, иначе JPEG. AVIF намеренно не используем: на картинках
@@ -122,6 +115,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   let body: Buffer;
   let type: string;
   try {
+    // Квадрат — не потеря пропорции по недосмотру: обложка на сайте квадратная
+    // везде (.cover-sm в списках, .cover-fill на странице разбора), и в базу
+    // она попадает уже квадратной — до 512×512 её жмёт сам редактор
+    // (lib/resizeImage.ts). То есть здесь `cover` практически ничего не режет.
     const pipeline = sharp(source).resize(SIZES[size], SIZES[size], { fit: 'cover' });
     if (format === 'webp') {
       body = await pipeline.webp({ quality: 76 }).toBuffer();
@@ -141,7 +138,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     type = raw;
   }
 
-  remember(key, { body, type });
+  cache.set(key, { body, type });
   return respond(body, type, ownerOnly);
 }
 

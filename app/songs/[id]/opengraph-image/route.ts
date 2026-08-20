@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { prisma } from '@/lib/db';
 import { getInstrument } from '@/lib/chords/instruments';
 import { songIdFromParam } from '@/lib/slug';
+import { createLruCache } from '@/lib/lruCache';
 
 /**
  * Картинка для превью ссылки (Telegram/VK/WhatsApp/Twitter) — 1200×630.
@@ -24,7 +25,7 @@ const BG = '#0e0d0b';
 const ACCENT = '#e6a23c';
 
 const CACHE_LIMIT = 60;
-const cache = new Map<string, Buffer>();
+const cache = createLruCache<Buffer>(CACHE_LIMIT);
 
 // Вордмарк — латиница, поэтому рисуется одинаково на любой системе (кириллицу
 // в картинку принципиально не выводим). Разбивка «Raw» акцентом + «Chords»
@@ -79,6 +80,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     where: { id },
     select: { coverUrl: true, visibility: true, updatedAt: true, instrument: true },
   });
+  // `unlisted` сюда проходит намеренно: смысл такого разбора — в том, что им
+  // делятся прямой ссылкой, а превью ссылки мессенджер рисует из этой картинки.
+  // Закрыть её значило бы оставить от ссылки голый адрес. Закрыт только
+  // `private`.
   if (!song || song.visibility === 'private') return new Response(null, { status: 404 });
 
   const strings = getInstrument(song.instrument).strings;
@@ -123,10 +128,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     out = await sharp(placeholder(strings)).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
   }
 
-  if (cache.size >= CACHE_LIMIT) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
-  }
   cache.set(key, out);
   return image(out);
 }

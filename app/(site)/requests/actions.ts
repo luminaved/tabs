@@ -22,6 +22,11 @@ export interface RequestFormState {
   done?: 'created' | 'voted' | 'known';
 }
 
+/** Исход голоса. Пустой объект — голос ушёл, строка обновится сама. */
+export interface VoteState {
+  error?: string;
+}
+
 /**
  * Заявок с одного адреса в час. Форма открыта гостям, то есть это единственная
  * на сайте запись в БД без входа, — потолок здесь не перестраховка. Пятёрки
@@ -82,25 +87,39 @@ export async function requestSongAction(
  *
  * Отдельный экшен от формы: голосуют кнопкой из списка, где название и
  * исполнитель уже известны, — переспрашивать их незачем.
+ *
+ * Возвращает состояние, а не `void`: раньше оба отказа (лимит и неопознанный
+ * браузер) были молчаливым `return`, и кнопка на них выглядела просто
+ * сломанной — счётчик не двигался, объяснения не было.
  */
-export async function voteRequestAction(formData: FormData): Promise<void> {
+export async function voteRequestAction(
+  _prev: VoteState,
+  formData: FormData,
+): Promise<VoteState> {
   const id = String(formData.get('id') ?? '');
-  if (!id) return;
+  if (!id) return {};
 
   const h = await headers();
   const ip = clientIpFrom((n) => h.get(n)) || 'no-ip';
   // Голос дешевле заявки, но и он пишет в базу — потолок тот же по порядку.
   const limit = await hit(`request-vote:${ip}`, REQUEST_LIMIT * 4, REQUEST_WINDOW_MS);
-  if (!limit.ok) return;
+  if (!limit.ok) {
+    const minutes = Math.ceil(limit.retryAfter / 60);
+    return { error: `Слишком много голосов. Попробуйте через ${minutes} мин.` };
+  }
 
+  // Голосующий не опознан — это `currentVisitorKey()` посчитал User-Agent
+  // ботом. У живого браузера так не бывает, но если уж случилось, молчать
+  // нельзя: человек видит кнопку, жмёт её и ничего не происходит.
   const requester = await currentRequester();
-  if (!requester) return;
+  if (!requester) return { error: 'Голос не засчитан: браузер не опознан.' };
 
   // Именно `voteForRequest`, а НЕ `createOrVote`: тот при отсутствии заявки
   // создаёт новую, и удаление спама админом отменялось бы первым же кликом с
   // чужой открытой вкладки. Голос должен быть только голосом.
   await voteForRequest(id, requester);
   revalidatePath('/requests');
+  return {};
 }
 
 /** Удаление заявки. Только администратору: список публичный. */

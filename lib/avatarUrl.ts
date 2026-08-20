@@ -24,11 +24,23 @@ export const AVATAR_TAIL_CHARS = 128;
  * странице) саму картинку из базы больше не тянет: ей достаточно `length(image)`
  * и `right(image, 128)` — полторы сотни байт вместо всего data URL. Обе функции
  * обязаны давать одинаковый результат, это закреплено тестом.
+ *
+ * Аккумулятора два, и это не украшение. С одним отпечаток был 32-битным, то
+ * есть ~4 млрд значений на все версии одного аватара; при столкновении адрес
+ * `?v=` не менялся бы и человек видел бы старое фото после замены — с длинным
+ * `immutable`-кэшем в браузере это чинится только чисткой кэша руками. Две
+ * независимые свёртки (разные множители, разное начальное состояние) дают 64
+ * бита той же ценой в один проход по хвосту.
  */
 export function avatarVersionFromParts(length: number, tail: string): string {
-  let h = length;
-  for (let i = 0; i < tail.length; i++) h = (Math.imul(31, h) + tail.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(36);
+  let a = length;
+  let b = length ^ 0x9e3779b9;
+  for (let i = 0; i < tail.length; i++) {
+    const code = tail.charCodeAt(i);
+    a = (Math.imul(31, a) + code) | 0;
+    b = (Math.imul(131, b) ^ code) | 0;
+  }
+  return `${(a >>> 0).toString(36)}${(b >>> 0).toString(36)}`;
 }
 
 /**

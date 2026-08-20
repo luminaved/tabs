@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { prisma } from '@/lib/db';
 import { avatarVersion } from '@/lib/avatarUrl';
 import { createTtlCache } from '@/lib/ttlCache';
+import { createLruCache } from '@/lib/lruCache';
 import { isAllowedAvatarUrl, servableImageType } from '@/lib/imageInput';
 import { adoptRemoteAvatar } from '@/lib/remoteAvatar';
 
@@ -25,7 +26,7 @@ import { adoptRemoteAvatar } from '@/lib/remoteAvatar';
 
 const SIZE = 96; // ×2 к самому крупному показу (48px в кабинете)
 const CACHE_LIMIT = 100;
-const cache = new Map<string, { body: Buffer; type: string }>();
+const cache = createLruCache<{ body: Buffer; type: string }>(CACHE_LIMIT);
 
 /**
  * Версия аватара (отпечаток картинки) — с коротким сроком годности: он и
@@ -104,10 +105,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     type = raw;
   }
 
-  if (cache.size >= CACHE_LIMIT) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
-  }
   cache.set(key, { body, type });
   return respond(body, type, versioned);
 }

@@ -5,10 +5,10 @@ import { isAdminUser } from '@/lib/admin';
 import { currentVisitorKey } from '@/lib/visitor';
 import { listRequests, type RequesterRef } from '@/lib/songRequests';
 import { INSTRUMENTS } from '@/lib/chords/instruments';
-import { pluralRu } from '@/lib/plural';
 import { SITE_NAME } from '@/lib/site';
 import { RequestForm } from '@/components/RequestForm';
-import { deleteRequestAction, voteRequestAction } from './actions';
+import { OpenRequestRow } from '@/components/OpenRequestRow';
+import { deleteRequestAction } from './actions';
 
 /**
  * Страница из индекса закрыта, и это не осторожность, а осознанный отказ.
@@ -75,48 +75,7 @@ export default async function RequestsPage() {
           </p>
           <ul className="flex flex-col gap-2">
             {open.map((r) => (
-              <li key={r.id} className="req-row">
-                {/* Обычная форма, а не кнопка на JS: голос — это запись в базу,
-                    и она должна работать даже там, где скрипты не выполнились. */}
-                <form action={voteRequestAction} className="shrink-0">
-                  {/* Только идентификатор: голос ничего не создаёт, поэтому
-                      название с исполнителем экшену больше не нужны — и тем
-                      меньше данных, которым он мог бы поверить. */}
-                  <input type="hidden" name="id" value={r.id} />
-                  <button
-                    type="submit"
-                    disabled={r.mine}
-                    className={r.mine ? 'req-vote req-vote--on' : 'req-vote'}
-                    aria-label={
-                      r.mine
-                        ? `Ваш голос за «${r.title}» учтён. Сейчас просят: ${r.votes}`
-                        : `Поднять «${r.title}» в очереди. Сейчас просят: ${r.votes}`
-                    }
-                    title={r.mine ? 'Ваш голос учтён' : 'Поднять в очереди — разберём раньше'}
-                  >
-                    <ArrowUpIcon />
-                    <span className="req-vote-count">{r.votes}</span>
-                    {/* Подпись под числом — чтобы столбик не читался как «+1».
-                        Слово то же, что в схеме: счётчик мерит спрос, а не
-                        число уникальных людей. */}
-                    <span className="req-vote-label">
-                      {pluralRu(r.votes, 'просит', 'просят', 'просят')}
-                    </span>
-                  </button>
-                </form>
-
-                <div className="req-body">
-                  <div className="req-title-line">
-                    <span className="req-title">{r.title}</span>
-                    {r.instrument !== 'guitar' ? (
-                      <span className="inst-badge shrink-0">{INSTRUMENTS[r.instrument].name}</span>
-                    ) : null}
-                  </div>
-                  {/* «без исполнителя» остаётся ради записей, заведённых до
-                      того, как поле стало обязательным. */}
-                  <p className="req-meta">{r.artist || 'без исполнителя'}</p>
-                </div>
-
+              <OpenRequestRow key={r.id} request={r}>
                 {canModerate ? (
                   <form action={deleteRequestAction} className="shrink-0">
                     <input type="hidden" name="id" value={r.id} />
@@ -130,7 +89,7 @@ export default async function RequestsPage() {
                     </button>
                   </form>
                 ) : null}
-              </li>
+              </OpenRequestRow>
             ))}
           </ul>
         </section>
@@ -177,16 +136,6 @@ export default async function RequestsPage() {
         </section>
       ) : null}
     </main>
-  );
-}
-
-/** Стрелка вверх — «поднять в очереди». Направление и есть смысл кнопки. */
-function ArrowUpIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 19V5" />
-      <path d="m5 12 7-7 7 7" />
-    </svg>
   );
 }
 

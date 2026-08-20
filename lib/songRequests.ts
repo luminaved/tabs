@@ -227,6 +227,14 @@ export async function listRequests(requester: RequesterRef | null): Promise<Requ
  * рассинхрона: разбор удалили или спрятали — заявка сама снова становится
  * открытой, и никакой фоновой сверки для этого не нужно. Плата — один запрос
  * с перечислением; при потолке в сотню заявок это дёшево.
+ *
+ * Карта заполняется ключами ЗАЯВОК, а не найденных разборов, и это не
+ * придирка. Раньше ключ считался от песни — а для заявки без исполнителя
+ * условие в запросе исполнителя не требует, значит подходящий разбор находился
+ * с каким-то своим `artist`, и его ключ («название + исполнитель») никогда не
+ * совпадал с ключом заявки («только название»). Такие заявки не закрывались ни
+ * при каких условиях. Поле стало обязательным на ввод позже, поэтому записи без
+ * исполнителя в базе остались.
  */
 async function findFulfilled(
   rows: { title: string; artist: string | null; instrument: string }[],
@@ -242,12 +250,36 @@ async function findFulfilled(
         ...(r.artist ? { artist: { equals: r.artist, mode: 'insensitive' as const } } : {}),
       })),
     },
+    // Для заявки без исполнителя подходящих разборов может оказаться
+    // несколько — берём первый вышедший, а не тот, что вернула база.
+    orderBy: { createdAt: 'asc' },
     select: { id: true, title: true, artist: true, instrument: true },
   });
 
+  const byTitle = new Map<string, typeof songs>();
+  for (const s of songs) {
+    const key = titleKey(s.instrument, s.title);
+    const list = byTitle.get(key);
+    if (list) list.push(s);
+    else byTitle.set(key, [s]);
+  }
+
   const out = new Map<string, string>();
-  for (const s of songs) out.set(requestMatchKey(s), songPath(s));
+  for (const r of rows) {
+    const list = byTitle.get(titleKey(r.instrument, r.title));
+    if (!list) continue;
+    const artist = r.artist?.toLowerCase();
+    // Без исполнителя заявку закрывает любой разбор с тем же названием — так
+    // это и задумано для старых записей (см. комментарий у формы заявки).
+    const song = artist ? list.find((s) => s.artist?.toLowerCase() === artist) : list[0];
+    if (song) out.set(requestMatchKey(r), songPath(song));
+  }
   return out;
+}
+
+/** «Инструмент + название» — то, по чему запрос уже отобрал разборы. */
+function titleKey(instrument: string, title: string): string {
+  return `${parseInstrumentId(instrument)}:${title.trim().toLowerCase()}`;
 }
 
 /** Удаление заявки — только администратору (см. экшен). */
