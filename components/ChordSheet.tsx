@@ -1,5 +1,6 @@
-import { Fragment } from 'react';
+import { Fragment, type CSSProperties } from 'react';
 import { lineToColumns, lineToPlainText } from '@/lib/chordpro/columns';
+import { chordPads } from '@/lib/chordpro/spacing';
 import { Section, Segment, Song } from '@/lib/chordpro/types';
 
 /** Интерактивность строк для аннотаций (опционально — обычный рендер без неё). */
@@ -114,20 +115,24 @@ function LyricLineView({
   renderChord?: (chord: string) => React.ReactNode;
 }) {
   const columns = lineToColumns(segments);
+  // Аккорд сам по себе колонку не расширяет (см. lib/chordpro/spacing.ts):
+  // отступ появляется только там, где иначе два аккорда налезли бы друг на друга.
+  const pads = chordPads(columns);
   const clickable = !!interaction?.onLineClick;
   const active = interaction?.activeLine === line;
 
   // Колонки одного слова (разбитого аккордом) держим вместе: перенос строки —
   // только между словами (по пробелам), внутри слова — никогда.
-  const words: (typeof columns)[] = [];
-  let current: typeof columns = [];
-  for (const col of columns) {
-    current.push(col);
+  type Cell = { col: (typeof columns)[number]; pad?: string };
+  const words: Cell[][] = [];
+  let current: Cell[] = [];
+  columns.forEach((col, i) => {
+    current.push({ col, pad: pads[i] });
     if (col.spaceAfter) {
       words.push(current);
       current = [];
     }
-  }
+  });
   if (current.length) words.push(current);
 
   const content =
@@ -137,8 +142,12 @@ function LyricLineView({
       words.map((word, wi) => (
         <Fragment key={wi}>
           <span className="cs-word">
-            {word.map((col, ci) => (
-              <span key={ci} className="cs-col">
+            {word.map(({ col, pad }, ci) => (
+              <span
+                key={ci}
+                className="cs-col"
+                style={pad ? ({ '--cs-pad': pad } as CSSProperties) : undefined}
+              >
                 <span className="cs-chord">
                   {col.chord ? (renderChord ? renderChord(col.chord) : col.chord) : ''}
                 </span>
@@ -148,7 +157,7 @@ function LyricLineView({
               </span>
             ))}
           </span>
-          {word[word.length - 1]?.spaceAfter ? ' ' : null}
+          {word[word.length - 1]?.col.spaceAfter ? ' ' : null}
         </Fragment>
       ))
     );
