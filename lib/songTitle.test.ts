@@ -30,6 +30,16 @@ describe('titleFit', () => {
     expect(verified.oneLine).toBeGreaterThan(plain.oneLine);
   });
 
+  it('хвост под галочку — неразрывный пробел и значок в 0.72 кегля', () => {
+    // Число должно совпадать с .song-title .verified-badge в globals.css:
+    // значок растёт вместе с названием, и запас под него считается в долях
+    // кегля. Разъедется пара — галочка начнёт переноситься на свою строку.
+    // Сравниваем грубо: обе ширины округлены до сотых, и разность round(a) −
+    // round(b) точного значения не даёт.
+    const tail = titleFit('Пьяные', true).oneLine - titleFit('Пьяные').oneLine;
+    expect(tail).toBeCloseTo((0.25 + 0.72) * 1.015, 1);
+  });
+
   it('широкие буквы шире узких', () => {
     expect(titleFit('шшш').oneLine).toBeGreaterThan(titleFit('ттт').oneLine);
   });

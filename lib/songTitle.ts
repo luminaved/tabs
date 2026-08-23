@@ -86,12 +86,19 @@ const LETTER_SPACING = -0.015;
 const SPACE = 0.25;
 
 /**
- * Хвост за последним словом у подтверждённого разбора: неразрывный пробел плюс
- * значок. Значок ростом не меняется (24px), и здесь он взят в долях
- * МИНИМАЛЬНОГО кегля — на крупном это запас в его пользу, и название скорее
- * останется на кегль мельче, чем налезет на галочку.
+ * Значок подтверждения с неразрывным пробелом перед ним — хвост за последним
+ * словом.
+ *
+ * Значок растёт вместе с названием (см. `.song-title .verified-badge` в
+ * globals.css), поэтому доли кегля здесь — не оценка, а точное значение.
+ *
+ * Вычесть его из ширины колонки в CSS было бы нельзя при всём желании: em
+ * внутри `font-size` считается от кегля РОДИТЕЛЯ, а не от вычисляемого, и такой
+ * запас отмерялся бы от 16px заголовка. Поэтому хвост прибавляется к ширине
+ * слова — что то же самое, только без круговой ссылки.
  */
-const BADGE = 1.05;
+const BADGE = 0.72;
+const BADGE_TAIL = SPACE + BADGE;
 
 /** Запас на округления при отрисовке: лучше кегль мельче, чем строка не влезла. */
 const SAFETY = 1.015;
@@ -99,9 +106,9 @@ const SAFETY = 1.015;
 export interface TitleFit {
   /** Ширина названия одной строкой, в долях кегля. */
   oneLine: number;
-  /** Ширина самого длинного слова; у последнего учтён значок подтверждения. */
+  /** Ширина самого длинного слова: перенести его некуда, оно и задаёт потолок. */
   longestWord: number;
-  /** Слов в названии — от них зависит потолок кегля у многострочных. */
+  /** Слов в названии — от них зависит, на сколько строк рассчитывать потолок. */
   words: number;
 }
 
@@ -113,22 +120,26 @@ function wordWidth(word: string): number {
 }
 
 /**
- * Две ширины названия, из которых CSS считает кегль:
- * `oneLine` — влезет ли название целиком в строку, `longestWord` — влезет ли
- * хотя бы самое длинное слово (перенести его некуда, и оно задаёт потолок).
+ * Две ширины названия, из которых CSS считает кегль: влезет ли оно целиком в
+ * строку (`oneLine`) и влезет ли самое длинное слово (`longestWord`) — перенести
+ * его некуда, и оно задаёт потолок.
  */
 export function titleFit(title: string, verified = false): TitleFit {
   const words = title.split(/\s+/).filter(Boolean);
+  const round = (n: number) => Math.round(n * SAFETY * 100) / 100;
   if (words.length === 0) return { oneLine: SAFETY, longestWord: SAFETY, words: 0 };
 
-  const tail = verified ? BADGE : 0;
   const widths = words.map(wordWidth);
-  // Значок стоит за последним словом и переносится вместе с ним.
-  widths[widths.length - 1] += tail;
+  // Значок с неразрывным пробелом переносится вместе с последним словом, то
+  // есть входит в его ширину — и в самое длинное слово, если последнее им и
+  // оказалось.
+  if (verified) widths[widths.length - 1] += BADGE_TAIL;
 
-  const oneLine = widths.reduce((a, b) => a + b, 0) + (words.length - 1) * (SPACE + LETTER_SPACING);
-  const longestWord = Math.max(...widths);
-
-  const round = (n: number) => Math.round(n * SAFETY * 100) / 100;
-  return { oneLine: round(oneLine), longestWord: round(longestWord), words: words.length };
+  return {
+    oneLine: round(
+      widths.reduce((a, b) => a + b, 0) + (words.length - 1) * (SPACE + LETTER_SPACING),
+    ),
+    longestWord: round(Math.max(...widths)),
+    words: words.length,
+  };
 }

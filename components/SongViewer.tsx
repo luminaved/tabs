@@ -606,6 +606,10 @@ export function SongViewer({
                     {optimisticVerified ? (
                       <>
                         {' '}
+                        {/* Размер значка задан в долях кегля стилями
+                            (.song-title .verified-badge): кегль названия
+                            зависит от его длины, и число здесь — только
+                            запасное, на случай если стиль не доехал. */}
                         <VerifiedBadge size={24} />
                       </>
                     ) : null}
