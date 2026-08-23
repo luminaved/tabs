@@ -33,6 +33,7 @@ import {
   writePref,
 } from '@/lib/viewerPrefs';
 import { withPluralRu } from '@/lib/plural';
+import { titleFit } from '@/lib/songTitle';
 import { songFromRecord, type SongRecordLike } from '@/lib/chordpro/fromRecord';
 import { songAccidental, transposeSong } from '@/lib/chordpro/transform';
 import { transposeKey } from '@/lib/chords/key';
@@ -372,7 +373,11 @@ export function SongViewer({
       // scrollHeight у -webkit-box всегда чуть больше клампа: выносные элементы
       // букв не помещаются в line-height 1.05. Поэтому сравниваем не высоты, а
       // округлённое число строк.
-      setTitleClipped(Math.round(el.scrollHeight / lineHeight) > limit);
+      const tooManyLines = Math.round(el.scrollHeight / lineHeight) > limit;
+      // Второй случай — одно слово шире колонки: переносить его негде, кегль
+      // уже на нижней границе, и без этой проверки оно обрезалось бы молча.
+      const tooWide = el.scrollWidth - el.clientWidth > 1;
+      setTitleClipped(tooManyLines || tooWide);
     };
 
     check();
@@ -388,6 +393,23 @@ export function SongViewer({
       observer.disconnect();
     };
   }, [titleText]);
+
+  /**
+   * Кегль названия — по нему самому: короткому есть куда расти, длинное
+   * остаётся на прежних 30px (формула в .song-title). Потолок для
+   * многострочных — 42px: две строки такого кегля вместе с исполнителем ещё не
+   * выше обложки, то есть шапка не растёт.
+   */
+  const titleStyle = useMemo(() => {
+    const fit = titleFit(titleText, optimisticVerified);
+    return {
+      '--title-w1': fit.oneLine,
+      '--title-wmax': fit.longestWord,
+      '--title-cap': fit.words <= 2 ? '2.625rem' : '1.875rem',
+      // Без обложки колонка под заголовком — во всю ширину страницы.
+      ...(coverUrl ? null : { '--title-cover': '0px' }),
+    } as CSSProperties;
+  }, [titleText, optimisticVerified, coverUrl]);
 
   // Подсказка с полным названием закрывается нажатием мимо неё и по Escape.
   useEffect(() => {
@@ -544,18 +566,19 @@ export function SongViewer({
               {/* Обёртка нужна подсказке с полным названием: сам заголовок
                   обрезан по overflow, и всё внутри него отрезало бы. */}
               <div ref={titleWrapRef} className="relative">
-                {/* Кегль 30px вместо 36: на телефоне заголовок стоит в колонке
-                    шириной около 200px, и на 36 даже три коротких слова
-                    разъезжались на четыре строки.
+                {/* Кегль задаётся в .song-title, а не утилитой: на телефоне он
+                    считается из длины названия (см. lib/songTitle.ts) — от 30px
+                    у длинных до 48px у однословных.
 
                     Галочка идёт прямо в потоке текста, а не отдельной колонкой
                     flex: так она встаёт в конец названия (за последним словом,
                     даже когда оно перенеслось), как и в каталоге. Неразрывный
                     пробел не даёт ей оторваться от слова. */}
-                <h1 className="display text-3xl font-medium sm:text-5xl">
+                <h1 className="display font-medium">
                   <span
                     ref={titleRef}
                     className={titleClipped ? 'song-title song-title--clipped' : 'song-title'}
+                    style={titleStyle}
                     role={titleClipped ? 'button' : undefined}
                     tabIndex={titleClipped ? 0 : undefined}
                     aria-expanded={titleClipped ? titleOpen : undefined}
