@@ -104,12 +104,10 @@ const BADGE_TAIL = SPACE + BADGE;
 const SAFETY = 1.015;
 
 export interface TitleFit {
-  /** Ширина названия одной строкой, в долях кегля. */
+  /** Ширина колонки, при которой название ложится в одну строку, в долях кегля. */
   oneLine: number;
-  /** Ширина самого длинного слова: перенести его некуда, оно и задаёт потолок. */
-  longestWord: number;
-  /** Слов в названии — от них зависит, на сколько строк рассчитывать потолок. */
-  words: number;
+  /** То же для двух строк — наименьшая ширина, при которой хватает двух. */
+  twoLines: number;
 }
 
 /** Ширина слова в долях кегля. */
@@ -119,27 +117,76 @@ function wordWidth(word: string): number {
   return width;
 }
 
+/** Промежуток между словами. */
+const GAP = SPACE + LETTER_SPACING;
+
+/** Сколько строк даст жадный перенос в колонке шириной `width`. */
+function greedyLines(widths: number[], width: number): number {
+  let lines = 1;
+  let current = widths[0];
+  for (let i = 1; i < widths.length; i++) {
+    const next = current + GAP + widths[i];
+    if (next <= width + 1e-9) current = next;
+    else {
+      lines += 1;
+      current = widths[i];
+    }
+  }
+  return lines;
+}
+
 /**
- * Две ширины названия, из которых CSS считает кегль: влезет ли оно целиком в
- * строку (`oneLine`) и влезет ли самое длинное слово (`longestWord`) — перенести
- * его некуда, и оно задаёт потолок.
+ * Наименьшая ширина колонки, при которой название укладывается в `limit` строк.
+ *
+ * Перебираем ширины всех возможных строк: строка — это всегда несколько подряд
+ * идущих слов, поэтому ответом может быть только такая сумма. Проверяем их от
+ * узкой к широкой ЖАДНЫМ переносом — тем же, каким ломает строки браузер:
+ * оптимальная разбивка дала бы ширину меньше настоящей, и название вылезло бы
+ * на лишнюю строку.
+ */
+function widthForLines(widths: number[], limit: number): number {
+  const candidates: number[] = [];
+  for (let i = 0; i < widths.length; i++) {
+    let sum = widths[i];
+    candidates.push(sum);
+    for (let j = i + 1; j < widths.length; j++) {
+      sum += GAP + widths[j];
+      candidates.push(sum);
+    }
+  }
+  // Уже самого длинного слова колонка быть не может: перенести его некуда, и
+  // счёт строк тут обманчив — в узкой колонке слово встаёт на свою строку и
+  // просто вылезает за край. Само оно тоже в кандидатах, так что нижняя
+  // граница достижима.
+  const floor = Math.max(...widths);
+  candidates.sort((a, b) => a - b);
+  for (const width of candidates) {
+    if (width >= floor && greedyLines(widths, width) <= limit) return width;
+  }
+  return candidates[candidates.length - 1];
+}
+
+/**
+ * Две ширины названия, из которых CSS считает кегль: сколько места нужно, чтобы
+ * оно легло в одну строку и чтобы легло в две.
+ *
+ * Считаем именно строки, а не слова. Раньше потолок кегля зависел от числа слов,
+ * и «я схавал опиат» — три слова — попадало в правило для длинных: название
+ * вытягивалось в одну мелкую строку, хотя «я схавал» / «опиат» крупным кеглем
+ * встают ровно по высоте обложки.
  */
 export function titleFit(title: string, verified = false): TitleFit {
   const words = title.split(/\s+/).filter(Boolean);
   const round = (n: number) => Math.round(n * SAFETY * 100) / 100;
-  if (words.length === 0) return { oneLine: SAFETY, longestWord: SAFETY, words: 0 };
+  if (words.length === 0) return { oneLine: SAFETY, twoLines: SAFETY };
 
   const widths = words.map(wordWidth);
   // Значок с неразрывным пробелом переносится вместе с последним словом, то
-  // есть входит в его ширину — и в самое длинное слово, если последнее им и
-  // оказалось.
+  // есть входит в его ширину.
   if (verified) widths[widths.length - 1] += BADGE_TAIL;
 
   return {
-    oneLine: round(
-      widths.reduce((a, b) => a + b, 0) + (words.length - 1) * (SPACE + LETTER_SPACING),
-    ),
-    longestWord: round(Math.max(...widths)),
-    words: words.length,
+    oneLine: round(widths.reduce((a, b) => a + b, 0) + (words.length - 1) * GAP),
+    twoLines: round(widthForLines(widths, 2)),
   };
 }
