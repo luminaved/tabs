@@ -12,6 +12,7 @@ import {
 import Link from 'next/link';
 import { ChordSheet } from './ChordSheet';
 import { ChordCard } from './ChordCard';
+import { diagramWidth } from './ChordDiagram';
 import { InlineChord } from './InlineChord';
 import { AnnotationForm } from './AnnotationForm';
 import { ShareButton } from './ShareButton';
@@ -437,7 +438,12 @@ export function SongViewer({
     <div className={pinChords ? 'chord-bar chord-bar--pinned print-hide' : 'chord-bar print-hide'}>
       {/* Закреплённые аккорды не переносятся на вторую строку, а едут
           горизонтально: иначе на телефоне они съели бы пол-экрана. */}
-      <div className="chord-bar-strip">
+      {/* Ширина колонки сетки (см. globals.css) — по самой диаграмме: у укулеле
+          она уже гитарной, и одним числом на оба инструмента не обойтись. */}
+      <div
+        className="chord-bar-strip"
+        style={{ '--chord-card-w': `${diagramWidth(inst.strings, 96)}px` } as CSSProperties}
+      >
         {usedChords.map((c) => (
           <ChordCard
             key={c}
