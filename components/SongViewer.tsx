@@ -32,6 +32,7 @@ import {
   viewerKeys,
   writePref,
 } from '@/lib/viewerPrefs';
+import { withPluralRu } from '@/lib/plural';
 import { songFromRecord, type SongRecordLike } from '@/lib/chordpro/fromRecord';
 import { songAccidental, transposeSong } from '@/lib/chordpro/transform';
 import { transposeKey } from '@/lib/chords/key';
@@ -111,25 +112,29 @@ export function SongViewer({
   shareUrl?: string;
   shareTitle?: string;
 }) {
-  const createdLabel = createdAt?.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  /**
+   * Дата добавления коротко: «19 авг. 2026».
+   *
+   * Слово «добавлено» ушло вместе с полным месяцем: подпись стоит мелкой серой
+   * строкой под шапкой, и в ней важна сама дата, а не служебное пояснение.
+   * Собираем из частей, а не режем строку: в русской локали Intl дописывает
+   * « г.», и в ряду с числом аккордов этот хвост только шумит.
+   */
+  const createdLabel = createdAt
+    ? new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
+        .formatToParts(createdAt)
+        .filter((p) => p.type === 'day' || p.type === 'month' || p.type === 'year')
+        .map((p) => p.value)
+        .join(' ')
+    : null;
   const base = useMemo(() => songFromRecord(record), [record]);
   const inst = getInstrument(instrument);
 
-  // Подпись под шапкой: только то, чего страница не говорит в других местах.
-  //
-  // Капо отсюда УБРАНО намеренно. В ряду с темпом и датой добавления оно
+  // Капо в подписи под шапкой НЕТ намеренно. В ряду с темпом и датой оно
   // читалось как ещё одна справочная мелочь, хотя это единственное, без чего
   // песню не сыграешь как записано. Теперь у него своя плашка над текстом —
   // см. ниже.
   const capo = typeof base.meta.capo === 'number' ? base.meta.capo : 0;
-  const metaBits = [
-    base.meta.tempo ? `${base.meta.tempo} bpm` : null,
-    createdLabel ? `добавлено ${createdLabel}` : null,
-  ].filter(Boolean);
 
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);
@@ -320,6 +325,16 @@ export function SongViewer({
   const realKey = base.meta.key ? transposeKey(base.meta.key, transpose) : null;
   const usedChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
 
+  // Подпись под шапкой: только то, чего страница не говорит в других местах.
+  // Инструмент и тональность отсюда ушли раньше — их видно в крошках и крупно в
+  // панели управления. Число аккордов берём у той же панели аппликатур: оно
+  // говорит о разборе больше, чем дата, и стоит ровно один раз.
+  const metaBits = [
+    createdLabel,
+    usedChords.length ? withPluralRu(usedChords.length, 'аккорд', 'аккорда', 'аккордов') : null,
+    base.meta.tempo ? `${base.meta.tempo} bpm` : null,
+  ].filter(Boolean);
+
   // Свои аппликатуры едут вместе с песней: они лежат под именем аккорда, а
   // транспонирование это имя меняет. Без переноса диаграмма пропадала с первым
   // же нажатием «+» — у аккорда, форму которого нарисовали руками, под новым
@@ -328,6 +343,68 @@ export function SongViewer({
     () => transposeChordDefs(chordDefs ?? {}, transpose, songAccidental(base.meta.key, transpose)),
     [chordDefs, base.meta.key, transpose],
   );
+
+  // ── Длинное название ──────────────────────────────────────────────────────
+  //
+  // Заголовок обрезается тремя строками (см. .song-title в globals.css), и хвост
+  // последней растворяется. Но растворять можно ТОЛЬКО когда обрезка правда
+  // случилась: иначе маска гасила бы последние буквы у названия, которое
+  // поместилось целиком. Сам факт обрезки CSS не отдаёт, поэтому считаем,
+  // сколько строк получилось бы без неё, и сравниваем с самим `line-clamp` —
+  // так число живёт в стилях в единственном экземпляре.
+  const titleText = base.meta.title ?? 'Без названия';
+  const titleRef = useRef<HTMLSpanElement>(null);
+  const titleWrapRef = useRef<HTMLDivElement>(null);
+  const [titleClipped, setTitleClipped] = useState(false);
+  const [titleOpen, setTitleOpen] = useState(false);
+
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    let alive = true;
+
+    const check = () => {
+      if (!alive) return;
+      const style = getComputedStyle(el);
+      const lineHeight = parseFloat(style.lineHeight);
+      const limit = parseInt(style.getPropertyValue('-webkit-line-clamp'), 10);
+      if (!Number.isFinite(lineHeight) || lineHeight <= 0 || !Number.isFinite(limit)) return;
+      // scrollHeight у -webkit-box всегда чуть больше клампа: выносные элементы
+      // букв не помещаются в line-height 1.05. Поэтому сравниваем не высоты, а
+      // округлённое число строк.
+      setTitleClipped(Math.round(el.scrollHeight / lineHeight) > limit);
+    };
+
+    check();
+    // Колонка под заголовком меняет ширину от поворота экрана и от того,
+    // помещается ли рядом кнопка редактирования.
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    // Первый замер приходится на запасной шрифт, а у Spectral метрики свои.
+    document.fonts?.ready.then(check).catch(() => {});
+
+    return () => {
+      alive = false;
+      observer.disconnect();
+    };
+  }, [titleText]);
+
+  // Подсказка с полным названием закрывается нажатием мимо неё и по Escape.
+  useEffect(() => {
+    if (!titleOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!titleWrapRef.current?.contains(e.target as Node)) setTitleOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTitleOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [titleOpen]);
 
   const offsetLabel = transpose > 0 ? `+${transpose}` : transpose < 0 ? `${transpose}` : '±0';
 
@@ -464,21 +541,51 @@ export function SongViewer({
           ) : null}
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <div className="min-w-0 flex-1 self-center">
-              {/* Галочка идёт прямо в потоке текста, а не отдельной колонкой
-                  flex: так она встаёт в конец названия (за последним словом,
-                  даже когда оно перенеслось), как и в каталоге. Неразрывный
-                  пробел не даёт ей оторваться от слова. */}
-              <h1 className="display text-4xl font-medium sm:text-5xl">
-                {base.meta.title ?? 'Без названия'}
-                {optimisticVerified ? (
-                  <>
-                    {' '}
-                    <VerifiedBadge size={30} />
-                  </>
-                ) : null}
-              </h1>
+              {/* Обёртка нужна подсказке с полным названием: сам заголовок
+                  обрезан по overflow, и всё внутри него отрезало бы. */}
+              <div ref={titleWrapRef} className="relative">
+                {/* Кегль 30px вместо 36: на телефоне заголовок стоит в колонке
+                    шириной около 200px, и на 36 даже три коротких слова
+                    разъезжались на четыре строки.
+
+                    Галочка идёт прямо в потоке текста, а не отдельной колонкой
+                    flex: так она встаёт в конец названия (за последним словом,
+                    даже когда оно перенеслось), как и в каталоге. Неразрывный
+                    пробел не даёт ей оторваться от слова. */}
+                <h1 className="display text-3xl font-medium sm:text-5xl">
+                  <span
+                    ref={titleRef}
+                    className={titleClipped ? 'song-title song-title--clipped' : 'song-title'}
+                    role={titleClipped ? 'button' : undefined}
+                    tabIndex={titleClipped ? 0 : undefined}
+                    aria-expanded={titleClipped ? titleOpen : undefined}
+                    title={titleClipped ? 'Показать название целиком' : undefined}
+                    onClick={titleClipped ? () => setTitleOpen((v) => !v) : undefined}
+                    onKeyDown={
+                      titleClipped
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              // Пробел иначе прокручивает страницу из-под подсказки.
+                              e.preventDefault();
+                              setTitleOpen((v) => !v);
+                            }
+                          }
+                        : undefined
+                    }
+                  >
+                    {titleText}
+                    {optimisticVerified ? (
+                      <>
+                        {' '}
+                        <VerifiedBadge size={24} />
+                      </>
+                    ) : null}
+                  </span>
+                </h1>
+                {titleClipped && titleOpen ? <span className="title-pop">{titleText}</span> : null}
+              </div>
               {base.meta.artist ? (
-                <p className="mt-1.5 text-lg text-muted">
+                <p className="mt-1 text-base text-muted sm:mt-1.5 sm:text-lg">
                   {/* Клик по исполнителю — все его разборы */}
                   <Link
                     href={`/artist/${encodeURIComponent(base.meta.artist)}`}
@@ -489,15 +596,18 @@ export function SongViewer({
                 </p>
               ) : null}
             </div>
+            {/* На телефоне карандаш уходит вниз, в ряд действий: в строке
+                заголовка он забирал 56px из ~200, и названию не оставалось места
+                даже на второе слово. На широком экране места хватает — там он
+                остаётся подписанной кнопкой справа. */}
             {editHref ? (
               <Link
                 href={editHref}
-                className="btn btn-outline h-11 w-11 shrink-0 px-0 text-sm print-hide sm:w-auto sm:px-4"
+                className="btn btn-outline hidden shrink-0 text-sm print-hide sm:inline-flex"
                 title="Редактировать"
-                aria-label="Редактировать"
               >
                 <PencilIcon />
-                <span className="hidden sm:inline">Редактировать</span>
+                Редактировать
               </Link>
             ) : null}
           </div>
@@ -506,18 +616,34 @@ export function SongViewer({
         {/* Строка была длиннее: «Аккорды для гитары · тональность · bpm · дата».
             Инструмент и тональность отсюда ушли — их страница уже говорит в
             других местах (первой крошкой над обложкой и крупно в панели
-            управления), и вторым разом они только шумели. Остались темп и дата:
-            их больше нигде нет.
+            управления), и вторым разом они только шумели.
+
+            Кегль здесь мелкий, а не основной, как было. Строкой в размер текста
+            эта подпись читалась как начало новой секции: шапка будто кончилась,
+            и следом пошло что-то ещё. Мелкой она остаётся хвостом шапки.
 
             Соединение через join, а не разделителем в разметке, как было:
-            частей теперь две, и городить ради них Fragment с отдельным
-            <span> под точку незачем. */}
+            городить ради точки Fragment с отдельным <span> незачем. */}
         {metaBits.length > 0 ? (
-          <p className="mt-3 text-muted">{metaBits.join(' · ')}</p>
+          <p className="mt-2.5 text-sm text-muted">{metaBits.join(' · ')}</p>
         ) : null}
 
         {/* «Поделиться» доступна всем, лайк/избранное — только со входом. */}
         <div className="print-hide mt-3 flex flex-wrap items-center gap-2">
+          {/* Карандаш владельца — первым в ряду и только на телефоне: в строке
+              заголовка он не оставлял названию ширины (см. выше). Здесь он
+              одного роста с соседями, и 36px тут не про экономию места, а про
+              то, что вся строка кнопок такая. */}
+          {editHref ? (
+            <Link
+              href={editHref}
+              className="btn btn-outline h-9 w-9 px-0 text-sm sm:hidden"
+              title="Редактировать"
+              aria-label="Редактировать"
+            >
+              <PencilIcon />
+            </Link>
+          ) : null}
           {optimisticEng && songId ? (
             <>
               <button

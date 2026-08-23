@@ -185,6 +185,16 @@
   .cs-chord {
     color: #000;
   }
+  /* На бумаге название печатается целиком: обрезка нужна экрану, где заголовок
+     стоит в узкой колонке рядом с обложкой. */
+  .song-title {
+    display: block;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
   /* На бумаге приглушённые цвета темы превращаются в светло-серое по белому.
      Заметке это стоило читаемости — на экране она нарочно тусклая. */
   .cs-note {
@@ -3207,6 +3217,82 @@
      больше — кнопка упрётся в нижний край. */
   .cover-edit--empty .cover-edit-overlay {
     padding-top: 4.4rem;
+  }
+
+  /* ── Название разбора ─────────────────────────────────────────────────────
+     На телефоне заголовок стоит в колонке рядом с обложкой, и колонка эта узкая
+     (около 200px). Длинное название разгоняло шапку на пол-экрана: галочка
+     уезжала на отдельную строку, исполнитель отрывался от названия, а подпись
+     под ними читалась как начало новой секции, а не как хвост шапки.
+
+     Поэтому название обрезается тремя строками — с ними блок с заголовком не
+     выше обложки, и шапка держит одну высоту при любом названии. Двух строк
+     мало: на них не помещаются живые названия каталога вроде «ванна красный
+     пол», которым не хватило одного слова.
+
+     Многоточия нет намеренно: точки в крупном заголовке читаются как часть
+     самого названия. Вместо них хвост последней строки растворяется в фоне, а
+     полное имя открывается по нажатию (.title-pop) — и остаётся в крошках над
+     обложкой и в заголовке вкладки. */
+  .song-title {
+    --title-lh: 1.05;
+    --title-line: calc(var(--title-lh) * 1em);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    line-height: var(--title-lh);
+  }
+  /* Растворение вешается ТОЛЬКО когда название правда не влезло — класс ставит
+     рендер, посчитав строки (см. SongViewer). Иначе маска гасила бы последние
+     буквы у названия, которое поместилось целиком, а CSS сам факт обрезки не
+     отдаёт.
+
+     Маски складываются: первая оставляет нетронутыми все строки, кроме
+     последней, вторая гасит хвост — в итоге гаснет только он. */
+  .song-title--clipped {
+    cursor: pointer;
+    -webkit-mask-image:
+      linear-gradient(
+        to bottom,
+        #000 calc(100% - var(--title-line)),
+        transparent calc(100% - var(--title-line))
+      ),
+      linear-gradient(to right, #000 calc(100% - 2.2em), transparent 100%);
+    mask-image:
+      linear-gradient(
+        to bottom,
+        #000 calc(100% - var(--title-line)),
+        transparent calc(100% - var(--title-line))
+      ),
+      linear-gradient(to right, #000 calc(100% - 2.2em), transparent 100%);
+    -webkit-mask-composite: source-over;
+    mask-composite: add;
+  }
+
+  /* Полное название по нажатию — мелким текстом на своей подложке, в одном
+     оформлении с подсказкой у галочки. Прижата к правому краю колонки и тянется
+     влево, поверх обложки: колонка слишком узкая, чтобы вместить длинное имя. */
+  .title-pop {
+    position: absolute;
+    bottom: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 60;
+    width: max-content;
+    max-width: min(19rem, 88vw);
+    padding: 0.5rem 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 28%, var(--color-line));
+    border-radius: 0.55rem;
+    background: var(--color-raised);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 400;
+    line-height: 1.35;
+    letter-spacing: 0;
+    white-space: normal;
+    box-shadow: 0 10px 26px rgb(0 0 0 / 0.5);
   }
 
   /* Обложка на странице песни — квадрат фиксированного размера. На узких
