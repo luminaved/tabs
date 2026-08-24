@@ -5,7 +5,7 @@ import { INSTRUMENTS, type InstrumentId } from '@/lib/chords/instruments';
 import { withPluralRu } from '@/lib/plural';
 import { songMeta } from '@/lib/songMeta';
 import { absoluteUrl, SITE_NAME } from '@/lib/site';
-import { breadcrumbJsonLd, itemListJsonLd, type Crumb } from '@/lib/seo';
+import { itemListJsonLd, type Crumb } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
 import { songPath } from '@/lib/slug';
 import { catalogPath } from '@/lib/chords/instruments';
@@ -98,9 +98,12 @@ export default async function ArtistPage({ params }: { params: Promise<{ name: s
    * страница является на самом деле; отдельным блоком идёт список, потому что
    * одна разметка отвечает на вопрос «про кого страница», а вторая — «куда она
    * ведёт», и склеивать их в одну поисковик не просит.
+   *
+   * Крошек здесь НЕТ намеренно: их разметку выводит сам компонент <Breadcrumbs>
+   * рядом с видимой цепочкой. Раньше она стояла и тут, и там — страница отдавала
+   * два одинаковых BreadcrumbList.
    */
   const jsonLd = [
-    breadcrumbJsonLd(crumbs),
     {
       '@context': 'https://schema.org',
       '@type': 'MusicGroup',

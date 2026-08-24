@@ -5,6 +5,7 @@ import { getSongForViewer, listRelatedSongs } from '@/lib/songs';
 import { listBySong } from '@/lib/annotations';
 import { getSongEngagement, recordView, type ViewerRef } from '@/lib/engagement';
 import { currentVisitorKey } from '@/lib/visitor';
+import { getPublicUser } from '@/lib/users';
 import { parseChordDefs } from '@/lib/chords/diagrams';
 import { catalogPath, getInstrument } from '@/lib/chords/instruments';
 import { isAdminUser } from '@/lib/admin';
@@ -116,7 +117,7 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
   // Просмотр засчитываем ПАРАЛЛЕЛЬНО с остальными запросами (последовательно
   // это добавляло бы к загрузке лишний round-trip до БД). Счётчик, прочитанный
   // одновременно, может не включать этот просмотр — поэтому прибавляем вручную.
-  const [annotations, engagement, justViewed, canVerify, related] = await Promise.all([
+  const [annotations, engagement, justViewed, canVerify, related, author] = await Promise.all([
     isOwner ? listBySong(song.id) : Promise.resolve([]),
     getSongEngagement(song.id, viewerId),
     viewer ? recordView(song.id, viewer) : Promise.resolve(false),
@@ -124,6 +125,11 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
     // Соседей ищем только у публичных: у приватного разбора блок «похожие»
     // сводился бы к рекламе чужих песен на собственной закрытой странице.
     isPublic ? listRelatedSongs(song) : Promise.resolve([]),
+    // Автор разбора — для структурированных данных: без `author` разметка
+    // Article у Google невалидна, и он выбрасывает её целиком. Запрос лёгкий
+    // (одна строка) и идёт здесь же, в общей пачке, чтобы не добавлять
+    // round-trip; у приватного разбора разметки нет — спрашивать незачем.
+    isPublic ? getPublicUser(song.userId) : Promise.resolve(null),
   ]);
 
   const url = songPath(song);
@@ -156,6 +162,13 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
         datePublished: song.createdAt.toISOString(),
         dateModified: song.updatedAt.toISOString(),
         inLanguage: 'ru',
+        // Разбор делает человек, и Google просит сказать, какой именно: без
+        // `author` он считает Article неполной. У автора без имени ссылаться
+        // не на кого — тогда автором значится сам сайт, как у любой редакции.
+        author:
+          author?.name
+            ? { '@type': 'Person', name: author.name, url: absoluteUrl(`/u/${song.userId}`) }
+            : publisherJsonLd,
         // Разбор открыт целиком и без регистрации — для поисковика это отдельный
         // факт: страницы с частично скрытым текстом он ранжирует иначе.
         isAccessibleForFree: true,
