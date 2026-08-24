@@ -15,8 +15,8 @@
 
 import { getInstrument, type InstrumentId } from '../chords/instruments';
 import {
-  chordNameToPowerFifth,
   getChordShape,
+  powerFifthLabelForShape,
   powerFifthToChordName,
   type ChordShape,
 } from '../chords/diagrams';
@@ -146,23 +146,65 @@ export function powerFifthPins(
   return next;
 }
 
-// ─── Показ квинт ладами: «G#5» → «4В» ──────────────────────────────────────
+// ─── Показ квинт ладами: «A#5» → «6В» ──────────────────────────────────────
 //
 // Это НЕ то же, что всё выше. Выше — разовая правка текста в редакторе:
 // устаревшая запись переводится в стандартную и такой сохраняется. Здесь —
-// обратная подмена, и только НА ПОКАЗ: в базе по-прежнему «G#5» (только
+// обратная подмена, и только НА ПОКАЗ: в базе по-прежнему «A#5» (только
 // стандартные имена транспонируются), а читалка подписывает их так, как
 // человеку привычнее читать с листа. Настройка общая на все разборы, потому что
 // это привычка чтения, а не свойство песни (см. lib/viewerPrefs.ts).
-//
-// Аппликатура от подмены не двигается: имя «4В» приводит ровно к тем же ладам,
-// что и «G#5» (общее правило выбора струны, см. chordNameToPowerFifth).
 
 /**
- * Песня с квинтами, подписанными ладами. Если подписывать нечего, возвращается
- * ТОТ ЖЕ объект — так React не перерисовывает лист там, где ничего не менялось.
+ * Таблица подписей: стандартное имя → «лад + В/Н».
+ *
+ * Строится ОДНА на всё и по НАРИСОВАННЫМ формам, а не по именам аккордов, и
+ * это здесь главное. Позицию на грифе задаёт форма, а её может перебить своя
+ * аппликатура с песни: у разбора со своей формой A#5 = [6,8,8,×,×,×] подпись,
+ * посчитанная от имени, говорила «1Н» (встроенная позиция) под диаграммой
+ * шестого лада. Спрашиваем `getChordShape` — ровно ту функцию, которой рисует
+ * страница, поэтому подпись и картинка совпадают по построению.
+ *
+ * Одна таблица на три места (текст песни, панель аппликатур, ключи своих форм)
+ * — по той же причине: разъехаться трём копиям одного правила проще, чем
+ * кажется, а разъехавшись, они дадут аккорд, подписанный в тексте иначе, чем
+ * в панели.
+ *
+ * Аккорды, которым подписи нет (форма не задана, корень с четвёртой струны,
+ * непривычный хват), в таблицу не попадают и остаются под своими именами.
  */
-export function songWithFretFifths(song: Song): Song {
+export function fretFifthNames(
+  chords: readonly string[],
+  instrument: InstrumentId | null | undefined,
+  defs: Record<string, ChordShape>,
+): Map<string, string> {
+  const names = new Map<string, string>();
+  const inst = getInstrument(instrument);
+  // Запись гитарная по устройству: на укулеле нет ни шестой струны, ни пятой.
+  if (!inst.fifthShorthand) return names;
+
+  const taken = new Set<string>();
+  for (const chord of chords) {
+    if (names.has(chord)) continue;
+    const shape = getChordShape(chord, inst, defs);
+    if (!shape) continue;
+    const label = powerFifthLabelForShape(shape.frets);
+    // Одну подпись двум разным аккордам не отдаём: в тексте они стали бы
+    // неразличимы, а их формы столкнулись бы под общим ключом. Второму
+    // достаётся стандартное имя — оно точное.
+    if (!label || taken.has(label)) continue;
+    taken.add(label);
+    names.set(chord, label);
+  }
+  return names;
+}
+
+/**
+ * Песня с подписанными квинтами. Если подписывать нечего, возвращается ТОТ ЖЕ
+ * объект — так React не перерисовывает лист там, где ничего не менялось.
+ */
+export function songWithFretFifths(song: Song, names: Map<string, string>): Song {
+  if (names.size === 0) return song;
   let touched = false;
 
   const sections = song.sections.map((section) => ({
@@ -173,7 +215,7 @@ export function songWithFretFifths(song: Song): Song {
         ...line,
         segments: line.segments.map((seg) => {
           if (seg.chord === undefined) return seg;
-          const renamed = chordNameToPowerFifth(seg.chord);
+          const renamed = names.get(seg.chord);
           if (!renamed) return seg;
           touched = true;
           return { ...seg, chord: renamed };
@@ -191,16 +233,19 @@ export function songWithFretFifths(song: Song): Song {
  * Без переименования ключей нарисованная руками форма пропала бы с картинки:
  * формы лежат под именем аккорда, а имя только что сменилось (та же причина, по
  * которой существует `transposeChordDefs`). Вызывать вместе с
- * `songWithFretFifths` — порознь они рассогласуют текст и картинки.
+ * `songWithFretFifths` и той же таблицей — порознь они рассогласуют текст и
+ * картинки.
  */
 export function defsWithFretFifths(
   defs: Record<string, ChordShape>,
+  names: Map<string, string>,
 ): Record<string, ChordShape> {
+  if (names.size === 0) return defs;
   const out: Record<string, ChordShape> = {};
   let touched = false;
 
   for (const [name, shape] of Object.entries(defs)) {
-    const renamed = chordNameToPowerFifth(name);
+    const renamed = names.get(name);
     if (renamed) touched = true;
     out[renamed ?? name] = shape;
   }

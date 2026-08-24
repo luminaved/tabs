@@ -7,7 +7,7 @@ import {
   EDITOR_FRET_ROWS,
   fretSpan,
   fretWindow,
-  chordNameToPowerFifth,
+  powerFifthLabelForShape,
   getChordShape,
   parseChordDefs,
   parseFrets,
@@ -446,49 +446,59 @@ describe('имена аккордов из прототипа', () => {
   });
 });
 
-describe('chordNameToPowerFifth', () => {
-  it('переводит квинту в запись «лад + В/Н»', () => {
-    expect(chordNameToPowerFifth('G#5')).toBe('4В');
-    expect(chordNameToPowerFifth('A5')).toBe('5В');
-    expect(chordNameToPowerFifth('E5')).toBe('0В');
-    expect(chordNameToPowerFifth('C5')).toBe('3Н');
-    expect(chordNameToPowerFifth('D5')).toBe('5Н');
+describe('powerFifthLabelForShape', () => {
+  it('подписывает форму по струне корня и ладу', () => {
+    expect(powerFifthLabelForShape([4, 6, 6, -1, -1, -1])).toBe('4В');
+    expect(powerFifthLabelForShape([0, 2, 2, -1, -1, -1])).toBe('0В');
+    expect(powerFifthLabelForShape([-1, 3, 5, 5, -1, -1])).toBe('3Н');
+    // Своя форма высоко на грифе — подпись двузначная, и это нормально.
+    expect(powerFifthLabelForShape([12, 14, 14, -1, -1, -1])).toBe('12В');
+    expect(powerFifthLabelForShape([-1, 11, 13, 13, -1, -1])).toBe('11Н');
   });
 
-  it('не квинта — null, переводить нечего', () => {
-    for (const name of ['Am', 'C', 'G7', 'A5/E', 'N.C.', '5В', '', 'H5', 'A']) {
-      expect(chordNameToPowerFifth(name), name).toBeNull();
+  it('хват из двух струн тоже подписывается', () => {
+    expect(powerFifthLabelForShape([5, 7, -1, -1, -1, -1])).toBe('5В');
+    expect(powerFifthLabelForShape([-1, 5, 7, -1, -1, -1])).toBe('5Н');
+  });
+
+  it('корень не с шестой и не с пятой струны — подписи нет', () => {
+    // У записи всего две буквы, и обе про эти струны.
+    expect(powerFifthLabelForShape([-1, -1, 8, 10, 10, -1])).toBeNull();
+    expect(powerFifthLabelForShape([-1, -1, -1, 5, 7, 7])).toBeNull();
+  });
+
+  it('не квинта — подписи нет', () => {
+    expect(powerFifthLabelForShape([-1, 0, 2, 2, 1, 0])).toBeNull(); // Am
+    expect(powerFifthLabelForShape([1, 3, 3, 2, 1, 1])).toBeNull(); // F
+    expect(powerFifthLabelForShape([-1, 2, 2, 4, -1, -1])).toBeNull(); // непривычный хват
+    expect(powerFifthLabelForShape([5, 7, 7, 7, -1, -1])).toBeNull(); // четыре струны
+    expect(powerFifthLabelForShape([5, -1, 7, -1, -1, -1])).toBeNull(); // дырка посреди
+    expect(powerFifthLabelForShape([-1, -1, -1, -1, -1, -1])).toBeNull(); // всё заглушено
+  });
+
+  it('подпись читается обратно тем же разбором', () => {
+    // Иначе «6В» на картинке и «6В» в тексте песни означали бы разное.
+    for (let fret = 0; fret <= 12; fret++) {
+      for (const [shape, expected] of [
+        [[fret, fret + 2, fret + 2, -1, -1, -1], true],
+        [[-1, fret, fret + 2, fret + 2, -1, -1], false],
+      ] as [number[], boolean][]) {
+        const label = powerFifthLabelForShape(shape) as string;
+        expect(label, JSON.stringify(shape)).not.toBeNull();
+        expect(parsePowerFifth(label), label).toEqual({ fret, upper: expected });
+      }
     }
   });
 
-  it('на всех двенадцати высотах перевод возвращается к тому же имени', () => {
+  it('встроенные квинты подписываются своим же местом на грифе', () => {
+    // Проверка того, что подпись и картинка не разъезжаются у форм, которые
+    // считает сам сайт: подпись, разобранная обратно, даёт те же лады.
     for (let pc = 0; pc < 12; pc++) {
       const name = `${pcToName(pc, 'sharp')}5`;
-      const frets = chordNameToPowerFifth(name);
-      expect(frets, name).not.toBeNull();
-      expect(powerFifthToChordName(frets as string), name).toBe(name);
-    }
-  });
-
-  it('от смены записи АППЛИКАТУРА НЕ ДВИГАЕТСЯ', () => {
-    // Главное свойство переключателя в читалке: он меняет подпись, а не аккорд.
-    // Держится на том, что струну обе стороны выбирают одним порогом
-    // (GUITAR_FIFTH_ON_SIXTH_MAX). Разойдись они — человек, нажавший
-    // «4В», получил бы вместо своего разбора другой, на несколько ладов в
-    // сторону, и заметил бы это только на слух.
-    for (let pc = 0; pc < 12; pc++) {
-      const name = `${pcToName(pc, 'sharp')}5`;
-      const frets = chordNameToPowerFifth(name) as string;
-      expect(getChordShape(frets, 'guitar'), `${name} → ${frets}`).toEqual(
-        getChordShape(name, 'guitar'),
-      );
-    }
-  });
-
-  it('подпись всегда двухсимвольная — ширина кнопки не прыгает', () => {
-    for (let pc = 0; pc < 12; pc++) {
-      const frets = chordNameToPowerFifth(`${pcToName(pc, 'sharp')}5`) as string;
-      expect(frets, frets).toHaveLength(2);
+      const shape = getChordShape(name, 'guitar');
+      const label = powerFifthLabelForShape((shape as { frets: number[] }).frets) as string;
+      expect(label, name).not.toBeNull();
+      expect(getChordShape(label, 'guitar'), `${name} → ${label}`).toEqual(shape);
     }
   });
 });

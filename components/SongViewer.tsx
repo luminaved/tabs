@@ -17,12 +17,12 @@ import { InlineChord } from './InlineChord';
 import { AnnotationForm } from './AnnotationForm';
 import { ShareButton } from './ShareButton';
 import { chordsFromSong } from '@/lib/chordpro/usedChords';
-import { defsWithFretFifths, songWithFretFifths } from '@/lib/chordpro/powerFifths';
 import {
-  chordNameToPowerFifth,
-  transposeChordDefs,
-  type ChordShape,
-} from '@/lib/chords/diagrams';
+  defsWithFretFifths,
+  fretFifthNames,
+  songWithFretFifths,
+} from '@/lib/chordpro/powerFifths';
+import { transposeChordDefs, type ChordShape } from '@/lib/chords/diagrams';
 import { getInstrument, type InstrumentId } from '@/lib/chords/instruments';
 import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
 import { toggleFavoriteAction, toggleLikeAction } from '@/app/(site)/songs/engagement-actions';
@@ -348,36 +348,57 @@ export function SongViewer({
   const realKey = base.meta.key ? transposeKey(base.meta.key, transpose) : null;
   const standardChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
 
+  // Свои аппликатуры едут вместе с песней: они лежат под именем аккорда, а
+  // транспонирование это имя меняет. Без переноса диаграмма пропадала с первым
+  // же нажатием «+» — у аккорда, форму которого нарисовали руками, под новым
+  // именем не находилось ничего.
+  const shapeDefs = useMemo(
+    () => transposeChordDefs(chordDefs ?? {}, transpose, songAccidental(base.meta.key, transpose)),
+    [chordDefs, base.meta.key, transpose],
+  );
+
   // ── Запись квинт ──────────────────────────────────────────────────────────
   //
-  // Хранится разбор всегда стандартными именами («G#5»): только они
+  // Хранится разбор всегда стандартными именами («A#5»): только они
   // транспонируются. Но читают их не все одинаково — выросшему на русских табах
-  // привычнее «4В», где лад назван прямо. Поэтому подмена живёт ЗДЕСЬ, на
+  // привычнее «6В», где лад назван прямо. Поэтому подмена живёт ЗДЕСЬ, на
   // показе, и ничего не меняет ни в базе, ни в транспонировании.
   //
-  // Порядок важен: сначала транспонирование, потом подпись. Наоборот запись
-  // «4В» перестала бы транспонироваться — ровно та беда, из-за которой её и
-  // убрали из хранения.
+  // Порядок здесь весь смысл, и он в две ступени:
+  //   транспонирование → формы → подписи.
+  // Сначала сдвиг (иначе запись «6В» перестала бы транспонироваться — ровно та
+  // беда, из-за которой её убрали из хранения), и только потом подпись, потому
+  // что считается она по УЖЕ ГОТОВЫМ формам, вместе со своими аппликатурами
+  // разбора. Поэтому `shapeDefs` стоит выше, а не ниже, как раньше.
   //
   // Переключатель гитарный: на укулеле такой записи нет вовсе (у неё нет ни
   // шестой струны, ни пятой), и `fifthShorthand` — как раз про это.
-  const fifthsSwappable = inst.fifthShorthand;
-  const showFretFifths = fifthsSwappable && fifthsAsFrets;
-
-  const sheetSong = useMemo(
-    () => (showFretFifths ? songWithFretFifths(shapeSong) : shapeSong),
-    [shapeSong, showFretFifths],
+  const fretFifths = useMemo(
+    () => fretFifthNames(standardChords, inst.id, shapeDefs),
+    [standardChords, inst.id, shapeDefs],
   );
 
-  // Список для панели аппликатур — та же подмена, но списком, а не обходом
-  // дерева. Столкнуться два имени не могут: перевод взаимно однозначен на
-  // двенадцати высотах, поэтому и порядок, и число аккордов сохраняются.
+  const showFretFifths = fifthsAsFrets && fretFifths.size > 0;
+
+  const sheetSong = useMemo(
+    () => (showFretFifths ? songWithFretFifths(shapeSong, fretFifths) : shapeSong),
+    [shapeSong, showFretFifths, fretFifths],
+  );
+
+  // Список для панели аппликатур — по той же таблице, что и текст: три места
+  // (текст, панель, ключи форм) обязаны подписывать аккорд одинаково, а трём
+  // копиям одного правила разъехаться проще, чем кажется.
   const usedChords = useMemo(
-    () =>
-      showFretFifths
-        ? standardChords.map((c) => chordNameToPowerFifth(c) ?? c)
-        : standardChords,
-    [standardChords, showFretFifths],
+    () => (showFretFifths ? standardChords.map((c) => fretFifths.get(c) ?? c) : standardChords),
+    [standardChords, showFretFifths, fretFifths],
+  );
+
+  // Формы лежат под именем аккорда, а подпись только что сменилась — значит и
+  // ключи должны. Иначе нарисованная руками аппликатура пропала бы с картинки
+  // ровно так же, как пропадала при транспонировании до `transposeChordDefs`.
+  const sheetDefs = useMemo(
+    () => (showFretFifths ? defsWithFretFifths(shapeDefs, fretFifths) : shapeDefs),
+    [shapeDefs, showFretFifths, fretFifths],
   );
 
   /**
@@ -385,21 +406,18 @@ export function SongViewer({
    *
    * Две подписи одного аккорда рядом объясняют настройку без единого слова
    * пояснения: видно и что переключается, и во что превратится именно этот
-   * разбор. Берём первую встреченную квинту — она же первая в тексте.
+   * разбор. Берём первую подписанную квинту — она же первая в тексте.
    *
-   * Считается по стандартным именам, то есть не зависит от текущего положения
-   * переключателя: иначе подписи на кнопках менялись бы местами при нажатии.
-   * Нет квинт — нет и примера, и всей строки: настройка, которой в этом разборе
-   * нечего переключать, только занимала бы место в панели.
+   * Не зависит от текущего положения переключателя: иначе подписи на кнопках
+   * менялись бы местами при нажатии. Подписывать нечего — нет ни примера, ни
+   * всей строки: настройка, которой в этом разборе нечего переключать, только
+   * занимала бы место в панели.
    */
   const fifthExample = useMemo(() => {
-    if (!fifthsSwappable) return null;
-    for (const chord of standardChords) {
-      const frets = chordNameToPowerFifth(chord);
-      if (frets) return { standard: chord, frets };
-    }
-    return null;
-  }, [fifthsSwappable, standardChords]);
+    const first = fretFifths.entries().next();
+    if (first.done) return null;
+    return { standard: first.value[0], frets: first.value[1] };
+  }, [fretFifths]);
 
   // Подпись под шапкой: только то, чего страница не говорит в других местах.
   // Инструмент и тональность отсюда ушли раньше — их видно в крошках и крупно в
@@ -410,23 +428,6 @@ export function SongViewer({
     usedChords.length ? withPluralRu(usedChords.length, 'аккорд', 'аккорда', 'аккордов') : null,
     base.meta.tempo ? `${base.meta.tempo} bpm` : null,
   ].filter(Boolean);
-
-  // Свои аппликатуры едут вместе с песней: они лежат под именем аккорда, а
-  // транспонирование это имя меняет. Без переноса диаграмма пропадала с первым
-  // же нажатием «+» — у аккорда, форму которого нарисовали руками, под новым
-  // именем не находилось ничего.
-  const shapeDefs = useMemo(
-    () => transposeChordDefs(chordDefs ?? {}, transpose, songAccidental(base.meta.key, transpose)),
-    [chordDefs, base.meta.key, transpose],
-  );
-
-  // Формы лежат под именем аккорда, а подпись только что сменилась — значит и
-  // ключи должны. Иначе нарисованная руками аппликатура пропала бы с картинки
-  // ровно так же, как пропадала при транспонировании до `transposeChordDefs`.
-  const sheetDefs = useMemo(
-    () => (showFretFifths ? defsWithFretFifths(shapeDefs) : shapeDefs),
-    [shapeDefs, showFretFifths],
-  );
 
   // ── Длинное название ──────────────────────────────────────────────────────
   //
