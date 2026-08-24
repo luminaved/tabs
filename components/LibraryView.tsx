@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/session';
 import { countOwnByInstrument, listSongs } from '@/lib/songs';
 import { songMeta } from '@/lib/songMeta';
 import { INSTRUMENTS, INSTRUMENT_IDS, type InstrumentId } from '@/lib/chords/instruments';
+import { SEARCH_QUERY_MAX } from '@/lib/chordpro/searchText';
 import { SongRow } from '@/components/SongRow';
 import { EAGER_THUMBS } from '@/components/SongThumb';
 import { LoadMoreSongs } from '@/components/LoadMoreSongs';
@@ -75,6 +76,7 @@ export async function LibraryView({
         <form className="flex gap-2" method="get">
           <input
             name="q"
+            maxLength={SEARCH_QUERY_MAX}
             defaultValue={query ?? ''}
             placeholder="Поиск по названию или исполнителю"
             className="field flex-1"

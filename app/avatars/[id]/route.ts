@@ -36,6 +36,26 @@ const cache = createLruCache<{ body: Buffer; type: string }>(CACHE_LIMIT);
 const META_TTL_MS = 30_000;
 const versionCache = createTtlCache<string>(META_TTL_MS, 300);
 
+/**
+ * Аккаунты, у которых перенос картинки провайдера только что не удался.
+ *
+ * Без этой памяти неудача ничего не стоила ровно один раз, а дальше стоила
+ * каждый раз: в базе остаётся внешний адрес, значит следующий запрос аватара
+ * снова идёт наружу и снова ждёт таймаут (TIMEOUT_MS = 4 c в lib/remoteAvatar.ts).
+ * А аватар — это шапка, то есть КАЖДАЯ страница сайта. Пока Google или Яндекс
+ * недоступен (или просто режется у провайдера сервера), каждая страница
+ * приносила с собой четырёхсекундное ожидание, и починиться само это не могло.
+ *
+ * Пять минут: сбой у провайдера длится дольше минуты, а цена ожидания — кружок
+ * с инициалом вместо фото, то есть ровно то, что и так рисуется при неудаче.
+ *
+ * Запоминаем ТОЛЬКО неудачный перенос, а не «аватара нет вообще»: последнее
+ * задержало бы показ только что загруженного своего фото, а оно приходит
+ * data URL'ом и наружу не ходит вовсе.
+ */
+const ADOPT_RETRY_MS = 5 * 60_000;
+const adoptFailed = createTtlCache<true>(ADOPT_RETRY_MS, 200);
+
 /** Годится ли значение из БД как аватар: своё фото либо разрешённый адрес. */
 function usableAvatar(image: string | null | undefined): image is string {
   if (!image) return false;
@@ -63,10 +83,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // Внешний адрес — переносим к себе. Возвращается уже сохранённый data URL.
   if (!image.startsWith('data:')) {
+    // Недавно уже не вышло — второй раз ждать таймаут незачем (см. adoptFailed).
+    if (adoptFailed.get(id)) return new Response(null, { status: 404 });
+
     const adopted = await adoptRemoteAvatar(id, image);
     // Не вышло — 404, и компонент нарисует кружок с инициалом. Пустой кружок
     // лучше сломанной картинки и куда лучше зависшей страницы.
-    if (!adopted) return new Response(null, { status: 404 });
+    if (!adopted) {
+      adoptFailed.set(id, true);
+      return new Response(null, { status: 404 });
+    }
     image = adopted;
   }
 

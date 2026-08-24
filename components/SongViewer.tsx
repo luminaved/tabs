@@ -17,7 +17,12 @@ import { InlineChord } from './InlineChord';
 import { AnnotationForm } from './AnnotationForm';
 import { ShareButton } from './ShareButton';
 import { chordsFromSong } from '@/lib/chordpro/usedChords';
-import { transposeChordDefs, type ChordShape } from '@/lib/chords/diagrams';
+import { defsWithFretFifths, songWithFretFifths } from '@/lib/chordpro/powerFifths';
+import {
+  chordNameToPowerFifth,
+  transposeChordDefs,
+  type ChordShape,
+} from '@/lib/chords/diagrams';
 import { getInstrument, type InstrumentId } from '@/lib/chords/instruments';
 import { deleteAnnotationAction } from '@/app/(site)/songs/annotations-actions';
 import { toggleFavoriteAction, toggleLikeAction } from '@/app/(site)/songs/engagement-actions';
@@ -148,6 +153,8 @@ export function SongViewer({
   const [fontSize, setFontSize] = useState<number | null>(null);
   // Закреплённая панель аккордов остаётся на виду при прокрутке.
   const [pinChords, setPinChords] = useState(false);
+  // Квинты подписаны ладами («4В») вместо стандартных имён («G#5»).
+  const [fifthsAsFrets, setFifthsAsFrets] = useState(false);
 
   const clampFont = (v: number) => Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(v * 100) / 100));
 
@@ -201,6 +208,9 @@ export function SongViewer({
     const pinned = readBoolPref(viewerKeys.pinChords);
     if (pinned !== null) setPinChords(pinned);
 
+    const fifths = readBoolPref(viewerKeys.fifthsAsFrets);
+    if (fifths !== null) setFifthsAsFrets(fifths);
+
     // Замок экрана восстанавливаем молча: браузер разрешает взять его без
     // нажатия, лишь бы вкладка была видна, а если откажет — эффект ниже сам
     // повторит попытку, когда на неё вернутся. Единственное, чем можно
@@ -242,6 +252,11 @@ export function SongViewer({
     writePref(viewerKeys.pinChords, next);
   };
 
+  const changeFifthsAsFrets = (next: boolean) => {
+    setFifthsAsFrets(next);
+    writePref(viewerKeys.fifthsAsFrets, next);
+  };
+
   const changeWakeOn = (next: boolean) => {
     setWakeOn(next);
     writePref(viewerKeys.wakeLock, next);
@@ -270,11 +285,16 @@ export function SongViewer({
   );
   const [, startEngagement] = useTransition();
 
+  // `null` от экшена — сделать ничего не вышло (разбора нет либо он чужой).
+  // Тогда состояние не трогаем вовсе: оптимистичный показ откатится сам, когда
+  // закончится переход. Раньше отказ приходил нулями и честно вписывался —
+  // видимый счётчик лайков падал в ноль на ровном месте.
   const onToggleLike = () => {
     if (!songId) return;
     startEngagement(async () => {
       applyOptimistic('like');
       const next = await toggleLikeAction(songId);
+      if (!next) return;
       setEng((cur) => (cur ? { ...cur, ...next } : cur));
     });
   };
@@ -284,6 +304,7 @@ export function SongViewer({
     startEngagement(async () => {
       applyOptimistic('favorite');
       const next = await toggleFavoriteAction(songId);
+      if (!next) return;
       setEng((cur) => (cur ? { ...cur, ...next } : cur));
     });
   };
@@ -325,7 +346,60 @@ export function SongViewer({
 
   const shapeSong = useMemo(() => transposeSong(base, transpose), [base, transpose]);
   const realKey = base.meta.key ? transposeKey(base.meta.key, transpose) : null;
-  const usedChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
+  const standardChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
+
+  // ── Запись квинт ──────────────────────────────────────────────────────────
+  //
+  // Хранится разбор всегда стандартными именами («G#5»): только они
+  // транспонируются. Но читают их не все одинаково — выросшему на русских табах
+  // привычнее «4В», где лад назван прямо. Поэтому подмена живёт ЗДЕСЬ, на
+  // показе, и ничего не меняет ни в базе, ни в транспонировании.
+  //
+  // Порядок важен: сначала транспонирование, потом подпись. Наоборот запись
+  // «4В» перестала бы транспонироваться — ровно та беда, из-за которой её и
+  // убрали из хранения.
+  //
+  // Переключатель гитарный: на укулеле такой записи нет вовсе (у неё нет ни
+  // шестой струны, ни пятой), и `fifthShorthand` — как раз про это.
+  const fifthsSwappable = inst.fifthShorthand;
+  const showFretFifths = fifthsSwappable && fifthsAsFrets;
+
+  const sheetSong = useMemo(
+    () => (showFretFifths ? songWithFretFifths(shapeSong) : shapeSong),
+    [shapeSong, showFretFifths],
+  );
+
+  // Список для панели аппликатур — та же подмена, но списком, а не обходом
+  // дерева. Столкнуться два имени не могут: перевод взаимно однозначен на
+  // двенадцати высотах, поэтому и порядок, и число аккордов сохраняются.
+  const usedChords = useMemo(
+    () =>
+      showFretFifths
+        ? standardChords.map((c) => chordNameToPowerFifth(c) ?? c)
+        : standardChords,
+    [standardChords, showFretFifths],
+  );
+
+  /**
+   * Пример для переключателя — из САМОЙ песни, а не выдуманный.
+   *
+   * Две подписи одного аккорда рядом объясняют настройку без единого слова
+   * пояснения: видно и что переключается, и во что превратится именно этот
+   * разбор. Берём первую встреченную квинту — она же первая в тексте.
+   *
+   * Считается по стандартным именам, то есть не зависит от текущего положения
+   * переключателя: иначе подписи на кнопках менялись бы местами при нажатии.
+   * Нет квинт — нет и примера, и всей строки: настройка, которой в этом разборе
+   * нечего переключать, только занимала бы место в панели.
+   */
+  const fifthExample = useMemo(() => {
+    if (!fifthsSwappable) return null;
+    for (const chord of standardChords) {
+      const frets = chordNameToPowerFifth(chord);
+      if (frets) return { standard: chord, frets };
+    }
+    return null;
+  }, [fifthsSwappable, standardChords]);
 
   // Подпись под шапкой: только то, чего страница не говорит в других местах.
   // Инструмент и тональность отсюда ушли раньше — их видно в крошках и крупно в
@@ -344,6 +418,14 @@ export function SongViewer({
   const shapeDefs = useMemo(
     () => transposeChordDefs(chordDefs ?? {}, transpose, songAccidental(base.meta.key, transpose)),
     [chordDefs, base.meta.key, transpose],
+  );
+
+  // Формы лежат под именем аккорда, а подпись только что сменилась — значит и
+  // ключи должны. Иначе нарисованная руками аппликатура пропала бы с картинки
+  // ровно так же, как пропадала при транспонировании до `transposeChordDefs`.
+  const sheetDefs = useMemo(
+    () => (showFretFifths ? defsWithFretFifths(shapeDefs) : shapeDefs),
+    [shapeDefs, showFretFifths],
   );
 
   // ── Длинное название ──────────────────────────────────────────────────────
@@ -449,7 +531,7 @@ export function SongViewer({
             key={c}
             name={c}
             instrument={inst}
-            customDefs={shapeDefs}
+            customDefs={sheetDefs}
             size={pinChords ? 62 : 96}
           />
         ))}
@@ -474,6 +556,10 @@ export function SongViewer({
   useEffect(() => {
     if (!scrolling) return;
     lastRef.current = performance.now();
+    // Накопитель обнуляем на старте: доля пикселя, не дошедшая до целого при
+    // прошлой остановке, иначе доживала до следующего запуска и уезжала в
+    // первый же кадр. Заметно это не на глаз, а на паузе-возобновлении подряд.
+    accRef.current = 0;
     const step = (now: number) => {
       const dt = now - lastRef.current;
       lastRef.current = now;
@@ -844,6 +930,41 @@ export function SongViewer({
               </div>
             </div>
 
+            {/* Запись квинт. Строка появляется, только если в разборе есть что
+                переключать (см. fifthExample), — на песне без квинт это была бы
+                настройка ни о чём.
+
+                Подписи кнопок — сам аккорд в двух записях, из этой же песни.
+                Объяснять словами, что такое «В» и «Н», не нужно: тот, кому эта
+                запись привычна, узнаёт её с первого взгляда, а остальным она и
+                не нужна — им подходит вариант слева, который стоит по
+                умолчанию. */}
+            {fifthExample ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted">Запись квинт</span>
+                <div className="seg seg--compact" role="group" aria-label="Запись квинт">
+                  <button
+                    type="button"
+                    onClick={() => changeFifthsAsFrets(false)}
+                    className={fifthsAsFrets ? 'seg-item' : 'seg-item seg-item--on'}
+                    aria-pressed={!fifthsAsFrets}
+                    title="Стандартные имена аккордов"
+                  >
+                    {fifthExample.standard}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeFifthsAsFrets(true)}
+                    className={fifthsAsFrets ? 'seg-item seg-item--on' : 'seg-item'}
+                    aria-pressed={fifthsAsFrets}
+                    title="Лад и струна: В — шестая, Н — пятая"
+                  >
+                    {fifthExample.frets}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <label className="flex flex-col gap-2">
               <span className="flex items-center justify-between text-sm">
                 <span className="text-muted">Скорость автоскролла</span>
@@ -936,10 +1057,10 @@ export function SongViewer({
         }
       >
         <ChordSheet
-          song={shapeSong}
+          song={sheetSong}
           showChords={showChords}
           renderChord={(c) => (
-            <InlineChord name={c} instrument={inst.id} customDefs={shapeDefs} />
+            <InlineChord name={c} instrument={inst.id} customDefs={sheetDefs} />
           )}
           interaction={
             interactive

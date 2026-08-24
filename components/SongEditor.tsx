@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FormEvent,
   type ReactNode,
   type UIEvent,
 } from 'react';
@@ -203,6 +204,29 @@ export function SongEditor({
   const [openParams, setOpenParams] = useState(
     () => !!(initial?.key || initial?.tempo || initial?.capo),
   );
+
+  /**
+   * Отказ браузера на СКРЫТОМ поле.
+   *
+   * Тот же капкан, из-за которого обязательное «Название» вынесено наружу
+   * складных разделов (см. комментарий у него). Проверку `min`/`max` браузер
+   * делает по всем полям формы, отрисованы они или нет, но подсветить и
+   * сфокусировать поле в закрытом <details> не может — и тогда отменяет
+   * отправку МОЛЧА. У темпа и капо границы есть, а лежат они как раз внутри
+   * складного раздела: достаточно было ввести капо 15, свернуть «Параметры
+   * разбора» и нажать «Сохранить», чтобы не произошло ровно ничего.
+   *
+   * Событие `invalid` до поля при этом доходит. По нему раскрываем раздел и
+   * показываем, что именно не так: текст берём у самого браузера — он уже
+   * переведён на язык интерфейса и точно описывает нарушенное ограничение.
+   */
+  const [invalidHint, setInvalidHint] = useState<string | null>(null);
+  const onFieldInvalid =
+    (label: string) =>
+    (e: FormEvent<HTMLInputElement>) => {
+      setOpenParams(true);
+      setInvalidHint(`${label}: ${e.currentTarget.validationMessage}`);
+    };
   const [openNote, setOpenNote] = useState(() => !!initial?.note?.trim());
   const [openDefs, setOpenDefs] = useState(false);
 
@@ -660,7 +684,11 @@ export function SongEditor({
               min={TEMPO_MIN}
               max={TEMPO_MAX}
               value={tempo}
-              onChange={(e) => setTempo(e.target.value)}
+              onChange={(e) => {
+                setTempo(e.target.value);
+                setInvalidHint(null);
+              }}
+              onInvalid={onFieldInvalid('Темп')}
               className="field"
               placeholder="bpm"
             />
@@ -676,7 +704,11 @@ export function SongEditor({
               min={CAPO_MIN}
               max={CAPO_MAX}
               value={capo}
-              onChange={(e) => setCapo(e.target.value)}
+              onChange={(e) => {
+                setCapo(e.target.value);
+                setInvalidHint(null);
+              }}
+              onInvalid={onFieldInvalid('Капо')}
               className="field"
               placeholder="лад (пусто — без капо)"
             />
@@ -869,9 +901,12 @@ export function SongEditor({
         </label>
       </FormSection>
 
-      {state.error ? (
+      {/* Отказ сервера и отказ браузера показываем одинаково и в одном месте:
+          для человека это один и тот же ответ — «сохранить не вышло, вот
+          почему». Браузерный при этом до сервера не доходит вовсе. */}
+      {state.error || invalidHint ? (
         <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
-          {state.error}
+          {state.error || invalidHint}
         </p>
       ) : null}
 

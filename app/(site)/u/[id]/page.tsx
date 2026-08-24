@@ -14,6 +14,7 @@ import { itemListJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
 import { songPath } from '@/lib/slug';
 import { getUserStats } from '@/lib/stats';
+import { SEARCH_QUERY_MAX } from '@/lib/chordpro/searchText';
 import { Avatar } from '@/components/Avatar';
 import { SongRow } from '@/components/SongRow';
 import { EAGER_THUMBS } from '@/components/SongThumb';
@@ -169,6 +170,7 @@ export default async function ProfilePage({
           <form className="flex gap-2" method="get">
             <input
               name="q"
+              maxLength={SEARCH_QUERY_MAX}
               defaultValue={query ?? ''}
               placeholder="Поиск по разборам автора"
               className="field flex-1"

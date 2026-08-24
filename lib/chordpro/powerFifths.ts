@@ -14,8 +14,14 @@
  */
 
 import { getInstrument, type InstrumentId } from '../chords/instruments';
-import { getChordShape, powerFifthToChordName, type ChordShape } from '../chords/diagrams';
+import {
+  chordNameToPowerFifth,
+  getChordShape,
+  powerFifthToChordName,
+  type ChordShape,
+} from '../chords/diagrams';
 import { accidentalForKey } from '../chords/key';
+import type { Line, Song } from './types';
 
 /** Токен аккорда в тексте ChordPro. Пробелы внутри скобок допускаем. */
 const CHORD_TOKEN_RE = /\[([^\]\n]+)\]/g;
@@ -138,4 +144,66 @@ export function powerFifthPins(
   }
 
   return next;
+}
+
+// ─── Показ квинт ладами: «G#5» → «4В» ──────────────────────────────────────
+//
+// Это НЕ то же, что всё выше. Выше — разовая правка текста в редакторе:
+// устаревшая запись переводится в стандартную и такой сохраняется. Здесь —
+// обратная подмена, и только НА ПОКАЗ: в базе по-прежнему «G#5» (только
+// стандартные имена транспонируются), а читалка подписывает их так, как
+// человеку привычнее читать с листа. Настройка общая на все разборы, потому что
+// это привычка чтения, а не свойство песни (см. lib/viewerPrefs.ts).
+//
+// Аппликатура от подмены не двигается: имя «4В» приводит ровно к тем же ладам,
+// что и «G#5» (общее правило выбора струны, см. chordNameToPowerFifth).
+
+/**
+ * Песня с квинтами, подписанными ладами. Если подписывать нечего, возвращается
+ * ТОТ ЖЕ объект — так React не перерисовывает лист там, где ничего не менялось.
+ */
+export function songWithFretFifths(song: Song): Song {
+  let touched = false;
+
+  const sections = song.sections.map((section) => ({
+    ...section,
+    lines: section.lines.map((line): Line => {
+      if (line.type !== 'lyric') return line;
+      return {
+        ...line,
+        segments: line.segments.map((seg) => {
+          if (seg.chord === undefined) return seg;
+          const renamed = chordNameToPowerFifth(seg.chord);
+          if (!renamed) return seg;
+          touched = true;
+          return { ...seg, chord: renamed };
+        }),
+      };
+    }),
+  }));
+
+  return touched ? { meta: song.meta, sections } : song;
+}
+
+/**
+ * Свои аппликатуры под новыми подписями.
+ *
+ * Без переименования ключей нарисованная руками форма пропала бы с картинки:
+ * формы лежат под именем аккорда, а имя только что сменилось (та же причина, по
+ * которой существует `transposeChordDefs`). Вызывать вместе с
+ * `songWithFretFifths` — порознь они рассогласуют текст и картинки.
+ */
+export function defsWithFretFifths(
+  defs: Record<string, ChordShape>,
+): Record<string, ChordShape> {
+  const out: Record<string, ChordShape> = {};
+  let touched = false;
+
+  for (const [name, shape] of Object.entries(defs)) {
+    const renamed = chordNameToPowerFifth(name);
+    if (renamed) touched = true;
+    out[renamed ?? name] = shape;
+  }
+
+  return touched ? out : defs;
 }

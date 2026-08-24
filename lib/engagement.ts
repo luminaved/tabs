@@ -142,18 +142,35 @@ async function canEngage(userId: string, songId: string): Promise<boolean> {
   return song.visibility !== 'private' || song.userId === userId;
 }
 
+/**
+ * Уникальный индекс сработал — отметку успел поставить параллельный запрос.
+ *
+ * Переключатели устроены как «снять, а если нечего снимать — поставить», и
+ * между этими двумя шагами помещается второй клик: двойное нажатие по сердечку
+ * (на телефоне — обычное дело) давало двум запросам увидеть одно и то же «лайка
+ * нет», после чего второй падал на уникальном индексе, и человек получал 500
+ * вместо лайка. Для него результат один и тот же — отметка стоит.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
 /** Переключить лайк. true/false — новое состояние, null — нет доступа. */
 export async function toggleLike(userId: string, songId: string): Promise<boolean | null> {
   if (!(await canEngage(userId, songId))) return null;
 
-  const existing = await prisma.like.findUnique({
-    where: { userId_songId: { userId, songId } },
-  });
-  if (existing) {
-    await prisma.like.delete({ where: { id: existing.id } });
-    return false;
+  // Снятие — условием самого DELETE, а не «прочитать, сравнить, удалить»: так
+  // между проверкой и записью нет зазора, в который встаёт параллельный клик
+  // (тем же приёмом сделаны deleteSong и deleteAnnotation).
+  const { count } = await prisma.like.deleteMany({ where: { userId, songId } });
+  if (count > 0) return false;
+
+  try {
+    await prisma.like.create({ data: { userId, songId } });
+  } catch (error) {
+    if (isUniqueViolation(error)) return true;
+    throw error;
   }
-  await prisma.like.create({ data: { userId, songId } });
   return true;
 }
 
@@ -161,14 +178,15 @@ export async function toggleLike(userId: string, songId: string): Promise<boolea
 export async function toggleFavorite(userId: string, songId: string): Promise<boolean | null> {
   if (!(await canEngage(userId, songId))) return null;
 
-  const existing = await prisma.favorite.findUnique({
-    where: { userId_songId: { userId, songId } },
-  });
-  if (existing) {
-    await prisma.favorite.delete({ where: { id: existing.id } });
-    return false;
+  const { count } = await prisma.favorite.deleteMany({ where: { userId, songId } });
+  if (count > 0) return false;
+
+  try {
+    await prisma.favorite.create({ data: { userId, songId } });
+  } catch (error) {
+    if (isUniqueViolation(error)) return true;
+    throw error;
   }
-  await prisma.favorite.create({ data: { userId, songId } });
   return true;
 }
 

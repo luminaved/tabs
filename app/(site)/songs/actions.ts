@@ -7,14 +7,7 @@ import { requireUser } from '@/lib/session';
 import { createSong, deleteSong, updateSong, type SongInput, type SongVisibility } from '@/lib/songs';
 import { parseInstrumentId } from '@/lib/chords/instruments';
 import { parseCoverField } from '@/lib/imageInput';
-import {
-  CAPO_MAX,
-  CAPO_MIN,
-  TEMPO_MAX,
-  TEMPO_MIN,
-  checkSongFields,
-  parseBoundedInt,
-} from '@/lib/songLimits';
+import { checkSongFields, parseBoundedField } from '@/lib/songLimits';
 import { songPath } from '@/lib/slug';
 
 export interface SongFormState {
@@ -50,10 +43,22 @@ function parseForm(formData: FormData): SongInput | { error: string } {
   const v = str('visibility') || 'private';
   const visibility = (VISIBILITIES as string[]).includes(v) ? (v as SongVisibility) : 'private';
 
-  // Темп и капо: целые в разумных границах, всё прочее — «не указано».
-  // Границы те же, что у полей формы, поэтому расхождения быть не может.
-  const tempo = parseBoundedInt(str('tempo'), TEMPO_MIN, TEMPO_MAX);
-  const capo = parseBoundedInt(str('capo'), CAPO_MIN, CAPO_MAX) ?? 0;
+  // Темп и капо: целые в разумных границах. Границы те же, что у полей формы,
+  // поэтому расхождения быть не может.
+  //
+  // Вне границ — ОТКАЗ с объяснением, а не «считаем, что не указано», как было.
+  // Прежнее поведение молча превращало опечатку «500» в пустой темп, а капо на
+  // пятнадцатом ладу — в ноль; человек узнавал об этом, только вернувшись в
+  // разбор. Текстовые поля здесь же отказываются обрезать молча (см.
+  // checkSongFields) — числа обязаны вести себя так же.
+  const parsedTempo = parseBoundedField(str('tempo'), 'tempo');
+  if ('error' in parsedTempo) return parsedTempo;
+  const parsedCapo = parseBoundedField(str('capo'), 'capo');
+  if ('error' in parsedCapo) return parsedCapo;
+
+  const tempo = parsedTempo.value;
+  // Ноль и «не указано» у капо неразличимы по построению (см. схему).
+  const capo = parsedCapo.value ?? 0;
 
   // Обложка: сентинел «не трогали», пустое поле «убрать», иначе новая картинка
   // (разбор и потолок размера — в parseCoverField). Проверка обязана быть на

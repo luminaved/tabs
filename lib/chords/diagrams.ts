@@ -12,6 +12,7 @@
 import { mod12, noteToPc, pcToName, type Accidental } from './pitch';
 import { parseChord, transposeChord } from './chord';
 import {
+  GUITAR_FIFTH_ON_SIXTH_MAX,
   getInstrument,
   type Barre,
   type ChordFrets,
@@ -302,6 +303,36 @@ export function powerFifthToChordName(name: string, accidental: Accidental = 'sh
 }
 
 /**
+ * Перевод в другую сторону: «G#5» → «4В», «C5» → «3Н». Не квинта — null.
+ *
+ * Нужен ПОКАЗУ, а не хранению. Запись «лад + В/Н» из русских табов для многих
+ * привычнее стандартных имён: «4В» прямо говорит, куда ставить палец, тогда как
+ * «G#5» это ещё надо перевести в позицию. Хранится разбор всегда стандартными
+ * именами (только они транспонируются, см. parsePowerFifth), а читалка по
+ * настройке подписывает их так, как человеку привычнее.
+ *
+ * Струна выбирается ТЕМ ЖЕ правилом, которым `guitarPowerChord` рисует форму
+ * (общий порог `GUITAR_FIFTH_ON_SIXTH_MAX`), поэтому подпись всегда совпадает с
+ * картинкой: «В» стоит там, где корень действительно на шестой струне. Отсюда
+ * же главное свойство — от смены записи АППЛИКАТУРА НЕ ДВИГАЕТСЯ: «G#5» и «4В»
+ * приводят к одним и тем же ладам (закреплено тестом).
+ *
+ * Обратна `powerFifthToChordName` не полностью, и не может быть: имя несёт
+ * высоту корня, но не позицию, поэтому «17В» переводится в «A5», а обратно —
+ * в «5В». Для показа это и нужно: подписывается та позиция, которая нарисована.
+ */
+export function chordNameToPowerFifth(name: string): string | null {
+  const m = /^([A-G][#b]*)5$/.exec(name.trim());
+  if (!m) return null;
+  const rootPc = noteToPc(m[1]);
+  if (rootPc === null) return null;
+
+  const sixth = mod12(rootPc - SIXTH_STRING_PC);
+  if (sixth <= GUITAR_FIFTH_ON_SIXTH_MAX) return `${sixth}В`;
+  return `${mod12(rootPc - FIFTH_STRING_PC)}Н`;
+}
+
+/**
  * Докуда переносится своя аппликатура (см. `transposeShape`). Двенадцатый лад —
  * октава: выше него на укулеле грифа попросту нет, а на гитаре начинается вырез
  * корпуса.
@@ -386,6 +417,27 @@ export function transposeChordDefs(
 }
 
 /**
+ * Значение из таблицы форм по имени аккорда — только СВОЁ свойство.
+ *
+ * Не перестраховка. Имя аккорда приходит из текста песни как есть: в аккорды
+ * попадает всё, что стоит в квадратных скобках (см. `chordsInOrder`), — а
+ * таблицы форм и словарь своих аппликатур это обычные объектные литералы.
+ * Значит `[constructor]`, `[toString]`, `[valueOf]` или `[__proto__]` в тексте
+ * возвращали не форму, а унаследованное свойство прототипа: истинное, поэтому
+ * все проверки его пропускали, и `deriveBarres` падал на нём с «frets.map is
+ * not a function». Одна такая строчка роняла И редактор (он ищет формы на
+ * каждый штрих, см. SongEditor), И страницу разбора.
+ *
+ * Своим свойством закрыт весь класс сразу — независимо от того, каким объектом
+ * пришёл словарь: их собирают в четырёх местах (parseChordDefs,
+ * transposeChordDefs, powerFifthPins, ChordDefsEditor).
+ */
+function ownEntry<T>(table: Record<string, T> | undefined, key: string): T | undefined {
+  if (!table || !Object.hasOwn(table, key)) return undefined;
+  return table[key];
+}
+
+/**
  * Аппликатура по имени аккорда для инструмента. customDefs (с песни) — главнее.
  * Возвращает null, если формы нет (нужно задать вручную).
  */
@@ -398,10 +450,12 @@ export function getChordShape(
 
   const trimmed = name.trim();
   if (!trimmed) return null;
-  if (customDefs && customDefs[trimmed]) return customDefs[trimmed];
+  const own = ownEntry(customDefs, trimmed);
+  if (own) return own;
 
   const base = trimmed.split('/')[0]; // бас в slash-аккорде для диаграммы игнорируем
-  if (customDefs && customDefs[base]) return customDefs[base];
+  const ownBase = ownEntry(customDefs, base);
+  if (ownBase) return ownBase;
 
   if (inst.fifthShorthand) {
     // Устаревшая запись «5В». Оставлена, чтобы вставленные табы рисовались;
@@ -410,7 +464,8 @@ export function getChordShape(
     if (power) return builtin(powerFifthFrets(power));
   }
 
-  if (inst.openShapes[base]) return builtin(inst.openShapes[base]);
+  const open = ownEntry(inst.openShapes, base);
+  if (open) return builtin(open);
 
   const m = /^([A-G][#b]*)(.*)$/.exec(base);
   if (!m) return null;
@@ -421,7 +476,9 @@ export function getChordShape(
   // вместе с корнем, а таблица знает только одну (см. `Instrument.powerChord`).
   if (m[2] === '5' && inst.powerChord) return inst.powerChord(rootPc);
 
-  const gen = inst.movableShapes[m[2]];
+  // `[Aconstructor]` попадало сюда же: корень разбирался, а суффикс уходил в
+  // таблицу подвижных форм и приносил оттуда `Object` вместо функции.
+  const gen = ownEntry(inst.movableShapes, m[2]);
   if (!gen) return null;
 
   return builtin(gen(mod12(rootPc - inst.movableRootPc)));

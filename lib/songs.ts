@@ -10,7 +10,7 @@ import type { SongSort } from './catalogUrl';
 import { cardSelect, type SongCard, type SongListPage } from './engagement';
 export type { SongListPage } from './engagement';
 import { SONGS_PAGE_SIZE, pageSkip, pageTake, parsePage, splitPage } from './paging';
-import { buildSearchText, searchQueryForLike } from './chordpro/searchText';
+import { buildSearchText, normalizeSearchQuery, searchQueryForLike } from './chordpro/searchText';
 import { chordsInOrder } from './chordpro/usedChords';
 
 export type SongVisibility = 'private' | 'unlisted' | 'public';
@@ -201,6 +201,48 @@ const FUZZY_MIN_QUERY = 3;
 /**
  * Похожие разборы при опечатке в запросе. Возвращает id по убыванию близости.
  * Требует расширения pg_trgm (см. scripts/setup-search.mjs).
+ *
+ * ── Почему оператор `<%`, а не функция со сравнением ────────────────────────
+ *
+ * Раньше отбор был написан как `word_similarity(запрос, "searchText") >= 0.45`.
+ * Читается это тем же самым, но выполняется совершенно иначе: триграммный
+ * GIN-индекс (`Song_searchText_trgm_idx`) ускоряет ОПЕРАТОРЫ pg_trgm, а вызов
+ * функции внутри условия для планировщика — обычное выражение, под которое
+ * индекса нет. То есть подбор шёл полным сканом таблицы и считал
+ * `word_similarity` на каждой строке дважды: один раз в `WHERE`, второй — в
+ * `ORDER BY`. И запускалось это на КАЖДОМ поиске без точных совпадений, то есть
+ * на каждой опечатке и на каждом мусорном `?q=` из адресной строки.
+ *
+ * `запрос <% "searchText"` — ровно то же условие по смыслу (документация
+ * pg_trgm определяет оператор как «word_similarity не ниже порога»), но его
+ * индекс покрывает. `word_similarity` в `ORDER BY` остаётся, и это нормально:
+ * теперь он считается только для строк, которые вернул индекс, а не для всех.
+ *
+ * Замерено на живой базе через EXPLAIN, «вличение»:
+ *   новая форма  → Bitmap Index Scan on "Song_searchText_trgm_idx",
+ *                  Index Cond: ("searchText" %> 'вличение');
+ *   прежняя форма → Seq Scan, причём ДАЖE при enable_seqscan = off
+ *                  («Disabled: true») — то есть другого плана у неё нет вовсе.
+ * Выдача и её порядок совпали с прежними один в один.
+ *
+ * Сегодня в каталоге два десятка разборов, и планировщик всё равно выбирает
+ * Seq Scan — на таком объёме он дешевле (та же история, что у составных
+ * индексов в schema.prisma). Разница в том, что теперь у запроса ЕСТЬ второй
+ * план, и он включится сам, когда каталог вырастет.
+ *
+ * ── Почему порог ставится через set_config ──────────────────────────────────
+ *
+ * Порог у оператора не пишется рядом с ним — он берётся из настройки
+ * `pg_trgm.word_similarity_threshold`, а по умолчанию она 0.6, то есть строже
+ * нашей 0.45. Оставить умолчание значило бы молча потерять половину замеренных
+ * случаев («вличение» → 0.500).
+ *
+ * `set_config(..., is_local = true)` вместо `SET` намеренно, и по двум разным
+ * причинам: `SET` не принимает параметров (имя настройки и значение в нём
+ * обязаны быть литералами), а `is_local` привязывает значение к транзакции —
+ * значит оно откатится на COMMIT и не осядет в соединении. Последнее
+ * обязательно: на Neon соединения общие (pooler), и настройка, выставленная
+ * навсегда, уехала бы в чужие запросы.
  */
 async function fuzzyMatchIds(
   query: string,
@@ -208,16 +250,22 @@ async function fuzzyMatchIds(
   verified: boolean,
   limit: number,
 ): Promise<string[]> {
-  const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT "id"
-    FROM "Song"
-    WHERE "visibility" = 'public'
-      ${instrument ? Prisma.sql`AND "instrument" = ${instrument}` : Prisma.empty}
-      ${verified ? Prisma.sql`AND "verified" = true` : Prisma.empty}
-      AND word_similarity(${query}, "searchText") >= ${FUZZY_THRESHOLD}
-    ORDER BY word_similarity(${query}, "searchText") DESC, "viewCount" DESC
-    LIMIT ${limit}
-  `;
+  const [, rows] = await prisma.$transaction([
+    // Значение — строкой: третий аргумент set_config текстовый.
+    prisma.$queryRaw`
+      SELECT set_config('pg_trgm.word_similarity_threshold', ${String(FUZZY_THRESHOLD)}, true)
+    `,
+    prisma.$queryRaw<{ id: string }[]>`
+      SELECT "id"
+      FROM "Song"
+      WHERE "visibility" = 'public'
+        ${instrument ? Prisma.sql`AND "instrument" = ${instrument}` : Prisma.empty}
+        ${verified ? Prisma.sql`AND "verified" = true` : Prisma.empty}
+        AND ${query} <% "searchText"
+      ORDER BY word_similarity(${query}, "searchText") DESC, "viewCount" DESC
+      LIMIT ${limit}
+    `,
+  ]);
   return rows.map((r) => r.id);
 }
 
@@ -302,7 +350,9 @@ async function fetchPublicSongs(filters: {
   // листать его незачем.
   // Короткие запросы в подбор не пускаем: у односимвольного близость к любому
   // слову с этой буквой равна 1.0, и «похожим» оказывается весь каталог.
-  const q = filters.query?.trim().toLowerCase();
+  // Тем же приведением, что и обычный поиск: у подбора своя дорога в базу, и
+  // потолок длины обязан стоять на обеих (см. normalizeSearchQuery).
+  const q = normalizeSearchQuery(filters.query);
   if (!q || q.length < FUZZY_MIN_QUERY || page > 0) return { songs: [], hasMore: false };
 
   // Подбор уважает тот же отбор: иначе при включённом «только подтверждённые»
@@ -399,8 +449,15 @@ export const findArtistName = cache(async function findArtistName(artist: string
   const name = artist.trim();
   if (!name) return null;
   return cachedByKey(['artist-name', name.toLowerCase()], [SONGS_TAG], async () => {
+    // Порядок задан явно, и это не педантизм: у одного имени в базе бывает
+    // несколько написаний («Кино» и «кино»), а `findFirst` без сортировки
+    // отдаёт какое придётся — то есть заголовок страницы мог меняться от
+    // запроса к запросу. Правило то же, что у блока исполнителей под каталогом
+    // (`min("artist")` в listTopArtists), поэтому надпись на ссылке и
+    // заголовок страницы, куда она ведёт, совпадают.
     const row = await prisma.song.findFirst({
       where: { visibility: 'public', artist: { equals: name, mode: 'insensitive' } },
+      orderBy: { artist: 'asc' },
       select: { artist: true },
     });
     return row?.artist ?? null;
@@ -494,16 +551,34 @@ export async function listTopArtists(
   // Кэшируется целиком: блок одинаков для всех, дат в ответе нет, а меняется он
   // только когда появляется или уходит разбор — то есть по тегу.
   return cachedByKey(['top-artists', instrument, String(limit)], [SONGS_TAG], async () => {
-    const rows = await prisma.song.groupBy({
-      by: ['artist'],
-      where: { visibility: 'public', instrument, artist: { not: null } },
-      _count: { _all: true },
-      orderBy: { _count: { artist: 'desc' } },
-      take: limit,
-    });
-    return rows
-      .filter((r): r is typeof r & { artist: string } => !!r.artist?.trim())
-      .map((r) => ({ name: r.artist, count: r._count._all }));
+    // Сырой SQL, а не groupBy, из-за ОДНОГО слова — `lower`.
+    //
+    // Исполнитель у разбора это свободное текстовое поле, и одно и то же имя
+    // приходит в разных написаниях («Кино», «кино», «КИНО»). Страница
+    // исполнителя это знает и сравнивает без учёта регистра (см.
+    // listSongsByArtist, getArtistSummary, findArtistName), а блок под
+    // каталогом группировал по ТОЧНОЙ строке — то есть показывал одного
+    // исполнителя двумя пунктами с разбитым пополам счётчиком, и оба вели на
+    // одну и ту же страницу, где стояла их сумма. `groupBy` у Prisma
+    // группировать по выражению не умеет, отсюда запрос руками.
+    //
+    // `min("artist")` как подпись — чтобы из нескольких написаний выбиралось
+    // одно и то же при каждом запросе: иначе название в блоке прыгало бы от
+    // сборки к сборке. Тем же правилом подписывается и сама страница
+    // исполнителя (см. findArtistName), поэтому надпись на ссылке и заголовок
+    // страницы, куда она ведёт, совпадают.
+    const rows = await prisma.$queryRaw<{ name: string; count: number }[]>`
+      SELECT min("artist") AS "name", count(*)::int AS "count"
+      FROM "Song"
+      WHERE "visibility" = 'public'
+        AND "instrument" = ${instrument}
+        AND "artist" IS NOT NULL
+        AND btrim("artist") <> ''
+      GROUP BY lower(btrim("artist"))
+      ORDER BY count(*) DESC, min("artist") ASC
+      LIMIT ${limit}
+    `;
+    return rows;
   });
 }
 
@@ -624,11 +699,29 @@ export async function getOwnedSong(id: string, userId: string) {
   return song;
 }
 
-export function createSong(userId: string, input: SongInput) {
+/**
+ * Что возвращает сохранение: ровно то, из чего вызывающий код собирает адрес
+ * разбора (`songPath`) и тег кэша, — и ничего сверх.
+ *
+ * Без `select` Prisma отдаёт ВСЕ скалярные поля, а среди них `coverUrl` — тот
+ * самый base64 до 400 КБ, ради которого заведён и флаг `hasCover`, и отдельный
+ * маршрут /covers/[id]. То есть каждое сохранение разбора тянуло картинку из
+ * базы (а база в другом полушарии) обратно в процесс, чтобы выбросить её
+ * следующей строкой: экшену нужны только id, название и исполнитель.
+ * Ровно та же экономия, что в `cardSelect`, `catalogSelect` и `viewerSelect`, —
+ * просто здесь про неё забыли, потому что поля никто не перечислял.
+ */
+const savedSelect = { id: true, title: true, artist: true } satisfies Prisma.SongSelect;
+
+/** Разбор после сохранения — только поля, из которых собирается его адрес. */
+export type SavedSong = Prisma.SongGetPayload<{ select: typeof savedSelect }>;
+
+export function createSong(userId: string, input: SongInput): Promise<SavedSong> {
   // У новой песни сохранять нечего, поэтому «не трогать» здесь читается как
   // «обложки нет».
   return prisma.song.create({
     data: { ...normalize(input), ...coverFields(input.coverUrl ?? null), userId },
+    select: savedSelect,
   });
 }
 
@@ -645,11 +738,18 @@ export function createSong(userId: string, input: SongInput) {
  * P2025 — «под условие ничего не подошло». Для вызывающего это ровно тот же
  * ответ, что и «чужой разбор», поэтому превращаем в `null`, а не в падение.
  */
-export async function updateSong(id: string, userId: string, input: SongInput) {
+export async function updateSong(
+  id: string,
+  userId: string,
+  input: SongInput,
+): Promise<SavedSong | null> {
   try {
     return await prisma.song.update({
       where: { id, userId },
       data: { ...normalize(input), ...coverFields(input.coverUrl) },
+      // Только поля адреса — см. `savedSelect`. На `select` проверка владельца
+      // никак не влияет: она в `where`, то есть в самом UPDATE.
+      select: savedSelect,
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {

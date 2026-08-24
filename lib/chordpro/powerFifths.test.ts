@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePowerFifths, powerFifthPins, powerFifthRenames } from './powerFifths';
+import {
+  defsWithFretFifths,
+  normalizePowerFifths,
+  powerFifthPins,
+  powerFifthRenames,
+  songWithFretFifths,
+} from './powerFifths';
+import { parseSong } from './parse';
+import { songFromRecord } from './fromRecord';
+import { songAccidental, transposeSong } from './transform';
+import {
+  chordNameToPowerFifth,
+  getChordShape,
+  parseChordDefs,
+  transposeChordDefs,
+} from '../chords/diagrams';
+import { chordsFromSong } from './usedChords';
 
 describe('powerFifthRenames', () => {
   it('находит старую запись без повторов, в порядке появления', () => {
@@ -122,5 +138,124 @@ describe('powerFifthPins', () => {
     // 1Н → A#5 в диезной тональности и Bb5 в бемольной; позиция одна и та же.
     expect(Object.keys(powerFifthPins('[13Н]a', {}, 'Am'))).toEqual(['A#5']);
     expect(Object.keys(powerFifthPins('[13Н]a', {}, 'Dm'))).toEqual(['Bb5']);
+  });
+});
+
+describe('songWithFretFifths', () => {
+  it('подписывает квинты ладами, не трогая остальные аккорды', () => {
+    const song = parseSong('[G#5]сло[Am]во [C5]ещё[F]раз');
+    expect(chordsFromSong(songWithFretFifths(song))).toEqual(['4В', 'Am', '3Н', 'F']);
+  });
+
+  it('подписывать нечего — возвращается ТОТ ЖЕ объект', () => {
+    // На этом держится память рендера: лист не перерисовывается там, где
+    // ничего не менялось.
+    const song = parseSong('[Am]сло[F]во');
+    expect(songWithFretFifths(song)).toBe(song);
+  });
+
+  it('устаревшую запись оставляет как есть — она уже такая', () => {
+    const song = parseSong('[5В]сло[3Н]во');
+    expect(songWithFretFifths(song)).toBe(song);
+  });
+
+  it('число аккордов и их порядок сохраняются', () => {
+    // Перевод взаимно однозначен на двенадцати высотах, поэтому две разные
+    // квинты не могут схлопнуться в одну подпись.
+    const song = parseSong('[C5]а[D5]б[E5]в[F5]г[G5]д[A5]е[B5]ж');
+    const before = chordsFromSong(song);
+    const after = chordsFromSong(songWithFretFifths(song));
+    expect(after).toHaveLength(before.length);
+    expect(new Set(after).size).toBe(before.length);
+  });
+});
+
+describe('defsWithFretFifths', () => {
+  it('переносит свою форму под новую подпись', () => {
+    const shape = { frets: [4, 6, 6, -1, -1, -1] };
+    expect(defsWithFretFifths({ 'G#5': shape })).toEqual({ '4В': shape });
+  });
+
+  it('не-квинты остаются под своими именами', () => {
+    const am = { frets: [-1, 0, 2, 2, 1, 0] };
+    const g = { frets: [4, 6, 6, -1, -1, -1] };
+    expect(defsWithFretFifths({ Am: am, 'G#5': g })).toEqual({ Am: am, '4В': g });
+  });
+
+  it('переносить нечего — ТОТ ЖЕ объект', () => {
+    const defs = { Am: { frets: [-1, 0, 2, 2, 1, 0] } };
+    expect(defsWithFretFifths(defs)).toBe(defs);
+  });
+});
+
+/**
+ * Сборка читалки целиком — та же цепочка вызовов, что стоит в SongViewer.
+ *
+ * Отдельно от проверок самих функций: каждая из них по себе верна, а вопрос
+ * здесь другой — в каком ПОРЯДКЕ их складывать. Сначала транспонирование,
+ * потом подпись: наоборот запись «4В» перестала бы транспонироваться, то есть
+ * вернулась бы ровно та беда, из-за которой её убрали из хранения. Разъехаться
+ * этому порядку в компоненте больше нечем — он закреплён здесь.
+ */
+function viewerChain(
+  body: string,
+  key: string | null,
+  defsJson: string | null,
+  transpose: number,
+  asFrets: boolean,
+) {
+  const base = songFromRecord({ body, key, title: 't' });
+  const shapeSong = transposeSong(base, transpose);
+  const shapeDefs = transposeChordDefs(
+    parseChordDefs(defsJson, 'guitar'),
+    transpose,
+    songAccidental(base.meta.key, transpose),
+  );
+  const sheetDefs = asFrets ? defsWithFretFifths(shapeDefs) : shapeDefs;
+  const sheetSong = asFrets ? songWithFretFifths(shapeSong) : shapeSong;
+  const standard = chordsFromSong(shapeSong);
+  const used = asFrets ? standard.map((c) => chordNameToPowerFifth(c) ?? c) : standard;
+  return {
+    used,
+    sheet: chordsFromSong(sheetSong),
+    shapes: used.map((c) => getChordShape(c, 'guitar', sheetDefs)),
+  };
+}
+
+/** Разбор с квинтами на всех трёх позициях струн плюс обычный аккорд. */
+const BODY = '[E5]раз [C#5]два [G#5]три [A5]и [Am]обычный';
+
+describe('запись квинт в читалке', () => {
+  it('без переключателя — стандартные имена', () => {
+    expect(viewerChain(BODY, null, null, 0, false).used).toEqual(['E5','C#5','G#5','A5','Am']);
+  });
+
+  it('с переключателем — лады, обычный аккорд не тронут', () => {
+    expect(viewerChain(BODY, null, null, 0, true).used).toEqual(['0В','4Н','4В','5В','Am']);
+  });
+
+  it('панель аккордов и текст подписаны одинаково', () => {
+    const v = viewerChain(BODY, null, null, 0, true);
+    expect(v.used).toEqual(v.sheet);
+  });
+
+  it('аппликатуры совпадают до последнего лада', () => {
+    expect(viewerChain(BODY, null, null, 0, true).shapes).toEqual(viewerChain(BODY, null, null, 0, false).shapes);
+  });
+
+  it('и после транспонирования тоже — на всех сдвигах', () => {
+    for (let t = -11; t <= 11; t++) {
+      const off = viewerChain(BODY, 'Am', null, t, false);
+      const on = viewerChain(BODY, 'Am', null, t, true);
+      expect(on.shapes, `сдвиг ${t}`).toEqual(off.shapes);
+      expect(on.used, `сдвиг ${t}`).toHaveLength(off.used.length);
+      expect(on.used, `сдвиг ${t}`).toEqual(on.sheet);
+    }
+  });
+
+  it('своя аппликатура переезжает вместе с подписью', () => {
+    const mine = JSON.stringify({ 'G#5': [9, 11, 11, -1, -1, -1] });
+    const on = viewerChain(BODY, null, mine, 0, true);
+    expect(on.shapes[on.used.indexOf('4В')]).toEqual({ frets: [9, 11, 11, -1, -1, -1] });
   });
 });

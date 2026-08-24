@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { listPublicSongs, listTopArtists } from '@/lib/songs';
 import { catalogHref, parseCatalogPage, parseSort, parseVerifiedParam } from '@/lib/catalogUrl';
+import { SEARCH_QUERY_MAX } from '@/lib/chordpro/searchText';
 import { INSTRUMENTS, catalogPath, type InstrumentId } from '@/lib/chords/instruments';
 import { itemListJsonLd } from '@/lib/seo';
 import { jsonLdScript } from '@/lib/jsonLd';
@@ -94,9 +95,13 @@ export async function CatalogView({
       <div className="mb-6 flex flex-col gap-3 sm:mb-8">
         <form className="search" method="get" role="search">
           <SearchIcon />
+          {/* maxLength — подсказка человеку, а не защита: форма уходит GET'ом,
+              и адрес можно набрать руками. Настоящий потолок стоит на пути в
+              базу (см. normalizeSearchQuery), оба берут одно и то же число. */}
           <input
             name="q"
             type="search"
+            maxLength={SEARCH_QUERY_MAX}
             defaultValue={query ?? ''}
             placeholder="Найти песню или исполнителя"
             className="field field--search"

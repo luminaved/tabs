@@ -20,26 +20,36 @@ import { toggleFavorite, toggleLike } from '@/lib/engagement';
  * счётчик лайков, догоняющий за минуту.
  */
 
+/**
+ * `null` — сделать ничего не вышло, состояние на странице менять нечем.
+ *
+ * Отдельно от «не лайкнуто», и это важно в обе стороны. Раньше отказ отвечал
+ * `{ liked: false, likeCount: 0 }`, страница честно вписывала эти числа себе —
+ * и ВИДИМЫЙ счётчик лайков падал в ноль на ровном месте (например, когда разбор
+ * удалили из соседней вкладки). Наружу же `null` по-прежнему не различает «нет
+ * доступа» и «нет разбора»: перебор id не получает подсказки.
+ */
 export async function toggleLikeAction(
   songId: string,
-): Promise<{ liked: boolean; likeCount: number }> {
+): Promise<{ liked: boolean; likeCount: number } | null> {
   const user = await requireUser();
-  if (!songId) return { liked: false, likeCount: 0 };
+  if (!songId) return null;
 
   const liked = await toggleLike(user.id, songId);
-  // null — разбора нет или он чужой приватный. Отвечаем «не лайкнуто», а не
-  // ошибкой: перебор id не должен различать «нет доступа» и «нет разбора».
-  if (liked === null) return { liked: false, likeCount: 0 };
+  if (liked === null) return null;
 
   // Счётчик перечитываем, а не считаем на клиенте: лайкать могли параллельно.
   const likeCount = await prisma.like.count({ where: { songId } });
   return { liked, likeCount };
 }
 
-export async function toggleFavoriteAction(songId: string): Promise<{ favorited: boolean }> {
+export async function toggleFavoriteAction(
+  songId: string,
+): Promise<{ favorited: boolean } | null> {
   const user = await requireUser();
-  if (!songId) return { favorited: false };
+  if (!songId) return null;
 
   const favorited = await toggleFavorite(user.id, songId);
-  return { favorited: favorited ?? false };
+  if (favorited === null) return null;
+  return { favorited };
 }

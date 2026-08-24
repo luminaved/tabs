@@ -130,9 +130,22 @@ const GUITAR_MOVABLE: Record<string, (f: number) => ChordFrets> = {
  *
  * Баррэ не задаётся: квинту берут пальцами 1-3-4, а не поперечным.
  */
+/**
+ * До какого лада включительно квинта берётся от ШЕСТОЙ струны; выше — от пятой.
+ *
+ * Числом здесь стояла пятёрка, и её же приходилось знать обратному переводу
+ * «G#5» → «4В» (см. `chordNameToPowerFifth` в diagrams.ts): буква В или Н —
+ * это ровно ответ на вопрос «на какой струне корень». Разойдись два места — и
+ * подпись сказала бы «В» там, где нарисована форма от пятой струны. Поэтому
+ * порог живёт в одном экземпляре и импортируется.
+ */
+export const GUITAR_FIFTH_ON_SIXTH_MAX = 5;
+
 function guitarPowerChord(rootPc: number): ChordShape {
   const sixth = mod12(rootPc - GUITAR_OPEN_PCS[0]);
-  if (sixth <= 5) return { frets: [sixth, sixth + 2, sixth + 2, -1, -1, -1] };
+  if (sixth <= GUITAR_FIFTH_ON_SIXTH_MAX) {
+    return { frets: [sixth, sixth + 2, sixth + 2, -1, -1, -1] };
+  }
   const fifth = mod12(rootPc - GUITAR_OPEN_PCS[1]);
   return { frets: [-1, fifth, fifth + 2, fifth + 2, -1, -1] };
 }

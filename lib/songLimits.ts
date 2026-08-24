@@ -117,3 +117,35 @@ export function parseBoundedInt(raw: string, min: number, max: number): number |
   if (int < min || int > max) return null;
   return int;
 }
+
+/** Числовые поля разбора: границы и человеческое имя для текста ошибки. */
+const BOUNDED_FIELDS = {
+  tempo: { min: TEMPO_MIN, max: TEMPO_MAX, label: 'Темп' },
+  capo: { min: CAPO_MIN, max: CAPO_MAX, label: 'Капо' },
+} as const;
+
+export type BoundedField = keyof typeof BOUNDED_FIELDS;
+
+/**
+ * Число из формы либо текст ошибки — в паре с `checkSongFields`.
+ *
+ * Отличается от `parseBoundedInt` ровно тем, ради чего и заведена: тот на
+ * значение вне границ отвечает `null`, то есть «не указано». Для темпа это
+ * значило, что «500» молча превращалось в пустоту, а для капо — в ноль, и
+ * человек узнавал об этом, только вернувшись в разбор и не найдя там своего
+ * числа. Соседний `checkLength` в этом же файле поступает наоборот и не зря:
+ * «обрезать молча нельзя… поэтому отказ с объяснением». Числа жили по другому
+ * правилу без всякой причины.
+ *
+ * Пустое поле по-прежнему `null` — это честное «не указано», а не ошибка.
+ */
+export function parseBoundedField(
+  raw: string,
+  field: BoundedField,
+): { value: number | null } | { error: string } {
+  const { min, max, label } = BOUNDED_FIELDS[field];
+  if (!raw.trim()) return { value: null };
+  const value = parseBoundedInt(raw, min, max);
+  if (value === null) return { error: `${label} — допустимо от ${min} до ${max}` };
+  return { value };
+}

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { transposeChord } from './chord';
+import { pcToName } from './pitch';
 import {
   DIAGRAM_MAX_ROWS,
   DIAGRAM_MIN_ROWS,
   EDITOR_FRET_ROWS,
   fretSpan,
   fretWindow,
+  chordNameToPowerFifth,
   getChordShape,
   parseChordDefs,
   parseFrets,
@@ -403,5 +405,90 @@ describe('parseFrets', () => {
   it('мусор → null', () => {
     expect(parseFrets('abc')).toBeNull();
     expect(parseFrets('x320')).toBeNull();
+  });
+});
+
+describe('имена аккордов из прототипа', () => {
+  // В аккорды попадает всё, что стоит в квадратных скобках (chordsInOrder не
+  // проверяет содержимое), а таблицы форм — обычные объектные литералы.
+  // Поэтому такое имя приносило из прототипа истинное значение вместо формы,
+  // и на нём падал deriveBarres — вместе с редактором и страницей разбора.
+  const PROTO = ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__'];
+
+  it('во встроенных таблицах ничего не находят', () => {
+    for (const name of PROTO) {
+      expect(getChordShape(name, 'guitar'), name).toBeNull();
+      expect(getChordShape(name, 'ukulele'), name).toBeNull();
+    }
+  });
+
+  it('в своих аппликатурах ничего не находят', () => {
+    const defs = parseChordDefs(JSON.stringify({ Am: [-1, 0, 2, 2, 1, 0] }), 'guitar');
+    for (const name of PROTO) {
+      expect(getChordShape(name, 'guitar', defs), name).toBeNull();
+    }
+  });
+
+  it('корень с таким суффиксом не уходит в таблицу подвижных форм', () => {
+    // «Aconstructor» разбирался: корень A, суффикс «constructor» — и суффикс
+    // приносил из прототипа `Object` вместо функции, строящей форму.
+    for (const name of PROTO) {
+      expect(getChordShape(`A${name}`, 'guitar'), name).toBeNull();
+    }
+  });
+
+  it('своя форма под таким именем всё же находится', () => {
+    // Обратная сторона: если человек НАРИСОВАЛ форму для аккорда с таким
+    // именем, она его собственное свойство и работать обязана.
+    const frets = [-1, 0, 2, 2, 1, 0];
+    const defs = parseChordDefs(JSON.stringify({ constructor: frets }), 'guitar');
+    expect(getChordShape('constructor', 'guitar', defs)).toEqual({ frets });
+  });
+});
+
+describe('chordNameToPowerFifth', () => {
+  it('переводит квинту в запись «лад + В/Н»', () => {
+    expect(chordNameToPowerFifth('G#5')).toBe('4В');
+    expect(chordNameToPowerFifth('A5')).toBe('5В');
+    expect(chordNameToPowerFifth('E5')).toBe('0В');
+    expect(chordNameToPowerFifth('C5')).toBe('3Н');
+    expect(chordNameToPowerFifth('D5')).toBe('5Н');
+  });
+
+  it('не квинта — null, переводить нечего', () => {
+    for (const name of ['Am', 'C', 'G7', 'A5/E', 'N.C.', '5В', '', 'H5', 'A']) {
+      expect(chordNameToPowerFifth(name), name).toBeNull();
+    }
+  });
+
+  it('на всех двенадцати высотах перевод возвращается к тому же имени', () => {
+    for (let pc = 0; pc < 12; pc++) {
+      const name = `${pcToName(pc, 'sharp')}5`;
+      const frets = chordNameToPowerFifth(name);
+      expect(frets, name).not.toBeNull();
+      expect(powerFifthToChordName(frets as string), name).toBe(name);
+    }
+  });
+
+  it('от смены записи АППЛИКАТУРА НЕ ДВИГАЕТСЯ', () => {
+    // Главное свойство переключателя в читалке: он меняет подпись, а не аккорд.
+    // Держится на том, что струну обе стороны выбирают одним порогом
+    // (GUITAR_FIFTH_ON_SIXTH_MAX). Разойдись они — человек, нажавший
+    // «4В», получил бы вместо своего разбора другой, на несколько ладов в
+    // сторону, и заметил бы это только на слух.
+    for (let pc = 0; pc < 12; pc++) {
+      const name = `${pcToName(pc, 'sharp')}5`;
+      const frets = chordNameToPowerFifth(name) as string;
+      expect(getChordShape(frets, 'guitar'), `${name} → ${frets}`).toEqual(
+        getChordShape(name, 'guitar'),
+      );
+    }
+  });
+
+  it('подпись всегда двухсимвольная — ширина кнопки не прыгает', () => {
+    for (let pc = 0; pc < 12; pc++) {
+      const frets = chordNameToPowerFifth(`${pcToName(pc, 'sharp')}5`) as string;
+      expect(frets, frets).toHaveLength(2);
+    }
   });
 });

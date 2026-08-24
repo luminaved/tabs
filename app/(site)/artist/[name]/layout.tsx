@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { findArtistName } from '@/lib/songs';
 
 /**
@@ -33,7 +33,31 @@ export default async function ArtistLayout({
     // всё равно не найдётся.
   }
 
-  if (!(await findArtistName(decoded))) notFound();
+  const artist = await findArtistName(decoded);
+  if (!artist) notFound();
+
+  /**
+   * Приведение адреса к каноническому написанию — 308, как у разбора.
+   *
+   * Исполнитель ищется без учёта регистра (см. findArtistName), поэтому
+   * `/artist/кино`, `/artist/Кино` и `/artist/КИНО` отдавали ОДНО И ТО ЖЕ
+   * содержимое с кодом 200 — то есть три адреса на одну страницу. У разбора
+   * ровно этот случай закрыт редиректом с прямо записанной причиной: «canonical
+   * — просьба, редирект — факт» (см. songs/[id]/(view)/layout.tsx). Здесь
+   * стояла только просьба.
+   *
+   * Сравниваем ЗАКОДИРОВАННЫЕ строки с обеих сторон, а не имя с сегментом
+   * адреса: имя исполнителя почти всегда кириллица, в адресе она живёт
+   * процентами, и сравнение «как есть» отправляло бы страницу в бесконечный
+   * редирект сама на себя. После одного перехода `decoded` совпадёт с `artist`,
+   * и второго не будет.
+   *
+   * Место то же и по той же причине, что у 404 выше: layout рендерится ВЫШЕ
+   * Suspense-границы, которую создаёт соседний loading.tsx, поэтому заголовок
+   * Location ещё можно поставить — после начала стрима уже нельзя.
+   */
+  const target = `/artist/${encodeURIComponent(artist)}`;
+  if (target !== `/artist/${encodeURIComponent(decoded)}`) permanentRedirect(target);
 
   return <>{children}</>;
 }

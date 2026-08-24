@@ -8,6 +8,7 @@ import {
   checkLength,
   checkSongFields,
   parseBoundedInt,
+  parseBoundedField,
   type SongTextFields,
 } from './songLimits';
 
@@ -125,5 +126,42 @@ describe('сами значения потолков', () => {
       if (field === 'body') continue;
       expect(SONG_LIMITS.body, `body против ${field}`).toBeGreaterThan(max);
     }
+  });
+});
+
+describe('parseBoundedField', () => {
+  it('пустое поле — «не указано», а не ошибка', () => {
+    expect(parseBoundedField('', 'tempo')).toEqual({ value: null });
+    expect(parseBoundedField('   ', 'capo')).toEqual({ value: null });
+  });
+
+  it('значение в границах проходит', () => {
+    expect(parseBoundedField(String(TEMPO_MIN), 'tempo')).toEqual({ value: TEMPO_MIN });
+    expect(parseBoundedField(String(TEMPO_MAX), 'tempo')).toEqual({ value: TEMPO_MAX });
+    expect(parseBoundedField('0', 'capo')).toEqual({ value: 0 });
+    expect(parseBoundedField(String(CAPO_MAX), 'capo')).toEqual({ value: CAPO_MAX });
+  });
+
+  it('вне границ — отказ с объяснением, а не тихое «не указано»', () => {
+    // Раньше «500» молча превращалось в пустой темп, а капо на пятнадцатом
+    // ладу — в ноль, и человек узнавал об этом, только вернувшись в разбор.
+    const tempo = parseBoundedField(String(TEMPO_MAX + 1), 'tempo');
+    expect(tempo).toHaveProperty('error');
+    expect('error' in tempo && tempo.error).toContain(String(TEMPO_MAX));
+
+    const capo = parseBoundedField(String(CAPO_MAX + 1), 'capo');
+    expect(capo).toHaveProperty('error');
+    expect('error' in capo && capo.error).toContain(String(CAPO_MAX));
+  });
+
+  it('не число — тоже отказ', () => {
+    expect(parseBoundedField('abc', 'tempo')).toHaveProperty('error');
+  });
+
+  it('у капо и темпа разные имена в тексте ошибки', () => {
+    const tempo = parseBoundedField('-5', 'tempo');
+    const capo = parseBoundedField('-5', 'capo');
+    expect('error' in tempo && tempo.error).toContain('Темп');
+    expect('error' in capo && capo.error).toContain('Капо');
   });
 });

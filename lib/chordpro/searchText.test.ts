@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildSearchText, searchQueryForLike, stripChordPro } from './searchText';
+import {
+  SEARCH_QUERY_MAX,
+  buildSearchText,
+  normalizeSearchQuery,
+  searchQueryForLike,
+  stripChordPro,
+} from './searchText';
 
 describe('stripChordPro', () => {
   it('убирает аккорды, склеивая разорванное слово', () => {
@@ -71,5 +77,37 @@ describe('searchQueryForLike', () => {
 
   it('обычный запрос не меняется', () => {
     expect(searchQueryForLike('тёплый вечер')).toBe('тёплый вечер');
+  });
+});
+
+describe('normalizeSearchQuery', () => {
+  it('пусто и пробелы — искать нечего', () => {
+    expect(normalizeSearchQuery('   ')).toBeNull();
+    expect(normalizeSearchQuery(undefined)).toBeNull();
+  });
+
+  it('обрезает края и снимает регистр', () => {
+    expect(normalizeSearchQuery('  Влечение ')).toBe('влечение');
+  });
+
+  it('режет запрос по потолку', () => {
+    // Потолка не было вовсе: `?q=` на сотню килобайт уходил в базу как есть, а
+    // поиск сознательно не кэшируется.
+    const long = 'я'.repeat(SEARCH_QUERY_MAX * 3);
+    expect(normalizeSearchQuery(long)).toHaveLength(SEARCH_QUERY_MAX);
+  });
+
+  it('запрос ровно в потолок проходит целиком', () => {
+    const edge = 'я'.repeat(SEARCH_QUERY_MAX);
+    expect(normalizeSearchQuery(edge)).toBe(edge);
+  });
+});
+
+describe('searchQueryForLike и потолок', () => {
+  it('потолок считается ДО экранирования', () => {
+    // Иначе строка из одних процентов усыхала бы вдвое: каждый символ
+    // превращается в два, и потолок съедал бы половину запроса.
+    const pct = '%'.repeat(SEARCH_QUERY_MAX);
+    expect(searchQueryForLike(pct)).toBe('\\%'.repeat(SEARCH_QUERY_MAX));
   });
 });
