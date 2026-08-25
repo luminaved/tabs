@@ -24,6 +24,8 @@ export function SiteFooter() {
         <nav className="site-footer-nav" aria-label="Дополнительно">
           <Link href="/">Гитара</Link>
           <Link href="/ukulele">Укулеле</Link>
+          <Link href="/chords">Аккорды</Link>
+          <Link href="/collections">Подборки</Link>
           <Link href="/requests">Заявки на разборы</Link>
           <Link href="/copyright">Правообладателям</Link>
         </nav>

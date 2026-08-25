@@ -612,6 +612,9 @@ const viewerSelect = {
   capo: true,
   body: true,
   note: true,
+  // Готовые чипы аккордов — из них собираются ссылки на справочник
+  // (см. страницу разбора). Короткий массив строк, текст песни он не тянет.
+  chords: true,
   chordDefs: true,
   hasCover: true,
   instrument: true,

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { getSongForViewer, listRelatedSongs } from '@/lib/songs';
@@ -15,6 +16,7 @@ import { jsonLdScript } from '@/lib/jsonLd';
 import { publisherJsonLd, songSeoDescription, songSeoTitle, type Crumb } from '@/lib/seo';
 import { songIdFromParam, songPath } from '@/lib/slug';
 import { resolveSongKey } from '@/lib/chordpro/fromRecord';
+import { listCatalogChords } from '@/lib/chords/chordPages';
 import { SongViewer } from '@/components/SongViewer';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { RelatedSongs } from '@/components/RelatedSongs';
@@ -122,7 +124,8 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
   // Просмотр засчитываем ПАРАЛЛЕЛЬНО с остальными запросами (последовательно
   // это добавляло бы к загрузке лишний round-trip до БД). Счётчик, прочитанный
   // одновременно, может не включать этот просмотр — поэтому прибавляем вручную.
-  const [annotations, engagement, justViewed, canVerify, related, author] = await Promise.all([
+  const [annotations, engagement, justViewed, canVerify, related, author, allChords] =
+    await Promise.all([
     isOwner ? listBySong(song.id) : Promise.resolve([]),
     getSongEngagement(song.id, viewerId),
     viewer ? recordView(song.id, viewer) : Promise.resolve(false),
@@ -135,10 +138,31 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
     // (одна строка) и идёт здесь же, в общей пачке, чтобы не добавлять
     // round-trip; у приватного разбора разметки нет — спрашивать незачем.
     isPublic ? getPublicUser(song.userId) : Promise.resolve(null),
+    // Справочник аккордов — чтобы увести со страницы разбора хоть куда-то.
+    // До него разбор был тупиком: на него ведут ссылки со всего сайта, а с него
+    // не ведёт ни одной (см. listRelatedSongs, заведённый по той же причине).
+    isPublic ? listCatalogChords() : Promise.resolve([]),
   ]);
 
   const url = songPath(song);
   const viewCount = engagement.viewCount + (justViewed ? 1 : 0);
+
+  /*
+   * Аккорды разбора со ссылками на справочник. `?? []` — не формальность:
+   * выборка разбора лежит в кэше данных, и после выката там какое-то время
+   * остаются записи, собранные ДО появления колонки в `viewerSelect`.
+   *
+   * Сопоставляем с инвентарём каталога, а не собираем адрес из имени: страницы
+   * заводятся только под аккорды, которые в каталоге есть, и энгармоника у них
+   * сведена (у «Bb5» адрес «A#5»). Собранный вручную адрес половину времени
+   * вёл бы на 404 или на 308.
+   */
+  const chordLinks = (song.chords ?? [])
+    .map((name: string) => {
+      const entry = allChords.find((c) => c.name === name || c.aliases.includes(name));
+      return entry ? { label: name, slug: entry.slug } : null;
+    })
+    .filter((v): v is { label: string; slug: string } => v !== null);
 
   // Путь до страницы: каталог своего инструмента → исполнитель → разбор.
   // Исполнителя пропускаем, когда его нет: крошка в никуда хуже её отсутствия.
@@ -227,6 +251,24 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
         shareUrl={absoluteUrl(url)}
         shareTitle={songSeoTitle(song, inst)}
       />
+      {chordLinks.length > 0 ? (
+        <section className="print-hide mt-10">
+          <h2 className="mb-2 text-sm font-medium text-muted">Аккорды этого разбора</h2>
+          <ul className="flex flex-wrap gap-1.5">
+            {chordLinks.map((c) => (
+              <li key={c.slug}>
+                <Link
+                  href={`/chords/${c.slug}`}
+                  className="chip"
+                  title={`Аккорд ${c.label}: аппликатуры для гитары и укулеле`}
+                >
+                  {c.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <RelatedSongs songs={related} artist={song.artist} instrument={inst} />
       {/* Приватный разбор видит один человек — его автор, и предлагать ему
           пожаловаться на самого себя незачем. */}

@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db';
 import { listPublicArtists } from '@/lib/songs';
+import { listCatalogChords } from '@/lib/chords/chordPages';
+import { COLLECTIONS } from '@/lib/collections';
 import { coverSitemapSrc } from '@/lib/coverUrl';
 import { songPath } from '@/lib/slug';
 import { absoluteUrl } from '@/lib/site';
@@ -105,7 +107,7 @@ export async function GET() {
   });
 
   const authorIds = [...new Set(songs.map((s) => s.userId))];
-  const artists = await listPublicArtists();
+  const [artists, chords] = await Promise.all([listPublicArtists(), listCatalogChords()]);
 
   // Дата последней правки разделов — не «сейчас»: поисковик сверяет её со своей
   // прошлой выгрузкой и по неизменившейся дате пропускает страницу без запроса.
@@ -148,6 +150,37 @@ export async function GET() {
         lastmod: lastSongChange,
         changefreq: 'weekly',
         priority: '0.6',
+      }),
+    ),
+    // Справочник аккордов. Страницы собраны из уже имеющихся данных и меняются
+    // вместе с каталогом, поэтому дата — общая с разборами.
+    {
+      loc: absoluteUrl('/chords'),
+      lastmod: lastSongChange,
+      changefreq: 'weekly',
+      priority: '0.6',
+    },
+    ...chords.map(
+      (c): Entry => ({
+        loc: absoluteUrl(`/chords/${c.slug}`),
+        lastmod: lastSongChange,
+        changefreq: 'weekly',
+        priority: '0.5',
+      }),
+    ),
+    // Подборки: список задан руками и короткий, поэтому запроса не требует.
+    {
+      loc: absoluteUrl('/collections'),
+      lastmod: lastSongChange,
+      changefreq: 'weekly',
+      priority: '0.7',
+    },
+    ...COLLECTIONS.map(
+      (c): Entry => ({
+        loc: absoluteUrl(`/collections/${c.slug}`),
+        lastmod: lastSongChange,
+        changefreq: 'weekly',
+        priority: '0.7',
       }),
     ),
     ...authorIds.map(
