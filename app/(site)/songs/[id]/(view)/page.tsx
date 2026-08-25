@@ -14,6 +14,7 @@ import { absoluteUrl, SITE_NAME } from '@/lib/site';
 import { jsonLdScript } from '@/lib/jsonLd';
 import { publisherJsonLd, songSeoDescription, songSeoTitle, type Crumb } from '@/lib/seo';
 import { songIdFromParam, songPath } from '@/lib/slug';
+import { resolveSongKey } from '@/lib/chordpro/fromRecord';
 import { SongViewer } from '@/components/SongViewer';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { RelatedSongs } from '@/components/RelatedSongs';
@@ -43,7 +44,9 @@ export async function generateMetadata({
   const artist = song.artist?.trim();
   const inst = getInstrument(song.instrument);
   const title = songSeoTitle(song, inst);
-  const description = songSeoDescription(song, inst);
+  // Тональность может быть выведена из аккордов: в базе она не заполнена ни у
+  // одной песни, а описание в выдаче её обещает (см. resolveSongKey).
+  const description = songSeoDescription({ ...song, key: resolveSongKey(song) }, inst);
 
   // Канонический адрес — с подписью. Пришедшего по голому `/songs/<id>` сюда
   // не пустит редирект из layout'а, но canonical всё равно ставим от него же:
@@ -99,6 +102,8 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
 
   const isOwner = song.userId === session?.user?.id;
   const inst = getInstrument(song.instrument);
+  // Та же тональность, что уходит в описание выдачи (см. generateMetadata).
+  const songKey = resolveSongKey(song);
 
   const viewerId = session?.user?.id;
 
@@ -157,7 +162,7 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
           '@type': 'MusicComposition',
           name: song.title,
           ...(song.artist ? { composer: { '@type': 'Person', name: song.artist } } : {}),
-          ...(song.key ? { musicalKey: song.key } : {}),
+          ...(songKey ? { musicalKey: songKey } : {}),
         },
         datePublished: song.createdAt.toISOString(),
         dateModified: song.updatedAt.toISOString(),

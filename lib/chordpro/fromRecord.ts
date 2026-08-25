@@ -1,4 +1,6 @@
 import { parseSong } from './parse';
+import { chordSequence } from './usedChords';
+import { detectKey } from '../chords/key';
 import { Song } from './types';
 
 export interface SongRecordLike {
@@ -37,5 +39,32 @@ export function songFromRecord(rec: SongRecordLike): Song {
   if (rec.key) meta.key = rec.key;
   if (rec.capo != null && rec.capo > 0) meta.capo = rec.capo;
   if (rec.tempo != null) meta.tempo = rec.tempo;
+
+  // Тональность, выведенная из аккордов, — последняя в очереди: она уступает и
+  // колонке, и директиве `{key: ...}` в тексте. См. `resolveSongKey`.
+  if (!meta.key) {
+    const detected = detectKey(chordSequence(song));
+    if (detected) meta.key = detected;
+  }
   return { meta, sections: song.sections };
+}
+
+/**
+ * Тональность разбора для метаданных и разметки: заданная либо выведенная.
+ *
+ * Отдельно от `songFromRecord`, потому что нужна там, где всё дерево песни ни к
+ * чему, — в `generateMetadata` и структурированных данных. Порядок тот же, что
+ * и выше, и он важен: сначала колонка (её заполнил человек), потом директива в
+ * тексте, и лишь потом догадка по аккордам.
+ *
+ * Догадка нужна не «на всякий случай»: колонка `key` не заполнена НИ У ОДНОЙ
+ * песни каталога, из-за чего панель читалки показывала «±0» вместо ноты,
+ * описание в выдаче обещало тональность и молчало, а `musicalKey` в разметке
+ * оставался пустым.
+ */
+export function resolveSongKey(rec: SongRecordLike): string | null {
+  const explicit = rec.key?.trim();
+  if (explicit) return explicit;
+  const song = parseSong(rec.body);
+  return song.meta.key?.trim() || detectKey(chordSequence(song));
 }

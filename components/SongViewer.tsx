@@ -345,7 +345,20 @@ export function SongViewer({
     typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 
   const shapeSong = useMemo(() => transposeSong(base, transpose), [base, transpose]);
-  const realKey = base.meta.key ? transposeKey(base.meta.key, transpose) : null;
+  /**
+   * Тональность в панели. При нулевом сдвиге показываем её ТАК, КАК ЗАПИСАНА, а
+   * не прогоняем через `transposeKey`: тот всегда переименовывает в
+   * предпочтительное написание, и разбор, у которого тональность «G#»,
+   * подписывался в панели как «Ab» — при том что в структурированных данных и в
+   * описании выдачи стояло «G#». Одна и та же песня называла свою тональность
+   * двумя разными именами. Сдвинули — переименование снова уместно: там имя
+   * целевой тональности и должно выбираться по кругу квинт.
+   */
+  const realKey = base.meta.key
+    ? transpose === 0
+      ? base.meta.key
+      : transposeKey(base.meta.key, transpose)
+    : null;
   const standardChords = useMemo(() => chordsFromSong(shapeSong), [shapeSong]);
 
   // Свои аппликатуры едут вместе с песней: они лежат под именем аккорда, а
