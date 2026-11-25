@@ -1,0 +1,341 @@
+// Prisma-схема. PostgreSQL и локально, и в продакшне (Neon) — см. README.
+//
+// Возврат на SQLite уже невозможен, даже несмотря на отсутствие enum'ов в
+// схеме: сырые запросы в lib/stats.ts (date_trunc/to_char), lib/engagement.ts
+// (INSERT … ON CONFLICT … RETURNING) и lib/songs.ts (word_similarity из
+// pg_trgm) написаны на диалекте Postgres. Плюс два уникальных индекса на
+// View держатся на том, что NULL здесь считаются различными значениями.
+
+// relationJoins: связи подтягиваются настоящим LATERAL JOIN, а не отдельным
+// запросом на каждую связь. Без него Prisma на строку каталога слала ДВА
+// запроса — сами песни и, следом, автора с числом лайков; при базе в другом
+// полушарии это лишний round-trip к каждой загрузке списка. Замерено на
+// странице каталога (25 строк, Neon us-east-2): 2 запроса / 91 мс → 1 / 47 мс.
+//
+// Опции у запросов не нужны: на PostgreSQL с включённым флагом join становится
+// стратегией по умолчанию. Проверено на всех формах, что есть в коде, — списки
+// карточек, избранное с фильтром по связи, groupBy и «одним запросом» из
+// getSongEngagement: везде один запрос и прежний результат.
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth.js (стандартные модели) ──────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  // Необязателен с 2026-08-02 — тогда это требовал вход, не отдававший почты.
+  // Сам вход убран, но колонку обратно в NOT NULL не возвращаем: заведённые им
+  // безадресные аккаунты (со своими песнями, лайками и заметками) миграция бы
+  // уронила. Ослабление ничего не открывает — см. ниже.
+  // Уникальность сохраняется: Postgres считает NULL различными,
+  // поэтому безадресных аккаунтов может быть сколько угодно, а вот один и тот
+  // же адрес по-прежнему занят ровно одним пользователем.
+  //
+  // Вход по паролю без адреса невозможен по построению: форма регистрации
+  // адрес требует (см. registerAction), а `authorize` ищет строго по нему.
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  // Хеш пароля (bcrypt). Расширение поверх стандартной схемы Auth.js
+  // для входа по email+паролю. Опционален: magic-link не требует пароля.
+  passwordHash  String?
+  // Роль: "user" | "admin". Админ может подтверждать разборы (см. Song.verified).
+  // Выдаётся скриптом scripts/grant-admin.mjs, а не через интерфейс.
+  role          String    @default("user")
+  createdAt     DateTime  @default(now())
+
+  accounts  Account[]
+  sessions  Session[]
+  songs     Song[]
+  setlists  Setlist[]
+  likes     Like[]
+  favorites Favorite[]
+  views     View[]
+  requestVotes SongRequestVote[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Модели приложения ─────────────────────────────────────────────────────
+
+model Song {
+  id         String   @id @default(cuid())
+  title      String
+  artist     String?
+  key        String? // тональность, напр. "Am", "Bb"
+  // Лад каподастра, 0 — без капо. ВНИМАНИЕ на значение по умолчанию: «капо
+  // нет» и «капо не задавали» в базе неразличимы, поэтому ноль читается как
+  // «не задано» и уступает директиве {capo: N} из текста песни
+  // (см. lib/chordpro/fromRecord.ts). Иначе в день, когда страница начала
+  // выбирать эту колонку, у всех разборов с директивой капо молча пропало бы.
+  capo       Int      @default(0)
+  tempo      Int?
+  body       String // текст в формате ChordPro, хранится как есть
+  note       String? // заметка от автора, показывается над текстом (видна всем)
+  coverUrl   String? // обложка: data URL (загружается и сжимается на клиенте)
+  // Флаг «обложка есть» — чтобы списки не тянули из БД тяжёлый base64
+  // (сама картинка отдаётся отдельным кэшируемым маршрутом /covers/[id]).
+  hasCover   Boolean  @default(false)
+  chordDefs  String? // JSON: кастомные аппликатуры { "имя": [лады по струнам] }
+  // Денормализованные аккорды разбора в порядке первого появления — те самые
+  // чипы, что показывает строка списка. Пересобираются при сохранении (см.
+  // normalize в lib/songs.ts), считает их chordsInOrder.
+  //
+  // Колонка появилась не ради удобства. Чипы считались из `body`, поэтому
+  // КАЖДЫЙ список выбирал текст песни целиком — и тут же его выбрасывал:
+  // замерено 30 КБ на страницу каталога (24 строки), и это ехало из Neon в
+  // другом полушарии на каждую загрузку каталога, библиотеки, страницы
+  // исполнителя и автора. Здесь лежит уже готовый ответ — пара сотен байт.
+  chords     String[] @default([])
+  // Денормализованный текст для поиска: название + исполнитель + слова песни
+  // без разметки ChordPro, в нижнем регистре. Пересобирается при сохранении
+  // (см. buildSearchText). Нужен, чтобы искать по строчке из песни: в самом
+  // body слова разорваны аккордами, а директивы дают ложные совпадения.
+  searchText String   @default("")
+  // Инструмент разбора: "guitar" | "ukulele". От него зависят аппликатуры
+  // (число струн и строй) и то, в каком каталоге песня показывается.
+  // Текст ChordPro инструмент-независим, поэтому хранится как есть.
+  instrument String   @default("guitar")
+  // Подтверждение модератора: аккорды верны и песня под них действительно
+  // поётся. Ставится только админом, автору разбора недоступно.
+  verified   Boolean  @default(false)
+  verifiedAt DateTime?
+  // "private" | "unlisted" | "public" (по умолчанию — приватная)
+  visibility String   @default("private")
+  // Денормализованный счётчик просмотров (растёт вместе с записями View) —
+  // чтобы каталог мог сортировать по популярности без агрегации.
+  viewCount  Int      @default(0)
+  userId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  annotations  Annotation[]
+  setlistItems SetlistItem[]
+  likes        Like[]
+  favorites    Favorite[]
+  views        View[]
+  // Заявки, которые администратор привязал к этому разбору вручную.
+  requests     SongRequest[]
+
+  @@index([userId])
+  @@index([visibility])
+  @@index([viewCount])
+  // Каталог всегда фильтруется по паре «публичная + инструмент».
+  @@index([visibility, instrument])
+  // Те же два поля плюс колонка сортировки. Каталог не просто фильтрует — он
+  // ещё и упорядочивает: по умолчанию «новые» (createdAt), вкладка
+  // «популярные» — по viewCount. Пары «visibility + instrument» для этого мало:
+  // Postgres отбирает по ней строки, а потом сортирует ВСЁ отобранное, чтобы
+  // отдать двадцать штук. С этими индексами он идёт по индексу и останавливается,
+  // набрав страницу. Отдельный @@index([viewCount]) выше эту работу не делает —
+  // он не знает про фильтр и для запроса каталога бесполезен.
+  //
+  // Сейчас в базе два десятка разборов, и планировщик всё равно выбирает Seq
+  // Scan (на таком объёме это дешевле) — выигрыш появится с ростом каталога.
+  @@index([visibility, instrument, createdAt])
+  @@index([visibility, instrument, viewCount])
+}
+
+model Annotation {
+  id     String @id @default(cuid())
+  songId String
+  // Якорь: номер строки ("12") — совместим с номерами строк из парсера.
+  anchor String
+  text   String
+  // "technique" | "rhythm" | "transition" | "note" (техника/ритм/переход/заметка)
+  type      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@index([songId])
+}
+
+// ЗАДЕЛ НА БУДУЩЕЕ, НЕ РАБОЧАЯ МОДЕЛЬ.
+//
+// Сетлисты не создаёт и не показывает ничего: ни экрана, ни функции в lib/.
+// Таблицы пустые и останутся пустыми, пока раздел не появится.
+//
+// Оставлены намеренно, а не удалены: дропать таблицы ради чистоты — операция
+// необратимая, а места они не занимают. Но если решите добавить сюда счётчик
+// на админскую страницу — не надо: он уже был и показывал вечный ноль, что
+// читалось как «сетлистами не пользуются» вместо правды «их негде завести».
+model Setlist {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items SetlistItem[]
+
+  @@index([userId])
+}
+
+// Упорядоченная связь many-to-many между сетлистом и песнями.
+model SetlistItem {
+  id        String @id @default(cuid())
+  setlistId String
+  songId    String
+  order     Int
+
+  setlist Setlist @relation(fields: [setlistId], references: [id], onDelete: Cascade)
+  song    Song    @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([setlistId, songId])
+  @@index([setlistId])
+}
+
+// Лайк пользователя на разбор (один на пару пользователь+песня).
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  songId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, songId])
+  @@index([songId])
+}
+
+// Просмотр разбора. Одна запись на пару «зритель + песня»; `viewedAt`
+// обновляется, когда засчитывается новый просмотр (не чаще раза в 12 часов).
+//
+// Зритель — либо аккаунт (`userId`), либо гость (`visitorId` — суточный
+// отпечаток, см. lib/visitor.ts). Заполнено ровно одно из двух, второе NULL.
+// Два уникальных индекса вместо одного работают именно благодаря этому:
+// Postgres считает NULL различными значениями, поэтому пара с NULL никого не
+// ограничивает, и каждый индекс сторожит только «свой» вид записей.
+model View {
+  id        String   @id @default(cuid())
+  userId    String?
+  visitorId String?
+  songId    String
+  viewedAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song  @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, songId])
+  @@unique([visitorId, songId])
+  @@index([songId])
+}
+
+// Заявка на разбор — «этой песни у вас нет, сделайте».
+//
+// Свободного текстового поля здесь НЕТ намеренно, и это защита, а не экономия:
+// список публичный, а публиковать чужой произвольный текст на своём домене —
+// значит завести доску объявлений для спама и модерировать её вручную. Название
+// с исполнителем спамить бессмысленно: ссылку туда не вставишь.
+model SongRequest {
+  id         String   @id @default(cuid())
+  title      String
+  artist     String?
+  // Инструмент: каталоги разделены, и «на гитаре» с «на укулеле» — разные заявки.
+  instrument String   @default("guitar")
+  // Ключ склейки дублей: нормализованные инструмент + название + исполнитель
+  // (см. requestMatchKey). Уникальность здесь и есть механизм — повторная
+  // заявка не создаёт вторую строку, а превращается в голос за существующую.
+  matchKey   String   @unique
+  createdAt  DateTime @default(now())
+
+  // Ручная привязка к разбору. Обычно заявка закрывается САМА — по совпадению
+  // названия и исполнителя (см. findFulfilled в lib/songRequests.ts), и это поле
+  // пустует. Оно нужно администратору на случай, когда автоматика промахнулась:
+  // другое написание названия, исполнитель записан иначе и т. п. Привязка
+  // сильнее автосовпадения. Разбор удалили — связь сама обнуляется (SetNull), и
+  // заявка снова открыта; разбор скрыли — заявка тоже открыта (читается при
+  // показе, как и автосвязь).
+  songId String?
+  song   Song?   @relation(fields: [songId], references: [id], onDelete: SetNull)
+
+  votes SongRequestVote[]
+
+  @@index([createdAt])
+  @@index([songId])
+}
+
+// Голос за заявку. Устроен как View (см. выше) и по той же причине: голосуют в
+// основном гости, пришедшие из поиска, поэтому зритель — либо аккаунт, либо
+// суточный отпечаток, и заполнено ровно одно из двух полей. Два уникальных
+// индекса работают благодаря тому, что Postgres считает NULL различными.
+//
+// Отпечаток живёт сутки (lib/visitor.ts), значит вернувшийся через неделю гость
+// проголосует снова. Это осознанно: чинится только долговременным слежением за
+// устройством, от которого проект отказался сознательно. Поэтому счётчик честно
+// подписан «просят», а не «столько людей» — он мерит давление спроса, а не
+// уникальных посетителей.
+model SongRequestVote {
+  id        String   @id @default(cuid())
+  requestId String
+  userId    String?
+  visitorId String?
+  createdAt DateTime @default(now())
+
+  request SongRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user    User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+  @@unique([visitorId, requestId])
+  @@index([requestId])
+}
+
+// Избранное пользователя (просмотр — позже, в личном кабинете).
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  songId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, songId])
+  @@index([songId])
+}

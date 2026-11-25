@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $src = [System.Drawing.Image]::FromFile\\(\"C:\\\\Users\\\\luminave\\\\.claude\\\\uploads\\\\c19e5544-8b57-4077-8921-0036d7629eb1\\\\028a8851-1000000051.png\"\\); \"$\\($src.Width\\) x $\\($src.Height\\)\"; $src.Dispose\\(\\))",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $src=[System.Drawing.Image]::FromFile\\(\"C:\\\\Users\\\\luminave\\\\.claude\\\\uploads\\\\c19e5544-8b57-4077-8921-0036d7629eb1\\\\028a8851-1000000051.png\"\\); $r=New-Object System.Drawing.Rectangle\\(0,2100,1080,292\\); $crop=New-Object System.Drawing.Bitmap\\(1080,292\\); $g=[System.Drawing.Graphics]::FromImage\\($crop\\); $g.DrawImage\\($src,\\(New-Object System.Drawing.Rectangle\\(0,0,1080,292\\)\\),$r,[System.Drawing.GraphicsUnit]::Pixel\\); $g.Dispose\\(\\); $crop.Save\\(\"$env:TEMP\\\\bottom.png\",[System.Drawing.Imaging.ImageFormat]::Png\\); $crop.Dispose\\(\\); $src.Dispose\\(\\); \"ok\")",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $b=New-Object System.Drawing.Bitmap\\(\"C:\\\\Users\\\\luminave\\\\.claude\\\\uploads\\\\c19e5544-8b57-4077-8921-0036d7629eb1\\\\028a8851-1000000051.png\"\\); foreach\\($y in 2290,2310,2320,2340,2360,2380,2390\\){$p=$b.GetPixel\\(100,$y\\); \"y=$y  #{0:X2}{1:X2}{2:X2}\" -f $p.R,$p.G,$p.B}; \"--- pill center ---\"; $p=$b.GetPixel\\(540,2345\\); \"pill #{0:X2}{1:X2}{2:X2}\" -f $p.R,$p.G,$p.B; $b.Dispose\\(\\))",
+      "Bash(grep -rEoh \"https?://[a-zA-Z0-9.-]+\\\\.[a-z]{2,}\" README.md)",
+      "Bash(curl -s https://rawchords.vercel.app/)",
+      "Bash(curl -s https://rawchords.vercel.app/manifest.webmanifest)",
+      "WebSearch",
+      "WebFetch(domain:developer.chrome.com)",
+      "WebFetch(domain:tech-ish.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(echo \"=== EXIT: $? ===\")",
+      "Bash(npx tsc *)",
+      "Bash(npm test *)",
+      "Bash(npx vitest *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

@@ -1,0 +1,4246 @@
+@import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Тема: «тёплый песенник под лампой». Тёмная тёплая база, один акцент —
+   ламповый янтарь. Много воздуха, крупная типографика (читается с расстояния
+   вытянутой руки при плохом свете).
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-bg: #0e0d0b;
+  --color-surface: #17150f;
+  --color-raised: #1e1b15;
+  --color-fg: #ece8e0;
+  --color-muted: #968f81;
+  /* Был #5f594e — 2.80:1 к фону, ниже минимума даже для крупного текста, а цвет
+     используется для плейсхолдеров и подсказок. Теперь 4.82:1 (AA для обычного
+     текста); остаётся заметно тусклее --color-muted, у которого 6.05:1. */
+  --color-faint: #857e6f;
+  --color-line: #2a271f;
+  --color-accent: #e6a23c;
+  --color-accent-fg: #1a1408;
+  /* Подтверждение модератора: своя краска, чуть холоднее и светлее акцента —
+     галочка, кнопка модератора и отбор в каталоге должны читаться как одно.
+     Раньше этот жёлтый был вписан числом в трёх местах. */
+  --color-verified: #f2c14e;
+  /* Выход из аккаунта. Не «опасное» действие и красной заливки не заслуживает,
+     но и мимоходом его нажимать не должны — поэтому краска появляется только
+     при наведении (см. .btn-exit). */
+  --color-danger: #e5675f;
+
+  --font-sans: var(--font-golos), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-spectral), ui-serif, Georgia, serif;
+
+  /* Ширина страницы: 54rem = 864px, минус боковые поля (по 2rem на широком
+     экране) — 800px под содержимое. Было 48rem, то есть 704px, и на любом
+     ноутбуке страница разбора читалась узкой лентой посреди пустого экрана.
+
+     Верхняя граница здесь не вкусовая, а геометрическая. Аппликатуры на широком
+     экране уезжают колонкой в поле СПРАВА от текста (см. .song-layout), и это
+     поле — ровно то, что остаётся от окна после колонки: каждый лишний rem
+     ширины забирает у него по полrem с каждой стороны и настолько же поднимает
+     порог, с которого колонка помещается. Пороги ниже пересчитаны под 54rem и
+     всё ещё срабатывают на распространённых 1280 и 1440 — дальше расширять
+     нельзя, не выгнав колонку с ноутбуков. */
+  --w-app: 54rem;
+
+  /* Колонка аппликатур справа от текста на широком экране (см. .song-layout).
+     Ширина карточки — та же, что у панели в потоке, чтобы диаграммы читались
+     ровно как раньше; ширина самой колонки задаёт, сколько их встанет в ряд. */
+  --w-chord-card: 6rem;
+  /* Шире карточки на ~1rem: когда аккордов много, у колонки появляется своя
+     полоса прокрутки, и без этого запаса она съедала бы ширину у карточки. */
+  --w-rail: 7rem;
+  --rail-gap: 2rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    background: var(--color-bg);
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Место под нижнюю навигацию, чтобы она не накрывала конец страницы */
+  @media (max-width: 639.98px) {
+    body {
+      padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+    }
+  }
+  @media print {
+    body {
+      padding-bottom: 0;
+    }
+  }
+
+  /* Атмосфера: мягкое ламповое свечение сверху + едва заметное зерно.
+     Всё позади контента (z-index 0), поэтому не влияет на читаемость. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(115% 55% at 50% -12%, rgba(230, 162, 60, 0.08), transparent 62%);
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 32%, transparent);
+    color: var(--color-fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-accent) 70%, transparent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input[type='range'] {
+    width: 100%;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+  }
+
+  /* ─── Полоса прокрутки ────────────────────────────────────────────────────
+     Системная полоса на тёмной теме выглядит инородно и широкой. Своя —
+     без дорожки, палец скруглённый и приглушённый, на наведении подсвечивается
+     акцентом.
+
+     Два механизма, и они ВЗАИМОИСКЛЮЧАЮЩИ: современный Chromium, увидев
+     `scrollbar-width` или `scrollbar-color`, перестаёт применять
+     `::-webkit-scrollbar` вовсе и рисует свою стандартную «тонкую» полосу
+     (замерено: 10px вместо заданных 12 и 8). Поэтому стандартные свойства
+     включаются только там, где псевдоэлементов нет, — то есть в Firefox.
+
+     У Firefox градаций толщины всего две («thin»/«auto»), поэтому тонкие
+     области выглядят там как остальные — ограничение движка, а не недосмотр.
+
+     Палец — с прозрачной рамкой и `background-clip: padding-box`: так он у́же
+     дорожки и не липнет к краю содержимого. */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in oklab, var(--color-muted) 42%, transparent) transparent;
+    }
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--color-muted) 42%, transparent);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--color-accent) 65%, var(--color-muted));
+  }
+}
+
+/* ─── Печать / PDF: без разрыва куплетов, чёрным по белому ─────────────────── */
+@media print {
+  body {
+    background: #fff;
+    color: #111;
+  }
+  body::before,
+  body::after {
+    display: none !important;
+  }
+  .site-header,
+  .print-hide {
+    display: none !important;
+  }
+  .container-app {
+    max-width: none;
+    padding-inline: 0;
+  }
+  .cs-chord {
+    color: #000;
+  }
+  /* На бумаге название печатается целиком: обрезка нужна экрану, где заголовок
+     стоит в узкой колонке рядом с обложкой. */
+  .song-title {
+    display: block;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  /* На бумаге приглушённые цвета темы превращаются в светло-серое по белому.
+     Заметке это стоило читаемости — на экране она нарочно тусклая. */
+  .cs-note {
+    border-left-color: #999;
+  }
+  .cs-note-text,
+  .cs-note-type {
+    color: #333;
+  }
+  .cs-section--chorus {
+    border-left-color: #888;
+  }
+  /* Куплет/припев/строка не рвутся между страницами */
+  .cs-section,
+  .cs-line {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Форма добавления и hover-подсказка не нужны на печати; заметки — печатаем */
+  .cs-note-form {
+    display: none !important;
+  }
+  .cs-line--interactive::after {
+    display: none;
+  }
+  .cs-note {
+    border-left-color: #888;
+  }
+  .cs-note-type {
+    color: #555;
+  }
+}
+
+@layer components {
+  /* Полоса потоньше — для областей внутри страницы (поле ввода и превью в
+     редакторе): там панель узкая, и обычная полоса съедает заметную часть
+     строки. Палец 4px против 6px у общей. */
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    border-width: 2px;
+  }
+
+  /* ─── Раскладка ───────────────────────────────────────────────────────── */
+  .container-app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: var(--w-app);
+    margin-inline: auto;
+    padding-inline: clamp(1.15rem, 4vw, 2rem);
+  }
+
+  /* ─── Шапка сайта ─────────────────────────────────────────────────────── */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid transparent;
+    background: color-mix(in oklab, var(--color-bg) 72%, transparent);
+    backdrop-filter: blur(12px) saturate(1.1);
+    transition: border-color 0.2s ease;
+  }
+  .site-header--bordered {
+    border-bottom-color: var(--color-line);
+  }
+
+  .wordmark {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--color-fg);
+    transition: color 0.18s ease;
+  }
+  .wordmark:hover {
+    color: var(--color-accent);
+  }
+  /* «Raw» акцентом, «Chords» основным цветом */
+  .wordmark-accent {
+    color: var(--color-accent);
+  }
+
+  /* ─── Строка списка песен ─────────────────────────────────────────────── */
+  .song-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    /* Отступы подрезаны (было 1rem / 0.75rem): строка стала ~77px вместо ~82,
+       и на первый экран телефона помещается на одну песню больше. Дальше
+       ужимать нельзя — обложка 3.5rem, и поля просто схлопнутся вплотную. */
+    gap: 0.85rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    /* Обрезки по границе здесь нет намеренно: она срезала бы подсказку у
+       галочки подтверждения, которая всплывает над строкой. Скруглять углы
+       заливки приходится ей самой (border-radius: inherit ниже). */
+    transition: border-color 0.2s ease;
+  }
+  /* Заливка от левого края в цвет рамки — проявляется при наведении.
+     Отдельный слой, а не фон строки: его можно гасить прозрачностью, не
+     трогая фон, и он лежит под содержимым (у него z-index не задан). */
+  .song-row::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      color-mix(in oklab, var(--color-accent) 16%, transparent),
+      transparent 55%
+    );
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .song-row:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+  }
+  .song-row:hover::before,
+  .song-row:focus-within::before {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .song-row,
+    .song-row::before {
+      transition: none;
+    }
+  }
+
+  /* Растянутая ссылка: делает всю карточку кликабельной (переход на песню),
+     при этом отдельные ссылки внутри (ник автора) с `relative z-[1]` кликаются. */
+  .stretched-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  /* Аватар */
+  .avatar {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+  }
+  .avatar-fallback {
+    font-weight: 600;
+    color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface));
+    line-height: 1;
+  }
+
+  /* Загрузка картинки: карандаш/крестик поверх при наведении.
+     Отсюда же берёт оформление обложка в редакторе (.cover-edit) — разница
+     между ними только в форме выреза, поэтому селекторы общие, а не вторая
+     копия тех же чисел. Своё у обложки — в её собственном блоке ниже. */
+  .avatar-edit {
+    position: relative;
+    display: inline-block;
+    border-radius: 50%;
+    /* Обязательно. Размер задан инлайновым стилем, но флекс-элемент по
+       умолчанию сжимается ниже своей ширины — и в ряду с текстом аватар
+       превращался в овал (у самой картинки `.avatar` запрет есть, а у обёртки
+       не было, так что сплющивало именно её вместе с круглой накладкой). */
+    flex-shrink: 0;
+  }
+  .avatar-overlay,
+  .cover-edit-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  /* Круг только у аватара: обложку обрезает по своему радиусу сама .cover-edit
+     (у неё overflow: hidden), и накладке скругляться незачем. */
+  .avatar-overlay {
+    border-radius: 50%;
+  }
+  .avatar-edit:hover .avatar-overlay,
+  .avatar-edit:focus-within .avatar-overlay,
+  .cover-edit:hover .cover-edit-overlay,
+  .cover-edit:focus-within .cover-edit-overlay {
+    opacity: 1;
+  }
+  /* Там, где наводить нечем, накладка видна всегда — приглушённо, но видна.
+     Прозрачная она кликов не отменяла, поэтому на телефоне тап по аватару и
+     раньше что-то делал: попадал в невидимую кнопку и открывал выбор файла.
+     Угадать это было нельзя — снаружи аватар выглядел просто картинкой. */
+  @media (hover: none) {
+    .avatar-overlay,
+    .cover-edit-overlay {
+      opacity: 1;
+      background: rgba(0, 0, 0, 0.34);
+    }
+  }
+  .avatar-overlay-btn,
+  .cover-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .avatar-overlay-btn:hover,
+  .cover-edit-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  /* Пока файл читается и жмётся, кнопка нажатий не принимает — и должна это
+     показывать. Раньше состояние держалось на подписи («…» вместо «Заменить»),
+     а у значка подписи нет. */
+  .avatar-overlay-btn:disabled,
+  .cover-edit-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* Вкладки (кабинет) */
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    height: 2.5rem;
+    padding-inline: 0.85rem;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--color-muted);
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .tab:hover {
+    color: var(--color-fg);
+  }
+  .tab--on {
+    color: var(--color-fg);
+    border-bottom-color: var(--color-accent);
+  }
+
+  /* ─── Нижняя навигация (телефон) ──────────────────────────────────────── */
+  .mnav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 45;
+    padding: 0.3rem 0.5rem calc(0.3rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--color-line);
+    background: color-mix(in oklab, var(--color-bg) 80%, transparent);
+    backdrop-filter: blur(14px) saturate(1.1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* Уехала за нижний край при прокрутке вниз (+1px — чтобы не светилась рамка) */
+  .mnav--down {
+    transform: translateY(calc(100% + 1px));
+  }
+  /* От планшета и шире работает обычная шапка */
+  @media (min-width: 640px) {
+    .mnav {
+      display: none;
+    }
+  }
+
+  .mnav-inner {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: 0.25rem;
+    max-width: 30rem;
+    margin-inline: auto;
+  }
+
+  .mnav-item {
+    position: relative;
+    flex: 1 1 0;
+    /* `flex: 1 1 0` без этого не работает как задумано: у флекс-элемента
+       `min-width` по умолчанию `auto`, и ниже ширины своей подписи он не
+       сжимается. У вошедшего пунктов четыре, и при крупном системном шрифте
+       или узком экране меню распирало бы страницу — а оно закреплено по окну,
+       так что следом поехало бы и всё остальное. */
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.5rem 0 0.35rem;
+    color: var(--color-muted);
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color 0.2s ease,
+      transform 0.12s ease;
+  }
+  .mnav-item:active {
+    transform: scale(0.93);
+  }
+  .mnav-item--on {
+    color: var(--color-accent);
+  }
+  .mnav-item svg {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .mnav-item--on svg {
+    transform: translateY(-1px);
+  }
+
+  /* Зона под иконку одной высоты у всех пунктов — включая центральную
+     кнопку, которая крупнее. Иначе подписи стоят на разных уровнях. */
+  .mnav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.15rem;
+  }
+
+  .mnav-label {
+    font-size: 0.63rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+    /* Подпись не тянет пункт вширь: длинная обрежется, а не сломает ряд. */
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Мягкое пятно за иконкой активного пункта.
+     Центрируется отрицательным margin в половину ширины, а НЕ `translate`:
+     см. объяснение у .mnav-item::before ниже. */
+  .mnav-glow {
+    position: absolute;
+    top: 0.5rem;
+    left: 50%;
+    width: 2.75rem;
+    height: 2.15rem;
+    margin-left: -1.375rem; /* половина width */
+    border-radius: 0.65rem;
+    background: color-mix(in oklab, var(--color-accent) 15%, transparent);
+    opacity: 0;
+    transform: scale(0.6);
+    transition:
+      opacity 0.22s ease,
+      transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .mnav-item--on .mnav-glow {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Риска над активным пунктом — «вкладка» выбрана.
+     Центрируется отрицательным margin, а НЕ `translate: -50% 0`. Соблазн
+     очевиден: `translate` и `transform` — разные свойства и по спецификации
+     складываются, так что центрирование не мешает анимации `scaleX`. Но
+     минификатор прод-сборки, схлопывая правило, выбрасывал `translate` и
+     оставлял только `transform: scaleX(…)` — риска теряла сдвиг назад и
+     уезжала вправо на половину ширины. На локальной сборке правило не
+     схлопывается, поэтому баг вылезал ТОЛЬКО после выкладки.
+     margin отрицательным на половину ширины делает то же самое и не зависит
+     ни от каких преобразований transform. */
+  .mnav-item::before {
+    content: '';
+    position: absolute;
+    top: -0.3rem;
+    left: 50%;
+    width: 1.6rem;
+    height: 2px;
+    margin-left: -0.8rem; /* половина width */
+    border-radius: 999px;
+    background: var(--color-accent);
+    opacity: 0;
+    transform: scaleX(0.25);
+    transition:
+      opacity 0.2s ease,
+      transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .mnav-item--on::before {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  /* Центральное действие — «добавить песню».
+     Ровно по высоте иконки соседних пунктов и БЕЗ отрицательного отступа:
+     иначе кнопка выступает за верхний край панели. */
+  .mnav-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 0.7rem;
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+    box-shadow: 0 3px 12px color-mix(in oklab, var(--color-accent) 28%, transparent);
+    transition: filter 0.18s ease;
+  }
+  .mnav-item:active .mnav-fab {
+    filter: brightness(1.08);
+  }
+  /* У центральной кнопки своя подсветка не нужна — она и так акцентная */
+  .mnav-item--on .mnav-fab {
+    filter: brightness(1.05);
+  }
+
+  .mnav-avatar {
+    display: inline-flex;
+    padding: 1px;
+    border-radius: 50%;
+    transition: box-shadow 0.2s ease;
+  }
+  .mnav-item--on .mnav-avatar {
+    box-shadow: 0 0 0 1.5px var(--color-accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mnav,
+    .mnav-item,
+    .mnav-item svg,
+    .mnav-glow,
+    .mnav-item::before {
+      transition: none;
+    }
+  }
+
+  /* Пункт навигации в шапке */
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2.25rem;
+    padding-inline: 0.6rem;
+    border-radius: 0.55rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .nav-link:hover {
+    color: var(--color-fg);
+    background: color-mix(in oklab, var(--color-fg) 6%, transparent);
+  }
+
+  /* ─── Кнопки ──────────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.75rem;
+    padding-inline: 1.15rem;
+    border: 1px solid transparent;
+    border-radius: 0.7rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease,
+      filter 0.18s ease,
+      transform 0.05s ease;
+  }
+  .btn:active {
+    transform: translateY(0.5px);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.07);
+  }
+  .btn-outline {
+    border-color: var(--color-line);
+    color: var(--color-fg);
+  }
+  .btn-outline:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+  .btn-ghost {
+    color: var(--color-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--color-fg);
+  }
+  /* Кнопка, которая что-то раскрыла («Настройки» в кабинете): та же рамка, но
+     в акценте — видно, какая часть карточки сейчас открыта. Прежде она в
+     закрытом виде была `btn-ghost`, без рамки: в ряду это читалось, а в
+     списке на телефоне безрамочная строка между двумя обведёнными выглядела
+     недорисованной. */
+  .btn-toggled {
+    border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+
+  /* «Выйти». Рамка как у соседей — это не опасная кнопка и пугать ею незачем, —
+     но при наведении краснеет: рядом стоят «Публичный профиль» и «Настройки», и
+     промахнуться мимо них не должно быть всё равно. */
+  .btn-exit:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-danger) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-danger) 10%, transparent);
+    color: var(--color-danger);
+  }
+
+  /* Число рядом с подписью кнопки («Гитара 12»). Не в скобках: скобки внутри
+     кнопки читаются как часть названия, а это счётчик. */
+  .count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.3rem;
+    padding-inline: 0.4rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-fg) 11%, transparent);
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted);
+  }
+  .btn-primary .count-badge {
+    background: color-mix(in oklab, var(--color-accent-fg) 16%, transparent);
+    color: var(--color-accent-fg);
+  }
+
+  /* ─── Личный кабинет ──────────────────────────────────────────────────────
+     Действия над аккаунтом: «Публичный профиль», «Настройки», «Выйти».
+
+     На телефоне — список во всю ширину, по строке на действие. Раньше здесь
+     стоял `flex-wrap`, и четыре кнопки разной длины разваливались на экране в
+     360px на три ряда с рваным правым краем: сверху карточка профиля, под ней
+     облако разнокалиберных прямоугольников, дальше ещё один такой же ряд —
+     глазу не за что зацепиться, и кабинет читался как свалка кнопок. Строчки
+     одинаковой ширины с подписями от левого края читаются как меню, а меню
+     просматривают сверху вниз, не разбирая каждую кнопку по отдельности.
+
+     От `sm` возвращается обычный ряд: там ширины хватает, и четыре кнопки
+     встают в одну строку без переносов. */
+  .account-actions {
+    display: grid;
+    gap: 0.5rem;
+  }
+  /* Форма выхода — тоже элемент сетки, и кнопка внутри неё обязана тянуться
+     так же, как соседние ссылки. */
+  .account-actions .btn {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  @media (min-width: 640px) {
+    .account-actions {
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .account-actions .btn {
+      width: auto;
+      justify-content: center;
+    }
+  }
+
+  /* Панель настроек профиля: раскрывается кнопкой в карточке. Отделена от неё
+     линией, а не рамкой — это продолжение той же карточки, а не вторая. */
+  .account-settings {
+    margin-top: 0.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-line);
+    animation: account-settings-in 0.2s ease;
+  }
+  @keyframes account-settings-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .account-settings {
+      animation: none;
+    }
+  }
+
+  /* ─── Сегментированный переключатель ──────────────────────────────────────
+     Выбор из трёх коротких вариантов одной «таблеткой». Пришёл на место трёх
+     карточек видимости: на телефоне те вставали друг под друга и забирали треть
+     экрана в самом низу длинной формы.
+
+     Пояснение к варианту показывается ОДНО — к выбранному (.seg-desc). Три
+     сразу читают один раз, а место они занимали каждый раз. */
+  .seg {
+    display: flex;
+    gap: 0.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    padding: 0.25rem;
+    background: color-mix(in oklab, var(--color-surface) 60%, transparent);
+  }
+  .seg-item {
+    /* `flex: 1 1 0` + `min-width: 0`: сегменты равной ширины независимо от длины
+       подписи, иначе «По ссылке» был бы заметно уже соседей. */
+    flex: 1 1 0;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.35rem;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .seg-item:hover {
+    color: var(--color-fg);
+  }
+  .seg-item--on {
+    background: color-mix(in oklab, var(--color-accent) 16%, transparent);
+    color: var(--color-accent);
+    font-weight: 500;
+  }
+  /* Фокус с клавиатуры приходит на скрытый <input>, а видеть его надо на
+     подписи — иначе обвести нечего и вкладками по форме идёшь вслепую. */
+  .seg-item:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+  .seg-item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .seg-desc {
+    margin-top: 0.45rem;
+    font-size: 0.8rem;
+    color: var(--color-faint);
+  }
+
+  /* Компактный сегмент — для настроек читалки, где переключатель стоит справа
+     от подписи, а не во всю ширину формы (см. «Запись квинт» в SongViewer).
+     Поэтому сегменты здесь по содержимому, а не равной ширины: подписи у них
+     короткие («G#5» / «4В»), и растягивать их до половины панели незачем.
+
+     Кнопки, а не радио с подписью: значение никуда не отправляется, оно живёт в
+     localStorage. Отсюда и свой фокус — у формы его перехватывал скрытый
+     <input>, а тут фокус приходит на саму кнопку. */
+  .seg--compact {
+    flex: 0 0 auto;
+    gap: 0.15rem;
+    padding: 0.2rem;
+    border-radius: 0.6rem;
+  }
+  .seg--compact .seg-item {
+    flex: 0 0 auto;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+    /* Цифра лада в подписи — моноширинной, чтобы «4В» и «11Н» не дёргали
+       ширину кнопки при смене тональности. */
+    font-variant-numeric: tabular-nums;
+  }
+  .seg--compact .seg-item:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  /* Карточка выбора видимости (радио с иконкой) */
+  .vis-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    background: var(--color-surface);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .vis-card:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+  }
+  .vis-card--on {
+    border-color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+  .vis-card-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+  .vis-card--on .vis-card-label {
+    color: var(--color-accent);
+  }
+  .vis-card-desc {
+    font-size: 0.78rem;
+    color: var(--color-muted);
+  }
+
+  /* Чип аккорда в палитре быстрой вставки */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 2rem;
+    padding-inline: 0.6rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .chip:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+
+  /* Маленький чип аккорда для строк списка */
+  .chip-sm {
+    display: inline-flex;
+    align-items: center;
+    height: 1.4rem;
+    padding-inline: 0.4rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.35rem;
+    background: var(--color-surface);
+    color: var(--color-accent);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .chip-sm--more {
+    color: var(--color-muted);
+  }
+
+  /* Панель аккордов над текстом: крупные диаграммы, показаны сразу */
+  .chord-bar {
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.35rem;
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-fg);
+  }
+  .chord-bar-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+    /* Место под кнопку-скрепку в правом верхнем углу */
+    padding-right: 2.25rem;
+  }
+
+  /* Кнопка-скрепка: закрепляет панель сверху */
+  .chord-pin {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    color: var(--color-muted);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .chord-pin:hover {
+    color: var(--color-fg);
+    border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-line));
+  }
+  .chord-pin--on {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+  /* Кнопка нарисована уже «воткнутой» (остриём вниз), поэтому поворачивать её
+     не нужно: включённое состояние читается по акцентной заливке. */
+
+  /* Закреплённое состояние. Липкость обеспечивает родительский блок с
+     тулбаром (панель рендерится внутрь него), поэтому здесь только внешний
+     вид: непрозрачная подложка, чтобы текст уезжал под неё, и одна строка с
+     горизонтальной прокруткой вместо переноса. */
+  .chord-bar--pinned {
+    /* Ряд «аккорды + кнопка», а не аккорды с кнопкой ПОВЕРХ них.
+       Раньше кнопка оставалась absolute и вылезала двумя способами сразу:
+       упиралась в скруглённую рамку (top/right считаются от границы, а не от
+       внутреннего отступа) и висела над областью прокрутки — аккорды уезжали
+       под неё и сливались с ней. Обычным соседом по флексу она не делает ни
+       того ни другого: отступ контейнера её держит, а прокрутка кончается
+       ровно там, где кнопка начинается. */
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
+    margin-bottom: 0;
+    padding: 0.55rem 0.6rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.9rem;
+    background: color-mix(in oklab, var(--color-raised) 88%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  .chord-bar--pinned .chord-bar-strip {
+    flex: 1 1 auto;
+    /* Без этого флекс-элемент не сжимается уже своего содержимого, и полоса
+       вместо прокрутки распирала бы панель. */
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 0.7rem;
+    /* Место под кнопку в углу больше не резервируем: она рядом, а не над. */
+    padding-right: 0;
+    overflow-x: auto;
+    /* Как и у колонки справа: своё `scrollbar-width` отключило бы в Chromium
+       общую полосу из @layer base в пользу системной. */
+    -webkit-overflow-scrolling: touch;
+  }
+  .chord-bar--pinned .chord-pin {
+    position: static;
+    flex: 0 0 auto;
+  }
+  .chord-bar--pinned .chord-card {
+    flex: 0 0 auto;
+  }
+
+  /* ── Аппликатуры колонкой справа (широкий экран) ─────────────────────────
+     На десктопе горизонтальная панель занимала ~163px по вертикали до начала
+     песни, а по бокам от колонки текста пустовало по несколько сотен пикселей.
+     Панель уезжает в это пустое поле: аккорды видны всё время, пока листаешь
+     текст, а первый экран достаётся самой песне.
+
+     Колонка вынута из потока (absolute), поэтому ширина текста НЕ меняется и
+     контейнер не расширяется — страница остаётся ровно той же, занимаем только
+     пустое поле. Заодно шапка сайта (тот же .container-app) остаётся выровненной
+     по колонке текста, чего не вышло бы, расширь мы контейнер.
+
+     Порог 1200px: при нём от края колонки текста до края окна остаётся
+     (1200 − 864) / 2 = 168px, а колонке нужно 112 + 32 = 144px (--w-rail плюс
+     --rail-gap). Ниже панель работает по-прежнему, поперёк.
+
+     Считаем от ГРАНИЦЫ контейнера, не приплюсовывая его собственные боковые
+     поля: они и так уходят на воздух между текстом и колонкой. Прежний порог
+     (1100px при контейнере в 768px) считал нужную ширину по карточке — 96px, —
+     хотя ширина колонки задаётся через --w-rail и на 1rem больше: запас на её
+     собственную полосу прокрутки, когда аккордов много.
+
+     Правило намеренно смотрит только на ПРЯМОГО потомка .song-layout:
+     закреплённая скрепкой панель лежит внутри липкого блока с тулбаром, под
+     селектор не попадает и работает как раньше. Сама скрепка в колонке скрыта —
+     закреплять нечего, колонка и так всё время на виду. Если состояние
+     «закреплено» пришло с телефона, на десктопе покажется прежняя полоса
+     сверху; её скрепка на месте, так что вернуться к колонке можно. */
+  @media screen and (min-width: 1200px) {
+    .song-layout {
+      position: relative;
+    }
+    .song-layout > .chord-bar {
+      position: absolute;
+      top: 0;
+      left: 100%;
+      width: var(--w-rail);
+      height: 100%;
+      margin-bottom: 0;
+      margin-left: var(--rail-gap);
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+    /* Липкий — внутренний блок, а не сама колонка: колонка растянута на всю
+       высоту страницы и служит ему дорожкой, вдоль которой он едет. */
+    .song-layout > .chord-bar .chord-bar-strip {
+      position: sticky;
+      /* Шапка сайта липкая, тянется во всю ширину окна и лежит выше по z —
+         поэтому колонка встаёт ПОД неё, а не под верх окна. 3.75rem — та же
+         высота шапки, на которую опирается липкий тулбар разбора, плюс отступ. */
+      top: 4.5rem;
+      /* Сетка, а не колонка flex: карточки сами встают в столько рядов, сколько
+         помещается по ширине колонки. Столбиком в один ряд шесть диаграмм
+         занимали почти всю высоту экрана — стена картинок вместо подсказки. */
+      display: grid;
+      grid-template-columns: repeat(auto-fill, var(--w-chord-card));
+      gap: 0.85rem;
+      /* Место под скрепку больше не нужно — она здесь скрыта. */
+      padding-right: 0;
+      /* Аккордов может быть больше, чем влезает в экран: прокручиваем саму
+         колонку, а не страницу. Вычитаем отступ сверху и столько же снизу. */
+      max-height: calc(100dvh - 5.5rem);
+      overflow-y: auto;
+      /* `scrollbar-width` здесь НЕ задаём — и это не забывчивость. Chromium,
+         увидев это свойство на элементе, перестаёт применять к нему
+         `::-webkit-scrollbar` и рисует свою системную полосу: светлая дорожка
+         во всю высоту вплотную к карточкам, совсем не в тон остальному сайту.
+         Без объявления колонка получает общую полосу из @layer base — тонкий
+         скруглённый палец без дорожки. Firefox своё `thin` берёт оттуда же
+         (см. блок про полосу прокрутки в начале файла). */
+    }
+    .song-layout > .chord-bar .chord-pin {
+      display: none;
+    }
+  }
+
+  /* От этой ширины в пустое поле встаёт второй столбец карточек: шесть аккордов
+     складываются в три ряда вместо шести и перестают тянуться на весь экран.
+     Порог с запасом: поля (1420 − 864) / 2 = 278px против нужных колонке
+     224 + 32 = 256px. Ниже второй столбец вставал бы впритык.
+
+     Число подобрано так, чтобы порог остался ПОД 1440px — это ширина окна
+     распространённого 13-дюймового ноутбука, и ровно на ней второй столбец
+     терять обиднее всего (места там на самом деле хватает: 288px против 256). */
+  @media screen and (min-width: 1420px) {
+    .song-layout {
+      --w-rail: 14rem;
+    }
+  }
+  .chord-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .chord-card-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+  .chord-card-empty {
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--color-line);
+    border-radius: 0.5rem;
+    color: var(--color-faint);
+    font-size: 0.85rem;
+  }
+
+  /* Аккорд в тексте с всплывающей аппликатурой */
+  .inline-chord {
+    position: relative;
+  }
+  /* Палец и подчёркивание — только у аккорда, которому ЕСТЬ что показать.
+     Аккорд без аппликатуры («N.C.», незнакомая запись) рисуется тем же
+     классом, но без role="button" (см. InlineChord), и обещать нажатие ему
+     нечем: раньше он менял курсор и подчёркивался, а по нажатию не делал
+     ничего. */
+  .inline-chord[role='button'] {
+    cursor: pointer;
+  }
+  .inline-chord[role='button']:hover {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+
+  .chord-pop {
+    position: absolute;
+    bottom: calc(100% + 0.35rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.6rem;
+    background: var(--color-raised);
+    color: var(--color-fg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+  }
+  .chord-pop-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+
+  /* ── Подсказка под знаком вопроса ────────────────────────────────────────
+     Знак стоит в строке текста, поэтому <details> здесь инлайновый: блочный
+     разрывал бы фразу, к которой относится. */
+  .hint-pop {
+    display: inline;
+  }
+  .hint-pop > summary {
+    display: inline-flex;
+    vertical-align: -0.2em;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 50%;
+    color: var(--color-muted);
+    background: color-mix(in oklab, var(--color-line) 60%, transparent);
+    cursor: pointer;
+    list-style: none;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .hint-pop > summary::-webkit-details-marker {
+    display: none;
+  }
+  .hint-pop > summary:hover {
+    color: var(--color-fg);
+    background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  }
+  /* Тот же механизм, но подписью вместо значка — там, где вопрос надо назвать
+     словами («Как это работает?»), а не спрятать за кружок. */
+  .hint-pop--text > summary {
+    width: auto;
+    height: auto;
+    border-radius: 0.4rem;
+    padding: 0.05rem 0.4rem;
+    background: none;
+    color: var(--color-accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .hint-pop--text > summary:hover {
+    background: color-mix(in oklab, var(--color-accent) 14%, transparent);
+    color: var(--color-accent);
+  }
+  .hint-pop > summary:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  /* Раскрывается В ПОТОКЕ, а не всплывашкой над содержимым: всплывашку пришлось
+     бы либо позиционировать относительно чего-то с overflow (и обрезать), либо
+     тащить в портал ради трёх строк текста. В потоке она сдвигает грифы вниз
+     ровно на то время, пока её читают. */
+  .hint-pop-body {
+    display: block;
+    margin-top: 0.5rem;
+    border-left: 2px solid color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+    padding: 0.15rem 0 0.15rem 0.7rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--color-muted);
+  }
+
+  /* ── Сетка аппликатур ─────────────────────────────────────────────────────
+     `auto-fill` сам считает, сколько грифов поместилось: телефон — один
+     столбец, десктоп — три. Раньше это был flex-wrap, и на широком экране
+     карточки упрямо вставали по две, растягивая блок на пол-экрана.
+
+     13.5rem — ширина карточки с гитарным грифом после ужатия ниже. Ukulele
+     уже (четыре струны), и его карточки просто встают с запасом по бокам. */
+  .chord-defs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+    gap: 1rem;
+    justify-items: center;
+  }
+  /* Гриф в сетке чуть мельче обычного — только этим и получилось выиграть
+     третий столбец: при 2.3rem на клетку три карточки не влезали в ширину
+     страницы.
+
+     Ужимаем ТОЛЬКО там, где есть мышь: баррэ ставится протягиванием вдоль
+     лада, и на пальце уменьшенные клетки — это промахи. На сенсорных экранах
+     гриф остаётся полноразмерным, а столбец там всё равно один.
+
+     Селектор длиннее, чем `.fb`, намеренно: свои размеры .fb объявляет на себе
+     же, и через наследование их не перебить. */
+  @media (min-width: 40rem) and (hover: hover) {
+    .chord-defs-grid .fb {
+      --fb-cell: 1.85rem;
+      --fb-head: 1.35rem;
+      --fb-dot: 0.95rem;
+    }
+  }
+  .chord-defs-lead {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-muted);
+  }
+
+  /* Интерактивный гриф (редактор аппликатуры) */
+  /* Размеры грифа-редактора живут ЗДЕСЬ и только здесь. Их читает и разметка
+     палки баррэ (см. barStyle в components/FretboardEditor.tsx): раньше те же
+     числа были выписаны копией в JS, и поменять клетку означало поправить два
+     файла — забытая половинка сдвигала палку мимо точек. */
+  .fb {
+    --fb-cell: 2.3rem;
+    --fb-gap: 3px;
+    --fb-head: 1.55rem;
+    --fb-dot: 1.15rem;
+
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .fb-basectl {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  /* Число колонок = число струн инструмента (задаётся инлайном компонентом) */
+  .fb-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--fb-strings, 6), var(--fb-cell));
+    gap: var(--fb-gap);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .fb-head {
+    height: var(--fb-head);
+    display: grid;
+    place-items: center;
+    color: var(--color-muted);
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  /* Порожек: жирная линия над первым ладом (класс, а не nth-child — число
+     струн зависит от инструмента) */
+  .fb-grid--nut .fb-cell--top {
+    border-top-width: 3px;
+    border-top-color: var(--color-fg);
+  }
+  .fb-cell {
+    height: var(--fb-cell);
+    /* pan-y, а не none: баррэ тянут ПО ГОРИЗОНТАЛИ вдоль лада, поэтому
+       горизонтальный жест забираем себе, а вертикальный оставляем браузеру —
+       иначе страницу нельзя было бы прокрутить, начав свайп с грифа. */
+    touch-action: pan-y;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--color-line);
+    border-radius: 0.4rem;
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color 0.12s ease;
+  }
+  .fb-cell:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+  }
+  .fb-cell--on {
+    border-color: var(--color-accent);
+  }
+  .fb-dot {
+    width: var(--fb-dot);
+    height: var(--fb-dot);
+    border-radius: 50%;
+    background: var(--color-accent);
+  }
+  /* Баррэ — палка поверх точек (клики проходят к ячейкам под ней) */
+  .fb-barre {
+    position: absolute;
+    height: var(--fb-dot);
+    border-radius: calc(var(--fb-dot) / 2);
+    background: var(--color-accent);
+    pointer-events: none;
+  }
+  .fb-barre--pending {
+    background: color-mix(in oklab, var(--color-accent) 45%, transparent);
+  }
+  .fb-label {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--color-faint);
+  }
+
+  /* Квадратная иконочная кнопка (± и т.п.) */
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.65rem;
+    color: var(--color-fg);
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease;
+  }
+  .icon-btn:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  /* ─── Поля ввода ──────────────────────────────────────────────────────── */
+  .field {
+    width: 100%;
+    height: 2.9rem;
+    padding-inline: 0.9rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-size: 1rem;
+    font-family: inherit;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .field::placeholder {
+    color: var(--color-faint);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 20%, transparent);
+  }
+
+  /* ─── Панель редактора текста ─────────────────────────────────────────────
+     Тулбар аккордов, поле разметки и превью — одна коробка с общей рамкой.
+     Раньше это были три блока с зазорами, и палитра читалась самостоятельным
+     элементом где-то сверху, а не панелью инструментов того поля, куда она
+     вставляет аккорды.
+
+     overflow: hidden — скругление панели обрезает углы вложенных слоёв. Из-за
+     этого же фокусная рамка поля рисуется ВНУТРЬ (см. ниже): наружная тень
+     обрезалась бы по краю панели и выглядела бы обрубком. */
+  .editor-panel {
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.8rem;
+    background: var(--color-surface);
+  }
+  .editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* Зазор по вертикали меньше горизонтального: тулбар переносится на
+       несколько рядов, и на телефоне каждый лишний пиксель между рядами
+       умножается на их число. */
+    gap: 0.3rem 0.4rem;
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.45rem 0.5rem;
+    background: color-mix(in oklab, var(--color-surface) 40%, transparent);
+  }
+  .editor-toolbar-label {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  /* Разделитель групп: «аккорды тональности | аккорды песни | свой». Ряд один и
+     с переносом, поэтому границы групп иначе не видно. */
+  .editor-toolbar-sep {
+    width: 1px;
+    height: 1.15rem;
+    background: var(--color-line);
+  }
+
+  /* Вкладки «Редактирование / Превью» — только на узком экране, где поля не
+     помещаются рядом (см. .editor-cols ниже). */
+  .editor-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .editor-tab {
+    flex: 1 1 0;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .editor-tab--on {
+    border-bottom-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .editor-cols {
+    display: grid;
+  }
+  /* Разделителя между половинами НЕТ, пока их не две: на узком экране показана
+     ровно одна вкладка, и полоска сверху у превью висела бы отчёркиванием
+     ниоткуда. Появляется только вместе со вторым столбцом. */
+  @media (min-width: 64rem) {
+    .editor-cols {
+      grid-template-columns: 1fr 1fr;
+    }
+    /* Полоска, а не зазор: панель одна, и щель между её половинами выглядела бы
+       трещиной. */
+    .editor-cols > * + * {
+      border-left: 1px solid var(--color-line);
+    }
+  }
+  /* Внутри панели слои поля разметки теряют свою рамку — её роль играет рамка
+     панели. Снимаем у ОБОИХ: border входит в border-box, и убери мы его у
+     одного, подсветка разъехалась бы с текстом на пиксель по всем осям. */
+  .editor-panel .cp-hl,
+  .editor-panel .cp-ta {
+    border: 0;
+    border-radius: 0;
+  }
+  .editor-panel .cp-ta:focus {
+    box-shadow: none;
+    outline: 2px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+    outline-offset: -2px;
+  }
+
+  /* ─── Липкая полоса действий редактора ────────────────────────────────────
+     «Сохранить» уезжало под нижний край, стоило раскрыть пару разделов.
+
+     Sticky, а не fixed: карточка остаётся последней в потоке, поэтому внизу
+     страницы садится на своё место и ничего не перекрывает насовсем. Fixed
+     висел бы поверх содержимого всегда, включая конец формы.
+
+     Оформлена ПЛАВАЮЩЕЙ КАРТОЧКОЙ, а не полосой во всю ширину, и это не вкус.
+     Полоса тянулась отрицательными полями до краёв контейнера — то есть до
+     864px, а не до краёв окна, — и на широком экране обрывалась двумя жёсткими
+     вертикальными срезами посреди страницы. Верхняя рамка при этом шла от среза
+     до среза и читалась светлой чертой ниоткуда в никуда.
+
+     Фон был полупрозрачным поверх `backdrop-filter`, а под страницей лежат два
+     ФИКСИРОВАННЫХ слоя — янтарное свечение и зерно (body::before/after).
+     Размывался и подкрашивался именно их кусок, поэтому пятно не совпадало по
+     тону с окружением и выглядело чужим. Теперь фон почти непрозрачный и взят
+     из --color-raised: приподнятая поверхность и называется так же. */
+  /* ─── Шапка редактора (телефон) ───────────────────────────────────────────
+     «Сохранить» наверху, как «Готово» в нативных приложениях. Внизу для него
+     места не осталось: там была нижняя навигация (на этих страницах её теперь
+     нет) и полоса действий, а с выехавшей клавиатурой от текста песни между
+     ними оставалась щель в пару строк.
+
+     Липнет ПОД шапку сайта и оформлена ЕЮ ЖЕ — тот же фон, то же размытие.
+     Раньше здесь стояли свои числа (92% против 72% у шапки), и получались две
+     липкие полосы из разного материала, встык одна под другой: верхняя
+     просвечивала, нижняя была плотнее, между ними шла черта. Читалось это ровно
+     как «странный фон и светлый бордер», хотя каждая полоса по отдельности была
+     в порядке.
+
+     Мешало здесь и место: янтарное свечение `body::before` — градиент от
+     ВЕРХНЕГО края экрана, и как раз под этой панелью оно ярче всего, поэтому
+     любое расхождение в прозрачности бросалось в глаза сильнее, чем внизу
+     страницы.
+
+     Своей рамки у панели НЕТ, вместо неё тень. Раньше их было две подряд —
+     под шапкой сайта и под этой полосой, — и вторая читалась «светлым бордером
+     ниоткуда». Тень отделяет панель от уезжающего под неё текста мягко и не
+     спорит с хайрлайном шапки, который есть на всех страницах и потому
+     воспринимается как край шапки, а не как дефект этой панели. */
+  .editor-topbar {
+    position: sticky;
+    /* 3.5rem — высота шапки, +1px — её нижняя рамка. Без этого пикселя между
+       двумя липкими полосами оставалась щель, сквозь которую при прокрутке
+       протекал текст. Замерено: шапка занимает ровно 57px. */
+    top: calc(3.5rem + 1px);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    /* Тянется во всю ширину окна: на телефоне контейнер и есть окно, а поля
+       возвращаются padding'ом — значение то же, что у .container-app. */
+    margin-inline: calc(-1 * clamp(1.15rem, 4vw, 2rem));
+    padding: 0.5rem clamp(1.15rem, 4vw, 2rem);
+    background: color-mix(in oklab, var(--color-bg) 72%, transparent);
+    backdrop-filter: blur(12px) saturate(1.1);
+    box-shadow: 0 8px 20px rgb(0 0 0 / 0.4);
+  }
+
+  .editor-actions {
+    /* На телефоне нижней полосы нет вовсе — её работу делает шапка выше.
+       Держим это правилом компонента, а не утилитой в разметке: `display`
+       задан здесь же, и разнести их значило бы полагаться на порядок слоёв. */
+    display: none;
+    position: sticky;
+    /* Не вплотную к краю: карточка висит над содержимым, и зазор — то, что
+       отличает «панель поверх» от «панели, приклеенной к низу окна». */
+    bottom: 0.85rem;
+    z-index: 20;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid color-mix(in oklab, var(--color-line) 90%, transparent);
+    border-radius: 0.9rem;
+    background: color-mix(in oklab, var(--color-raised) 95%, transparent);
+    backdrop-filter: blur(12px) saturate(1.15);
+    /* Тень заменяет рамку в роли границы: на тёмной теме мягкое затемнение под
+       карточкой отделяет её от текста надёжнее, чем светлая черта. */
+    box-shadow:
+      0 12px 30px rgb(0 0 0 / 0.5),
+      0 2px 6px rgb(0 0 0 / 0.35);
+  }
+  /* От планшета и шире — снова полоса внизу: там нет ни клавиатуры, отъедающей
+     пол-экрана, ни нижней навигации, а до конца длинной формы кнопке ближе. */
+  @media (min-width: 40rem) {
+    .editor-actions {
+      display: flex;
+    }
+  }
+
+  /* Место под нижнюю навигацию в редакторе не резервируем: её там нет
+     (см. MobileNav), и 5rem пустоты в конце формы были бы просто дырой.
+     Признак редактора — его собственная шапка: она есть ровно на этих
+     страницах, поэтому правило не разъедется с разметкой. */
+  @media (max-width: 639.98px) {
+    body:has(.editor-topbar) {
+      padding-bottom: 0;
+    }
+  }
+
+  /* ─── Редактор ChordPro с подсветкой ──────────────────────────────────── */
+  /* Подложка и textarea делят одну коробку — метрики обязаны совпадать. */
+  .cp-input {
+    position: relative;
+    display: block;
+  }
+  .cp-hl,
+  .cp-ta {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    /* Метрика ОБЯЗАНА совпадать у слоёв, иначе подсветка «разъезжается». */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    letter-spacing: 0;
+    word-spacing: 0;
+    /* Перенос строк (без горизонтального скролла); одинаковый резерв под
+       вертикальный скроллбар держит ширину строки равной у textarea и подложки. */
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    tab-size: 2;
+    scrollbar-gutter: stable;
+  }
+  .cp-hl {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--color-fg);
+    background: var(--color-surface);
+  }
+  .cp-ta {
+    position: relative;
+    z-index: 1;
+    display: block;
+    overflow: auto;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--color-fg);
+    resize: vertical;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .cp-ta:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 20%, transparent);
+  }
+  .cp-chord {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+  .cp-b {
+    color: color-mix(in oklab, var(--color-accent) 50%, var(--color-muted));
+  }
+  .cp-dir {
+    color: #82aaff;
+  }
+  .cp-muted {
+    color: var(--color-muted);
+  }
+  .cp-pct {
+    color: var(--color-faint);
+  }
+
+  /* Кнопка «скопировано»: зелёная вспышка, плавно тающая обратно в дефолт.
+     Переход длинный именно на возврате — вспышка появляется резко, а гаснет
+     мягко, поэтому смена состояния заметна, но не дёргает глаз. */
+  .btn-copied {
+    border-color: #3fae6a;
+    background: #3fae6a;
+    color: #08130c;
+    font-weight: 600;
+  }
+  .btn-share {
+    transition:
+      background 0.5s ease,
+      border-color 0.5s ease,
+      color 0.5s ease;
+  }
+  .btn-share.btn-copied {
+    transition:
+      background 0.12s ease,
+      border-color 0.12s ease,
+      color 0.12s ease;
+  }
+  /* Иконка/подпись подменяются вместе с состоянием — тоже без рывка. */
+  .btn-share .share-swap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: opacity 0.35s ease;
+  }
+
+  /* ─── Черновик редактора ──────────────────────────────────────────────── */
+  .draft-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 35%, var(--color-line));
+    border-radius: 0.8rem;
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    animation: draft-in 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  @keyframes draft-in {
+    from {
+      opacity: 0;
+      transform: translateY(-0.4rem);
+    }
+  }
+
+  /* Подтверждение записи: коротко появляется и остаётся бледной подписью. */
+  .draft-saved {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--color-faint);
+    animation: draft-saved-in 0.25s ease;
+  }
+  @keyframes draft-saved-in {
+    from {
+      opacity: 0;
+      transform: translateX(-0.3rem);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .draft-banner,
+    .draft-saved {
+      animation: none;
+    }
+  }
+
+  /* ─── Складные разделы формы ──────────────────────────────────────────────
+     Редактор — единственный экран, который не помещался в обзор: восемь блоков
+     подряд во всю ширину, и до текста песни (ради которого его и открывают)
+     приходилось прокручивать мимо капо, заметки и аппликатур. Второстепенное
+     сложено сюда и по умолчанию закрыто.
+
+     Родной <details>, а не своё состояние с условным рендером, и это не лень:
+     поля внутри ЗАКРЫТОГО <details> остаются в DOM и попадают в FormData. На
+     этом держатся и отправка формы, и черновик — он собирается ровно через
+     `new FormData(form)` (см. collect в SongEditor). Сворачивай мы раздел
+     размонтированием, «Капо» и «Заметка» молча пропадали бы из сохранения
+     каждый раз, когда человек их свернул.
+
+     Чего <details> не прощает: `required` внутри закрытой секции. Браузер не
+     может подсветить невидимое поле и отменяет отправку молча, без объяснения.
+     Поэтому «Название» — единственное обязательное поле формы — стоит снаружи,
+     в шапке, и в складные разделы не попадает НИКОГДА. */
+  .form-section {
+    border: 1px solid var(--color-line);
+    border-radius: 0.8rem;
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  }
+  .form-section > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.8rem;
+    cursor: pointer;
+    /* Родной треугольник убираем в обеих реализациях: свой шеврон умеет
+       поворачиваться и красится темой. */
+    list-style: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .form-section > summary::-webkit-details-marker {
+    display: none;
+  }
+  .form-section > summary:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .form-section-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--color-fg);
+  }
+  /* Сводка справа от заголовка: что внутри, не раскрывая. Без неё закрытый
+     раздел неотличим от пустого, и заданное капо пришлось бы искать, раскрывая
+     каждый по очереди, — то есть свёрнутая форма экономила бы место ценой
+     ровно того, ради чего её открывают. */
+  .form-section-hint {
+    margin-left: auto;
+    overflow: hidden;
+    font-size: 0.8rem;
+    color: var(--color-faint);
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Раздел просит внимания: в тексте есть аккорд без аппликатуры. Красить
+     нечем, кроме акцента, — он же на кнопке «Сохранить», поэтому здесь только
+     цвет подписи, без заливки и рамки. */
+  .form-section-hint--warn {
+    color: var(--color-accent);
+  }
+  .form-section-chevron {
+    flex-shrink: 0;
+    color: var(--color-faint);
+    transition: transform 0.18s ease;
+  }
+  .form-section[open] > summary .form-section-chevron {
+    transform: rotate(90deg);
+  }
+  .form-section-body {
+    padding: 0 0.9rem 0.9rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .form-section-chevron {
+      transition: none;
+    }
+  }
+
+  /* ─── Скелетон загрузки ───────────────────────────────────────────────── */
+  .skeleton {
+    background: color-mix(in oklab, var(--color-line) 55%, transparent);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+    /*
+      Полоски скелетонов заданы фиксированными ширинами (`w-72` — это 18rem,
+      288px), потому что имитируют текст известной длины. На узком экране это
+      оборачивалось настоящей ошибкой: при окне в 320px внутренняя часть
+      контейнера — около 283px, и такая полоска распирала страницу. Появлялась
+      горизонтальная прокрутка «в пустоту», а с ней уезжало и нижнее меню — оно
+      закреплено по окну, а не по документу, и переставало совпадать с
+      содержимым. Заметно это было только ПОКА ГРУЗИТСЯ страница, поэтому в
+      готовой разметке ничего не находилось.
+
+      Ограничение родителем чинит весь класс таких случаев разом — и в
+      существующих скелетонах, и в тех, что появятся позже.
+    */
+    max-width: 100%;
+  }
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 0.95;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+    }
+  }
+
+  /* ─── Поиск по каталогу ───────────────────────────────────────────────────
+     Раньше здесь было поле плюс отдельная кнопка «Найти» — на телефоне это
+     полстроки, отданные слову, которое дублирует клавишу Enter. Теперь кнопки
+     нет: лупа слева объясняет, что это поиск, отправка идёт по Enter
+     (`enterKeyHint="search"` подписывает клавишу на мобильной клавиатуре), а
+     submit остаётся в разметке скрытым — для клавиатуры и скринридеров. */
+  .search {
+    position: relative;
+    display: block;
+  }
+  .search-ico {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0.9rem;
+    margin-block: auto;
+    color: var(--color-faint);
+    /* Иначе лупа перехватывала бы клик, который должен ставить курсор в поле */
+    pointer-events: none;
+  }
+  .field--search {
+    /* Место слева под лупу, справа — под крестик очистки */
+    padding-inline: 2.7rem;
+  }
+  /* Свой крестик у WebKit убираем: он появляется только там, дублирует наш и
+     всего лишь чистит поле, тогда как наш возвращает к полной выдаче. */
+  .field--search::-webkit-search-cancel-button {
+    display: none;
+  }
+  .search-clear {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0.45rem;
+    margin-block: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    color: var(--color-faint);
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+  .search-clear:hover {
+    color: var(--color-fg);
+    background: color-mix(in oklab, var(--color-raised) 70%, transparent);
+  }
+
+  /* ─── Ряд сортировки и отбора ─────────────────────────────────────────────
+     Сортировка и «только подтверждённые» раньше стояли двумя этажами: поддон с
+     вкладками и отдельная кнопка-выключатель под ним. На телефоне это два ряда
+     интерфейса до первой песни, причём оба — про настройку выдачи, а не про неё
+     саму. Теперь они в одном ряду.
+
+     ── Прокрутка вбок и почему у неё есть стрелка ────────────────────────────
+
+     Ряд не всегда помещается в узкий экран и прокручивается. Само по себе это
+     нормальный мобильный приём, но опознаётся он по обрезанному у края пункту
+     — а обрезанное «⊘ Про» читается не как «здесь есть ещё», а как сломанная
+     вёрстка. Угадывать, прокрутка это или баг, пользователь не должен.
+
+     Поэтому у края стоит явная стрелка с затуханием под ней: она говорит, что
+     ряд продолжается, и по нажатию доматывает его. Как только домотали до
+     конца — пропадает (логика в components/FilterBar.tsx).
+
+     Стрелку рисует клиентский компонент, и это тоже осознанно: без JS она не
+     появится вовсе — вместо мёртвой кнопки останется ряд, который по-прежнему
+     прокручивается пальцем. Всё остальное на этой странице (сортировка, отбор,
+     поиск) работает без JS, и ломать это ради подсказки не стоит.
+
+     От `sm` прокрутки нет: там место есть, и ряд просто переносится по словам.
+
+     ВАЖНО: `overflow-x: auto` здесь ещё и страхует раскладку. Ряд, который шире
+     экрана, без него растянул бы весь документ, а вместе с ним уехала бы
+     нижняя навигация — она закреплена по окну (см. .mnav). */
+  .filter-bar-wrap {
+    position: relative;
+  }
+  .filter-bar {
+    display: flex;
+    gap: 0.3rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Доматывание по стрелке — плавное, а не рывком */
+    scroll-behavior: smooth;
+  }
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Стрелка «есть ещё». Затухание — под цвет страницы, поэтому последний пункт
+     не обрывается, а уходит в фон. */
+  .filter-more {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 3.4rem;
+    padding-inline-end: 0.1rem;
+    color: var(--color-muted);
+    background: linear-gradient(to left, var(--color-bg) 50%, transparent);
+    cursor: pointer;
+    animation: filter-more-in 0.18s ease-out;
+  }
+  .filter-more:hover {
+    color: var(--color-fg);
+  }
+  @keyframes filter-more-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (min-width: 640px) {
+    .filter-bar {
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+    /* На широком экране ряд переносится, доматывать нечего */
+    .filter-more {
+      display: none;
+    }
+  }
+  .filter-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex: none;
+    padding: 0.4rem 0.7rem;
+    border-radius: 0.55rem;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+    white-space: nowrap;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+  /* Отбор — не третий вариант сортировки, а выключатель рядом с ней. Отделяем
+     его лишним просветом: рамка или разделитель развалились бы при переносе. */
+  .filter-tab--verified {
+    margin-inline-start: 0.3rem;
+  }
+  .filter-tab:hover {
+    color: var(--color-fg);
+  }
+  /* Выбранное — тихой заливкой, без рамки и без акцентной краски: это
+     второстепенный переключатель, спорить с обложками и названиями ему нечем.
+     Акцент на этой странице принадлежит переключателю инструмента. */
+  .filter-tab--on {
+    color: var(--color-fg);
+    background: color-mix(in oklab, var(--color-raised) 85%, transparent);
+    font-weight: 500;
+  }
+  /* Отбор подтверждённых — единственный, кто берёт свою краску: она совпадает
+     с галочкой в строках, и связь читается без подписи. */
+  .filter-tab--verified.filter-tab--on {
+    color: var(--color-verified);
+    background: color-mix(in oklab, var(--color-verified) 14%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .filter-tab,
+    .search-clear {
+      transition: none;
+    }
+    /* Доматывание рывком вместо плавного, стрелка без проявления */
+    .filter-bar {
+      scroll-behavior: auto;
+    }
+    .filter-more {
+      animation: none;
+    }
+  }
+
+  /* ─── «Показать ещё» под каталогом ────────────────────────────────────────
+     Была обычной кнопкой с серой рамкой — той же, что «Найти» в поиске и
+     «Гитара» в шапке, — и в конце длинного списка одинаковых строк просто не
+     читалась как продолжение: список кончился, ниже что-то серое, человек
+     уходит с мыслью «это весь каталог».
+
+     Теперь это полоса во всю ширину списка, в акценте и со стрелкой вниз.
+     Стрелка тут не украшение: она единственная говорит НАПРАВЛЕНИЕ — что за
+     кнопкой ещё список, а не переход куда-то в сторону. При наведении полоса
+     заливается целиком, а стрелка подаётся вниз.
+
+     Ширина во всю строку выбрана намеренно: любая кнопка по центру уже колонки
+     читается как подпись под списком, а не как его продолжение. */
+  .load-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    width: 100%;
+    min-height: 3.15rem;
+    padding-inline: 1.25rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 42%, var(--color-line));
+    border-radius: 0.85rem;
+    background: color-mix(in oklab, var(--color-accent) 9%, transparent);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--color-accent);
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease;
+  }
+  .load-more:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+  .load-more-arrow {
+    transition: transform 0.18s ease;
+  }
+  .load-more:hover .load-more-arrow {
+    transform: translateY(2px);
+  }
+  /* Пока грузится — кнопка гаснет и перестаёт отзываться на наведение: иначе
+     нетерпеливый клик уходил бы в пустоту, а вид у кнопки оставался бы
+     «нажми меня». */
+  .load-more[aria-disabled='true'],
+  .load-more[aria-disabled='true']:hover {
+    border-color: var(--color-line);
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+    color: var(--color-muted);
+    cursor: default;
+  }
+  .load-more[aria-disabled='true'] .load-more-arrow {
+    transform: none;
+    animation: load-more-pulse 0.9s ease-in-out infinite;
+  }
+  @keyframes load-more-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(3px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .load-more,
+    .load-more-arrow {
+      transition: none;
+    }
+    .load-more[aria-disabled='true'] .load-more-arrow {
+      animation: none;
+    }
+  }
+
+  /* ─── Плитки статистики (админская страница) ──────────────────────────── */
+  .stat-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.7rem;
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  }
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: 1.65rem;
+    font-weight: 500;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-value--accent {
+    color: var(--color-accent);
+  }
+  .stat-label {
+    font-size: 0.78rem;
+    color: var(--color-muted);
+  }
+
+  /* Строка списка «топов»: номер, название, цифры справа */
+  .stat-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.5rem;
+  }
+  .stat-row:nth-child(odd) {
+    background: color-mix(in oklab, var(--color-surface) 45%, transparent);
+  }
+  .stat-rank {
+    width: 1.4rem;
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    text-align: right;
+    color: var(--color-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── Графики статистики ──────────────────────────────────────────────────
+     Одна серия — один цвет (акцент темы). Величину несёт длина/высота марки,
+     поэтому красить по величине не нужно: это было бы двойное кодирование, а
+     цвет тогда не сообщает ничего нового.
+
+     Сетка и оси — сплошные волосяные линии на тон от подложки. Пунктир не
+     используем: он шумит и читается как «прогноз» там, где это просто сетка. */
+  .chart-card {
+    padding: 1rem 1.1rem 0.9rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.9rem;
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  }
+  .chart-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+  }
+  .chart-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .chart-total {
+    font-size: 1.15rem;
+    color: var(--color-accent);
+  }
+  .chart-unit {
+    font-size: 0.75rem;
+    color: var(--color-faint);
+  }
+  .chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .chart-grid {
+    stroke: var(--color-line);
+    stroke-width: 1;
+  }
+  .chart-axis {
+    stroke: color-mix(in oklab, var(--color-line) 70%, var(--color-muted));
+    stroke-width: 1;
+  }
+  .chart-tick {
+    fill: var(--color-faint);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Кегль внутри SVG задан в единицах viewBox и сжимается вместе с картинкой.
+     На телефоне график ужимается с 700 единиц до ~300px, то есть вдвое с
+     лишним, и 10px превращались в нечитаемые 4px. Поэтому чем уже экран, тем
+     крупнее кегль в единицах — на выходе везде получается около 10px. */
+  @media (max-width: 48rem) {
+    .chart-tick {
+      font-size: 14px;
+    }
+    .chart-peak-label {
+      font-size: 15px;
+    }
+  }
+  @media (max-width: 35rem) {
+    .chart-tick {
+      font-size: 17px;
+    }
+    .chart-peak-label {
+      font-size: 18px;
+    }
+  }
+  @media (max-width: 25rem) {
+    .chart-tick {
+      font-size: 22px;
+    }
+    .chart-peak-label {
+      font-size: 23px;
+    }
+  }
+  .chart-area {
+    fill: color-mix(in oklab, var(--color-accent) 18%, transparent);
+  }
+  .chart-line {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .chart-peak-dot {
+    fill: var(--color-accent);
+    /* Кольцо в цвет подложки вместо обводки — марка не толстеет */
+    stroke: var(--color-bg);
+    stroke-width: 2;
+  }
+  .chart-peak-label {
+    fill: var(--color-fg);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .chart-caption {
+    margin-top: 0.55rem;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--color-faint);
+  }
+
+  /* Таблица-двойник: значения без наведения и без цвета. */
+  .chart-table {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+  }
+  .chart-table > summary {
+    color: var(--color-muted);
+    cursor: pointer;
+    list-style: none;
+  }
+  .chart-table > summary::-webkit-details-marker {
+    display: none;
+  }
+  .chart-table > summary::before {
+    content: '▸ ';
+  }
+  .chart-table[open] > summary::before {
+    content: '▾ ';
+  }
+  .chart-table table {
+    width: 100%;
+    margin-top: 0.5rem;
+    border-collapse: collapse;
+  }
+  .chart-table th,
+  .chart-table td {
+    padding: 0.2rem 0.4rem;
+    text-align: left;
+    font-weight: 400;
+    color: var(--color-muted);
+  }
+  .chart-table td {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-fg);
+  }
+  .chart-table thead th {
+    border-bottom: 1px solid var(--color-line);
+    font-size: 0.72rem;
+    color: var(--color-faint);
+  }
+  .chart-table thead th + th {
+    text-align: right;
+  }
+
+  /* ─── Полосы: топы и меры ─────────────────────────────────────────────── */
+  .bar-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .bar-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+  .bar-rank {
+    width: 1.2rem;
+    flex-shrink: 0;
+    padding-top: 0.05rem;
+    font-size: 0.78rem;
+    text-align: right;
+    color: var(--color-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-body {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .bar-labels {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+  .bar-label {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.88rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  a.bar-label:hover {
+    color: var(--color-accent);
+  }
+  .bar-sub {
+    color: var(--color-muted);
+  }
+  .bar-value {
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-track {
+    height: 0.4rem;
+    overflow: hidden;
+    border-radius: 0.2rem;
+    background: color-mix(in oklab, var(--color-line) 75%, transparent);
+  }
+  .bar-fill {
+    height: 100%;
+    /* Скруглён только конец данных, у основания полоса остаётся прижатой */
+    border-radius: 0 0.2rem 0.2rem 0;
+    background: var(--color-accent);
+  }
+
+  /* ─── Доли целого одной полосой ───────────────────────────────────────── */
+  /* Порядковая шкала одного тона: категории упорядочены по «открытости», и
+     разные цвета намекали бы на равноправие, которого здесь нет. Значения
+     проверены скриптом валидации на этой поверхности: монотонная светлота,
+     различимые шаги, тёмный конец держит контраст к подложке. */
+  .share-bar {
+    display: flex;
+    /* Зазор в цвет подложки вместо обводки: обводка утолщает марку и на узких
+       долях съедает саму долю. */
+    gap: 2px;
+    height: 0.65rem;
+    margin-bottom: 0.7rem;
+    border-radius: 0.32rem;
+    overflow: hidden;
+  }
+  .share-seg {
+    min-width: 2px;
+  }
+  .share-seg--1 {
+    background: #f5cf8f;
+  }
+  .share-seg--2 {
+    background: #e6a23c;
+  }
+  .share-seg--3 {
+    background: #a8701f;
+  }
+  .share-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .share-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .share-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    flex-shrink: 0;
+    border-radius: 0.2rem;
+  }
+  .share-legend-label {
+    flex: 1;
+    color: var(--color-muted);
+  }
+  .share-legend-value {
+    font-variant-numeric: tabular-nums;
+  }
+  .share-legend-pct {
+    color: var(--color-faint);
+  }
+
+  /* ─── Мера: одна доля против целого ───────────────────────────────────── */
+  .meter + .meter {
+    margin-top: 0.85rem;
+  }
+  .meter-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin-bottom: 0.3rem;
+  }
+  .meter-label {
+    font-size: 0.88rem;
+  }
+  .meter-value {
+    font-size: 0.85rem;
+    color: var(--color-fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .meter-abs {
+    color: var(--color-faint);
+  }
+  .meter-hint {
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--color-faint);
+  }
+
+  /* ─── Изменение к прошлой неделе ──────────────────────────────────────── */
+  /* Цвет не работает в одиночку: рядом всегда стрелка и подпись периода. */
+  .delta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.2rem;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .delta--up {
+    color: #0ca30c;
+  }
+  .delta--down {
+    color: #d03b3b;
+  }
+  .delta--flat {
+    color: var(--color-faint);
+  }
+
+  /* ─── Переключатель инструмента (каталог) ─────────────────────────────── */
+  .inst-tabs {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 0.2rem;
+    padding: 0.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  }
+  .inst-tab {
+    padding: 0.4rem 1rem;
+    border-radius: 0.55rem;
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--color-muted);
+    white-space: nowrap;
+    transition:
+      color 0.15s ease,
+      background 0.2s ease;
+  }
+  .inst-tab:hover {
+    color: var(--color-fg);
+  }
+  .inst-tab--on,
+  /* Тот же вид, когда вкладка — ярлык со спрятанным radio (форма заявки):
+     состояние берётся из самой формы, поэтому переключатель работает без JS. */
+  .inst-tab:has(input:checked) {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+    font-weight: 600;
+  }
+
+  /* Клавиатурный фокус на спрятанном radio виден по ярлыку — иначе по форме
+     нельзя было бы пройти табом, не потеряв каретку. */
+  .inst-tab:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  /* Счётчик разборов в своей библиотеке */
+  .inst-tab-count {
+    margin-left: 0.4rem;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.65;
+  }
+
+  /* ─── Подтверждённый разбор ───────────────────────────────────────────── */
+  /* Жёлтая галочка. Цвет чуть светлее акцента — она должна читаться как знак
+     качества, а не сливаться с обычными акцентными элементами. */
+  .verified-badge {
+    position: relative;
+    /* Поверх «растянутой» ссылки строки каталога (у неё ::after с z-index: 0),
+       иначе наведение до галочки не доходит и подсказка не появляется.
+       Значение выше липкой шапки (50): z-index здесь создаёт слой, внутри
+       которого живёт подсказка, поэтому спорит с шапкой именно он — а на
+       странице разбора заголовок стоит ровно под ней, и подсказка вверх
+       уходила бы под шапку. */
+    z-index: 60;
+    display: inline-flex;
+    align-items: center;
+    /* Галочка стоит и в потоке текста (заголовок разбора), и во flex-строке
+       списка. vertical-align во flex игнорируется, поэтому безвреден там и
+       сажает значок на нужную высоту здесь.
+       Значение подобрано по метрике шрифта, а не на глаз: центр значка
+       приходится на середину строчных (базовая линия минус половина
+       x-height). При -0.14em он уезжал на три пиксела ниже и заметно провисал
+       под строкой. */
+    vertical-align: -0.10em;
+    color: var(--color-verified);
+    line-height: 0;
+    cursor: help;
+  }
+  .verified-badge:focus-visible {
+    border-radius: 50%;
+  }
+
+  /* Подсказка над галочкой: мгновенная (без задержки и перехода), в оформлении
+     сайта. Ширину задаёт содержимое, но не шире экрана — длинный текст
+     переносится, а не выталкивает страницу вбок. */
+  .verified-tip {
+    position: absolute;
+    bottom: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    width: max-content;
+    /* На узком экране подсказка центрируется по галочке, а та может стоять
+       близко к краю — поэтому ограничение по ширине заметно строже vw, чтобы
+       текст переносился, а не упирался в границу окна. */
+    max-width: min(14rem, 54vw);
+    padding: 0.4rem 0.6rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 28%, var(--color-line));
+    border-radius: 0.55rem;
+    background: var(--color-raised);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: 0;
+    text-align: center;
+    white-space: normal;
+    box-shadow: 0 10px 26px rgb(0 0 0 / 0.5);
+    pointer-events: none;
+    /*
+      `display: none`, а НЕ `visibility: hidden` с прозрачностью, как было.
+      Скрытый через `visibility` элемент из раскладки не исчезает — он
+      продолжает занимать место. Подсказка центрируется по галочке
+      (`left: 50%` + сдвиг), поэтому у строки каталога, где галочка стоит
+      близко к правому краю, её невидимая правая половина вылезала за окно:
+      на экране 360px страница становилась шириной 416px. Получалась
+      горизонтальная прокрутка в пустоту — прокрутить есть куда, а смотреть
+      не на что, — и вместе с ней уезжало нижнее меню, закреплённое по окну.
+      Ограничение ширины (`max-width` выше) от этого не спасает: за край
+      выталкивало не размером, а центрированием.
+
+      Переход и задержка здесь не нужны (подсказка мгновенная), поэтому
+      смена `display` ничего не ломает.
+    */
+    display: none;
+  }
+  /* Хвостик подсказки */
+  .verified-tip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -0.3rem;
+    border: 0.3rem solid transparent;
+    border-top-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-line));
+  }
+  .verified-badge:hover .verified-tip,
+  .verified-badge:focus-visible .verified-tip {
+    display: block;
+  }
+  /*
+    На узком экране и там, где нечем наводить, подсказки нет вовсе.
+    Причина не в экономии, а в геометрии: подсказка центрируется по галочке, а
+    та в строке каталога стоит у правого края — вместить её половину в
+    оставшиеся ~18px отступа невозможно ни при какой ширине, поэтому в
+    показанном виде она неизбежно вылезала бы за окно. На касании наводить
+    нечем, так что и терять нечего: смысл галочки несёт `aria-label` на ней
+    самой (см. components/VerifiedBadge.tsx), и скринридеры читают его.
+  */
+  @media (hover: none), (max-width: 639.98px) {
+    .verified-badge:hover .verified-tip,
+    .verified-badge:focus-visible .verified-tip {
+      display: none;
+    }
+  }
+  /* На печати правило выше не срабатывает (наводить нечем), но оставляем явно:
+     подсказка — экранная деталь. */
+  @media print {
+    .verified-tip {
+      display: none;
+    }
+  }
+
+  /* Кнопка модератора во включённом состоянии */
+  /* Бейдж инструмента в списке своих разборов */
+  .inst-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 1.3rem;
+    padding-inline: 0.4rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--color-muted);
+  }
+
+  /* Ссылка на исполнителя в блоке перелинковки под каталогом. Отдельный класс,
+     а не .inst-badge: тот — подпись высотой 1.3rem, а сюда надо попадать
+     пальцем, поэтому цель крупнее и с наведением. */
+  .artist-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2rem;
+    padding-inline: 0.65rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--color-muted);
+    /* Имя исполнителя — чужой текст произвольной длины, а переноситься плашка
+       не умеет. Без ограничения родителем достаточно одного длинного названия
+       группы, чтобы страница поехала вбок. */
+    max-width: 100%;
+  }
+
+  /* Само имя и обрезается: счётчик при этом остаётся виден целиком. */
+  .artist-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .artist-chip:hover {
+    color: var(--color-fg);
+    border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+  }
+
+  .artist-chip-count {
+    color: var(--color-faint);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    /* Обрезается имя, а не число: «CUPSIZE 1» вместо «CUPSIZE 13» было бы враньём. */
+    flex-shrink: 0;
+  }
+
+  /* ─── Модалка ─────────────────────────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+    overflow-y: auto;
+    background: color-mix(in oklab, #000 62%, transparent);
+    backdrop-filter: blur(2px);
+  }
+  .modal-panel {
+    width: 100%;
+    max-width: 58rem;
+    margin: 2.5rem auto;
+    padding: 1.25rem 1.25rem 1rem;
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background: var(--color-surface);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  /* ─── Поверхности и мелочи ────────────────────────────────────────────── */
+  .card {
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    background: color-mix(in oklab, var(--color-surface) 65%, transparent);
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  /* ─── Счётчики автора ─────────────────────────────────────────────────────
+     Сколько человек написал и сколько это прочитали: на публичном профиле под
+     именем, в кабинете — над кнопками инструментов. Оформлены нарочно тихо:
+     это справка, а не заголовок, и спорить с именем автора им нечем и незачем.
+     Отсюда и антиква только на числах, и подписи цветом самого тусклого текста. */
+  .stat-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.9rem;
+    margin-top: 1.35rem;
+  }
+  .stat-strip-item {
+    /* column-reverse: в разметке подпись стоит перед числом (этого требует
+       <dl>), а показать надо наоборот. */
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 0.1rem;
+  }
+  .stat-strip-value {
+    margin: 0;
+    font-family: var(--font-spectral), Georgia, serif;
+    font-size: 1.55rem;
+    font-weight: 500;
+    line-height: 1.1;
+    color: var(--color-fg);
+    /* Цифры одной ширины: три числа стоят в ряд, и на «1,2 тыс.» против «52»
+       разнобой в ширине знаков читался бы как разное начертание. */
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-strip-label {
+    font-size: 0.76rem;
+    letter-spacing: 0.05em;
+    color: var(--color-faint);
+  }
+
+  /* Хлебные крошки. Стоят на месте «надзаголовка» (.eyebrow) и оформлены так
+     же — но БЕЗ uppercase: заглавными идёт рубрика, а здесь ссылки, и капслок
+     на названии исполнителя читался бы как крик. */
+  .breadcrumbs {
+    /* Отступ снизу — часть самой цепочки, а не забота страницы: крошки стоят
+       над разным содержимым (обложка разбора, шапка исполнителя), и без него
+       они прилипали к нему вплотную, читаясь как его первая строка. */
+    margin-bottom: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+  }
+
+  .breadcrumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .breadcrumbs li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    /* Длинное название песни в последней крошке не должно распирать страницу. */
+    min-width: 0;
+  }
+
+  .breadcrumbs a:hover {
+    color: var(--color-fg);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .breadcrumbs [aria-current='page'] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* `min-width: 0` обязателен, и это не перестраховка: флекс-элемент по
+       умолчанию НЕ сжимается ниже своего содержимого, а содержимое здесь —
+       название песни в одну строку без переносов. Без этой строчки длинное
+       название распирало страницу, появлялась горизонтальная прокрутка, и
+       вместе с ней «уезжало» нижнее меню — оно закреплено по окну, а не по
+       документу, поэтому при сдвиге вбок переставало совпадать с содержимым.
+       Прежние `max-width: 22rem` (352px) были шире узкого экрана и от этого
+       не спасали — ограничиваем родителем. */
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .breadcrumbs-sep {
+    color: var(--color-faint);
+  }
+
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+  }
+
+  /* Панель управления страницы песни */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem;
+    border: 1px solid var(--color-line);
+    border-radius: 0.9rem;
+    background: color-mix(in oklab, var(--color-raised) 82%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  /* Раскрывающаяся панель настроек под тулбаром.
+     Раньше здесь стоял обычный .card — а он полупрозрачный и БЕЗ размытия
+     фона, потому что рассчитан на карточки в потоке страницы, за которыми
+     ничего нет. Эта панель висит поверх текста песни, и сквозь неё читались
+     слова: подложка спорила с собственным содержимым.
+     Поэтому фон здесь полностью непрозрачный. Размытие не нужно — размывать
+     уже нечего, а тень отделяет панель от текста лучше полупрозрачности. */
+  .toolbar-panel {
+    border: 1px solid var(--color-line);
+    border-radius: 0.9rem;
+    background: var(--color-raised);
+    box-shadow: 0 12px 28px -12px rgb(0 0 0 / 0.75);
+  }
+
+  .key-readout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.5rem;
+    padding-inline: 0.25rem;
+    line-height: 1;
+  }
+  .key-readout b {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+  .key-readout span {
+    margin-top: 0.15rem;
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-muted);
+  }
+
+  /* ─── Рендер аккордов над слогами ─────────────────────────────────────────
+     Каждая колонка = inline-block (аккорд сверху, слог снизу). Перенос строки —
+     между колонками по пробелам, поэтому аккорды держатся над своими слогами и
+     на узком экране ничего не разъезжается. Без моноширинного выравнивания. */
+  .chordsheet {
+    /* Дефолт отзывчивый: на телефоне меньше, на десктопе крупнее.
+       Кнопки A−/A+ на странице песни задают точный размер через переменную.
+
+       Верхняя граница — 1.08rem вместо 1.15rem: на широком экране строка и так
+       вмещается целиком, и прежний размер только гнал текст вниз, отправляя
+       песню за нижний край раньше времени.
+
+       Нижнюю часть опустили (было `clamp(1rem, 0.9rem + 0.55vw, …)`): на
+       телефоне выходило ~16.5px, и текст занимал экран крупнее, чем нужно, —
+       до следующей строки приходилось листать чаще. Теперь на 390px это
+       ~15.7px, на 320px ~15.4px. Верх не тронут: от ~670px и шире размер
+       прежний, то есть на десктопе ничего не изменилось.
+
+       Кнопки A−/A+ шагают НЕ от числа, а от замеренного здесь размера
+       (см. measuredFont в components/SongViewer.tsx) — иначе на телефоне
+       первое нажатие A− попадало бы ровно в текущий размер и выглядело как
+       сломанная кнопка. */
+    font-size: var(--sheet-font-size, clamp(0.95rem, 0.85rem + 0.55vw, 1.08rem));
+    line-height: 1.18;
+    letter-spacing: 0.01em;
+  }
+
+  /* Заметка от автора над текстом песни (видна всем, печатается) */
+  .song-note {
+    margin-bottom: 1.5rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--color-line);
+    border-left: 2px solid var(--color-accent);
+    border-radius: 0 0.7rem 0.7rem 0;
+    background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  }
+  .song-note-label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .song-note-text {
+    white-space: pre-wrap;
+    color: var(--color-fg);
+  }
+
+  .cs-section {
+    margin: 1.6rem 0;
+  }
+  .cs-section:first-child {
+    margin-top: 0;
+  }
+  .cs-section--chorus {
+    border-left: 2px solid var(--color-accent);
+    padding-left: 1rem;
+  }
+  .cs-section--bridge {
+    border-left: 2px solid var(--color-line);
+    padding-left: 1rem;
+  }
+
+  /* Табулатура: моноширинно, с сохранением пробелов. По ширине не влезающие
+     табы скроллятся сами — переносить их нельзя, выравнивание сломается. */
+  .cs-tab {
+    margin: 0;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.82em;
+    line-height: 1.45;
+    white-space: pre;
+    tab-size: 4;
+    color: var(--color-fg);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cs-label {
+    margin-bottom: 0.6rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .cs-comment {
+    margin: 0.55rem 0;
+    /* Единственный курсив на сайте. Семейство обычное: курсивное начертание
+       объявлено отдельным вызовом next/font (см. app/layout.tsx), но попадает
+       в то же семейство 'Spectral' — отдельным @font-face со `font-style:
+       italic`, и браузер выбирает его сам по строчке ниже. */
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 0.95em;
+    color: var(--color-muted);
+  }
+
+  .cs-empty {
+    height: 0.75em;
+  }
+
+  .cs-line {
+    margin: 0.2em 0;
+  }
+
+  /* Слово (возможно разбитое аккордом) не переносится внутри себя */
+  .cs-word {
+    display: inline-block;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  .cs-col {
+    display: inline-block;
+    vertical-align: bottom;
+    /* Место, которое аккорду не хватило до соседнего: считается при рендере
+       (см. lib/chordpro/spacing.ts) и приходит инлайном. У большинства колонок
+       переменной нет — слова стоят вплотную, как в обычном тексте. */
+    padding-right: var(--cs-pad, 0);
+  }
+
+  /* Размер имени аккорда — долей от текста песни, чтобы он ехал за настройкой
+     кегля читалки. Было 0.64em: аккорды заметно проигрывали строке и на глаз
+     читались как подпись, хотя половина смысла страницы именно в них. 0.72em —
+     всё ещё явно мельче слов (иерархия сохраняется), но буквы уже разбираются
+     без вглядывания.
+
+     Высота строки аккордов задана в em ОТ СОБСТВЕННОГО кегля, поэтому место под
+     них подросло само и ничего не обрезало.
+
+     Превью редактора поднимает размер сильнее через --sheet-chord-size: там
+     лист ужат, и доля от мелкого текста снова становится нечитаемой. */
+  .cs-chord {
+    display: block;
+    height: 1.5em;
+    line-height: 1.5;
+    font-size: var(--sheet-chord-size, 0.72em);
+    font-weight: 600;
+    color: var(--color-accent);
+    white-space: pre;
+    /* Нулевая ширина — имя аккорда нависает над соседними словами и НЕ
+       растягивает свою колонку. Иначе короткое слово под широким аккордом
+       («[D#5]В моей голове») раздвигало фразу дырой на полстроки. Разойтись с
+       соседним аккордом помогает --cs-pad у .cs-col: место добавляется только
+       там, где аккорды действительно рядом. */
+    width: 0;
+  }
+
+  .cs-lyric {
+    display: block;
+    white-space: pre;
+  }
+
+
+  .chordsheet--nochords .cs-chord {
+    display: none;
+  }
+  /* Без аккордов раздвигать нечего — текст читается сплошной строкой. */
+  .chordsheet--nochords .cs-col {
+    padding-right: 0;
+  }
+
+  /* ─── Аннотации ───────────────────────────────────────────────────────── */
+  .cs-line--interactive {
+    cursor: pointer;
+    border-radius: 7px;
+    margin-inline: -0.45rem;
+    padding-inline: 0.45rem;
+    transition: background 0.15s ease;
+  }
+  .cs-line--interactive:hover {
+    background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  }
+  .cs-line--interactive::after {
+    content: '+';
+    margin-left: 0.5rem;
+    font-size: 0.7em;
+    color: var(--color-faint);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .cs-line--interactive:hover::after,
+  .cs-line--active::after {
+    opacity: 1;
+  }
+  .cs-line--active {
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  }
+
+  /* ─── Заметки к строке ───────────────────────────────────────────────────
+     Заметка — это пометка на полях, а не блок содержания. Раньше она рисовалась
+     карточкой во всю ширину: фон, скруглённая рамка, свои отступы. На тексте
+     вроде «2 раза» получалась широкая полоса ради семи символов, и в потоке
+     песни она весила не меньше заголовка куплета — глаз цеплялся за неё раньше,
+     чем за аккорды.
+
+     Теперь ширина по содержимому, фона нет, опознаётся заметка тонкой чертой
+     слева в акцентном тоне. Всё, что было в карточке, осталось на месте —
+     убрана только оправа. */
+  .cs-notes {
+    display: flex;
+    flex-direction: column;
+    /* Ключевое: чипы жмутся к содержимому и не растягиваются на всю строку. */
+    align-items: flex-start;
+    gap: 0.25rem;
+    margin: 0.1rem 0 0.5rem;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+  /* display: flex, а не inline-flex — родитель тоже flex-контейнер, и inline-*
+     там всё равно блокифицируется. По содержимому чип жмёт `align-items:
+     flex-start` у .cs-notes выше: в колоночном flex именно оно не даёт элементу
+     растянуться на всю ширину. */
+  .cs-note {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    max-width: 100%;
+    padding-left: 0.55rem;
+    border-left: 2px solid color-mix(in oklab, var(--color-accent) 40%, transparent);
+  }
+  .cs-note-type {
+    flex-shrink: 0;
+    /* Доля от кегля заметки, а не rem: подпись обязана ужиматься вместе с ней. */
+    font-size: 0.72em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--color-accent) 65%, var(--color-muted));
+  }
+  .cs-note-text {
+    color: var(--color-muted);
+  }
+
+  /* Инлайн-серый текст в песне: %…% */
+  .cs-muted {
+    color: var(--color-muted);
+  }
+
+  /* ─── Обложки ─────────────────────────────────────────────────────────── */
+  .cover {
+    display: block;
+    flex-shrink: 0;
+    object-fit: cover;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.65rem;
+  }
+  .cover-sm {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.5rem;
+  }
+  /* ── Обложка в редакторе ────────────────────────────────────────────────
+     Квадрат, как и всякая обложка на сайте (.cover-sm в списках, .cover-fill на
+     странице разбора). Пропорция важнее заполнения высоты: картинка сюда
+     приходит квадратной — её жмёт до 512×512 сам редактор (см. resizeImage), —
+     и любая другая рамка показывала бы её обрезанной, то есть врала бы о том,
+     что увидят в каталоге.
+
+     Размер задаёт ШИРИНА столбца сетки (см. шапку в SongEditor), высота идёт за
+     ней через aspect-ratio. Обратный порядок — тянуться по высоте соседнего
+     столбца и от неё же считать ширину — зациклил бы раскладку: ширина
+     столбца зависела бы от его же содержимого.
+
+     Одно правило на все ширины: на телефоне столбец один и тянется во всю
+     страницу, поэтому там квадрат упирается в потолок max-width. */
+  .cover-edit {
+    position: relative;
+    width: 100%;
+    max-width: 12rem;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: var(--color-surface);
+  }
+  .cover-edit-img,
+  .cover-edit-empty {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .cover-edit-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-faint);
+  }
+  /* Накладка с карандашом и крестиком — общая с аватаром, см. .avatar-overlay.
+     Здесь только то, что у обложки своё.
+
+     Прежний вариант — полоса снизу с подписанными кнопками «Заменить» и
+     «Убрать» — не пережил встречи с настоящим размером: две подписи с полями и
+     рамками шире квадрата в 8.5rem, и кнопки упирались в оба края. Значки
+     решают это не подгонкой отступов, а тем, что перестают зависеть от длины
+     слова: 2rem + 2rem + зазор укладываются в любую обложку с запасом. */
+
+  /* У пустой обложки накладка видна всегда. Показывать по наведению нечего:
+     за ней не картинка, а серый квадрат со значком, и без кнопок он выглядит
+     не «наведи меня», а «здесь ничего нет и не будет». */
+  .cover-edit--empty .cover-edit-overlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.28);
+  }
+
+  /* Нота остаётся ровно в центре квадрата, карандаш уходит под неё.
+     Оба слоя лежат друг на друге и выключены по центру, поэтому без сдвига
+     кнопка садилась прямо на ноту — читалось как один смазанный значок.
+
+     Через padding, а не transform: сдвигать пришлось бы саму накладку, а вместе
+     с ней уехало бы и затемнение, которое обязано покрывать весь квадрат.
+     Padding двигает только содержимое (и на ПОЛОВИНУ своей величины — центр
+     уходит на середину съеденного), а фон печатается под ним.
+
+     4.4rem = 70.4px, то есть кнопка опускается на 35 пикселей: половина ноты
+     (13) плюс половина кнопки (16) плюс зазор. Меньше — начнут соприкасаться,
+     больше — кнопка упрётся в нижний край. */
+  .cover-edit--empty .cover-edit-overlay {
+    padding-top: 4.4rem;
+  }
+
+  /* ── Название разбора ─────────────────────────────────────────────────────
+     На телефоне заголовок стоит в колонке рядом с обложкой, и колонка эта узкая
+     (около 200px). Длинное название разгоняло шапку на пол-экрана: галочка
+     уезжала на отдельную строку, исполнитель отрывался от названия, а подпись
+     под ними читалась как начало новой секции, а не как хвост шапки.
+
+     Поэтому название обрезается тремя строками — с ними блок с заголовком не
+     выше обложки, и шапка держит одну высоту при любом названии. Двух строк
+     мало: на них не помещаются живые названия каталога вроде «ванна красный
+     пол», которым не хватило одного слова.
+
+     Многоточия нет намеренно: точки в крупном заголовке читаются как часть
+     самого названия. Вместо них хвост последней строки растворяется в фоне, а
+     полное имя открывается по нажатию (.title-pop) — и остаётся в крошках над
+     обложкой и в заголовке вкладки. */
+  .song-title {
+    --title-lh: 1.05;
+    --title-line: calc(var(--title-lh) * 1em);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    /* Кегль и разрядка живут здесь, а не утилитами на самом h1: ниже размер
+       считается формулой, и держать его в двух местах нельзя. Разрядка тоже
+       переехала — em у letter-spacing считается от кегля СВОЕГО элемента, и на
+       заголовке без размера она отмерялась бы от 16px. */
+    font-size: 3rem;
+    line-height: var(--title-lh);
+    letter-spacing: -0.015em;
+  }
+
+  /* Кегль по длине названия. Короткому есть куда расти: рядом с обложкой на
+     телефоне под заголовок отведено около 200px, и одним размером на все
+     названия мы выбирали в пользу худшего случая — «Пьяные» набиралось тем же
+     кеглем, что и название из четырёх слов.
+
+     Ширины самого названия приходят из рендера (см. lib/songTitle.ts):
+     --title-w1 — сколько кеглей нужно, чтобы название легло в одну строку,
+     --title-w2 — то же для двух. Ширину колонки браузер знает сам, но в
+     font-size её не подставить (проценты и cqw там не работают), поэтому она
+     собирается тем же выражением, что и раскладка шапки: экран минус поля
+     страницы, минус обложка с зазором. Без обложки рендер обнуляет
+     --title-cover.
+
+     Из двух вариантов берётся больший — тот кегль, при котором название
+     занимает всю отведённую ему высоту:
+     · одна строка, но не крупнее 48px (кегль десктопа);
+     · две строки, но не крупнее 42px — две строки такого кегля вместе с
+       исполнителем ещё не выше обложки, то есть шапка не растёт.
+     Три строки отдельной ветки не требуют: их кегль упирается в нижнюю границу
+     clamp, а всё, что не влезло и в них, обрезается с растворением хвоста.
+
+     Строки, а не слова: «я схавал опиат» — три слова, но в две строки оно
+     встаёт крупным кеглем, и мерить его прежним правилом «трёхсловные — 30px»
+     значило растягивать название в одну мелкую строку на пол-обложки. */
+  @media (max-width: 639.98px) {
+    .song-title {
+      --title-col: calc(
+        100vw - 2 * clamp(1.15rem, 4vw, 2rem) -
+          var(--title-cover, calc(clamp(7.5rem, 32vw, 8.5rem) + 1rem))
+      );
+      font-size: clamp(
+        1.875rem,
+        max(
+          min(3rem, var(--title-col) / var(--title-w1, 99)),
+          min(2.625rem, var(--title-col) / var(--title-w2, 99))
+        ),
+        3rem
+      );
+    }
+  }
+  /* Растворение вешается ТОЛЬКО когда название правда не влезло — класс ставит
+     рендер, посчитав строки (см. SongViewer). Иначе маска гасила бы последние
+     буквы у названия, которое поместилось целиком, а CSS сам факт обрезки не
+     отдаёт.
+
+     Маски складываются: первая оставляет нетронутыми все строки, кроме
+     последней, вторая гасит хвост — в итоге гаснет только он. */
+  .song-title--clipped {
+    cursor: pointer;
+    -webkit-mask-image:
+      linear-gradient(
+        to bottom,
+        #000 calc(100% - var(--title-line)),
+        transparent calc(100% - var(--title-line))
+      ),
+      linear-gradient(to right, #000 calc(100% - 2.2em), transparent 100%);
+    mask-image:
+      linear-gradient(
+        to bottom,
+        #000 calc(100% - var(--title-line)),
+        transparent calc(100% - var(--title-line))
+      ),
+      linear-gradient(to right, #000 calc(100% - 2.2em), transparent 100%);
+    -webkit-mask-composite: source-over;
+    mask-composite: add;
+  }
+
+  /* Галочка подтверждения в заголовке. Размер — в долях кегля, а не в
+     пикселях: кегль названия теперь считается по его длине (30–48px), и
+     фиксированный значок в крупном заголовке выглядел мелкой пуговицей, а в
+     мелком — заплаткой. 0.72em держит одну пропорцию на всём диапазоне.
+
+     Сдвиг вниз — тот же принцип, что и у значка в каталоге: центр приходится на
+     середину строчных, то есть на базовую линию минус половина x-height. У
+     Spectral она 0.458em, значок нижним краем стоит на `vertical-align` ниже
+     базовой линии, отсюда 0.72 / 2 − 0.458 / 2 ≈ 0.13em. С прежними −0.10em
+     значок проседал на 4 пиксела: то значение подобрано под Golos в каталоге, у
+     которого строчные выше. */
+  .song-title .verified-badge {
+    vertical-align: -0.13em;
+  }
+  .song-title .verified-badge svg {
+    width: 0.72em;
+    height: 0.72em;
+  }
+
+  /* Полное название по нажатию — мелким текстом на своей подложке, в одном
+     оформлении с подсказкой у галочки. Прижата к правому краю колонки и тянется
+     влево, поверх обложки: колонка слишком узкая, чтобы вместить длинное имя. */
+  .title-pop {
+    position: absolute;
+    bottom: calc(100% + 0.4rem);
+    right: 0;
+    z-index: 60;
+    width: max-content;
+    max-width: min(19rem, 88vw);
+    padding: 0.5rem 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 28%, var(--color-line));
+    border-radius: 0.55rem;
+    background: var(--color-raised);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 400;
+    line-height: 1.35;
+    letter-spacing: 0;
+    white-space: normal;
+    box-shadow: 0 10px 26px rgb(0 0 0 / 0.5);
+  }
+
+  /* Обложка на странице песни — квадрат фиксированного размера. На узких
+     экранах шапка складывается в колонку (обложка сверху, под ней — заголовок,
+     дата, кнопки во всю ширину), поэтому здесь обложку делаем крупнее; на
+     десктопе она стоит слева в ряд с текстом (капается на 8.5rem). */
+  .cover-fill {
+    position: relative;
+    flex-shrink: 0;
+    align-self: flex-start;
+    width: clamp(7.5rem, 32vw, 8.5rem);
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.65rem;
+    background: var(--color-surface);
+  }
+  .cover-fill-img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .cover-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-faint);
+  }
+  /* Крестик удаления — по наведению. Постоянно висящий «×» у каждой заметки
+     давал ряд одинаковых значков вдоль всей песни и добавлял им веса, хотя
+     удаление — действие редкое. Прячем через opacity, а не display: элемент
+     остаётся в потоке, поэтому строка не дёргается при наведении. */
+  .cs-note-del {
+    flex-shrink: 0;
+    color: var(--color-faint);
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    /* Невидимый крестик не должен ловить случайные клики. На фокус с клавиатуры
+       это не влияет — там срабатывает :focus-within ниже. */
+    pointer-events: none;
+    transition:
+      opacity 0.15s ease,
+      color 0.15s ease;
+  }
+  .cs-note:hover .cs-note-del,
+  .cs-note:focus-within .cs-note-del {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* Там, где наведения не бывает (телефон, планшет), крестик виден всегда —
+     иначе удалить заметку было бы нечем. */
+  @media (hover: none) {
+    .cs-note-del {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+  .cs-note-del:hover {
+    color: var(--color-fg);
+  }
+  .cs-note-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.2rem;
+  }
+}
+
+/* ─── Подвал ────────────────────────────────────────────────────────────────
+   Появился вместе со страницей «Правообладателям»: постоянной ссылке, видной
+   с любой страницы, до этого негде было жить. Держится приглушённым намеренно
+   — это не раздел сайта, а служебная строка, и перетягивать внимание с разбора
+   ей незачем. */
+@layer components {
+  .site-footer {
+    margin-top: 4rem;
+    border-top: 1px solid var(--color-line);
+    padding-block: 1.75rem 2.25rem;
+  }
+
+  /* Ссылки слева, кнопка Telegram справа. Когда вместе не помещаются (телефон),
+     кнопка уходит на свою строку и встаёт к левому краю — под ссылки. */
+  .site-footer-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+  }
+
+  .site-footer-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    font-size: 0.9rem;
+  }
+  .site-footer-nav a {
+    color: var(--color-muted);
+    text-underline-offset: 4px;
+  }
+  .site-footer-nav a:hover {
+    color: var(--color-fg);
+    text-decoration: underline;
+  }
+
+  /* Кнопка канала: заливка акцентным оранжевым и тёмный текст — та же краска,
+     что у .btn-primary, только мельче. Углы скруглены умеренно (0.55rem, как у
+     соседних панелей), а не «таблеткой». На телефоне чуть выше: пальцем в 36px
+     попадать хуже, чем курсором. */
+  .site-footer-tg {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding-inline: 0.8rem 0.95rem;
+    border-radius: 0.55rem;
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transition:
+      filter 0.18s ease,
+      transform 0.05s ease;
+  }
+  .site-footer-tg svg {
+    flex: none;
+  }
+  .site-footer-tg:hover {
+    filter: brightness(1.07);
+  }
+  .site-footer-tg:active {
+    transform: translateY(0.5px);
+  }
+  @media (pointer: coarse) {
+    .site-footer-tg {
+      height: 2.5rem;
+    }
+  }
+
+  .site-footer-note {
+    margin-top: 1rem;
+    max-width: 46rem;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--color-faint);
+  }
+  .site-footer-note a {
+    color: var(--color-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .site-footer-note a:hover {
+    color: var(--color-fg);
+  }
+}
+
+/* ─── Текстовая страница (правообладателям) ─────────────────────────────────
+   Единственная на сайте страница со сплошным текстом. Свои правила, а не
+   готовый typography-плагин: ради одной страницы тянуть зависимость незачем,
+   а ширина строки здесь важнее — юридический текст читают вдумчиво, и
+   длинная строка на широком экране этому мешает. */
+@layer components {
+  .prose-page {
+    max-width: 44rem;
+    line-height: 1.7;
+    color: var(--color-fg);
+  }
+  .prose-page > * + * {
+    margin-top: 1rem;
+  }
+  .prose-page h2 {
+    margin-top: 2.25rem;
+    font-family: var(--font-spectral), Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 500;
+  }
+  .prose-page ol,
+  .prose-page ul {
+    padding-left: 1.35rem;
+    list-style: revert;
+  }
+  .prose-page li + li {
+    margin-top: 0.55rem;
+  }
+  .prose-page b {
+    font-weight: 500;
+    color: var(--color-fg);
+  }
+
+  /* Адрес для обращений — единственное, ради чего страницу открывают.
+     Поэтому он крупнее текста и выделен, а не спрятан в абзаце. */
+  .contact-mail {
+    display: inline-block;
+    border: 1px solid var(--color-line);
+    border-radius: 0.6rem;
+    background: var(--color-raised);
+    padding: 0.6rem 1rem;
+    font-size: 1.05rem;
+    color: var(--color-accent);
+    word-break: break-all;
+  }
+  .contact-mail:hover {
+    border-color: var(--color-accent);
+  }
+
+  /* Состояние «переменная не задана» — видно только владельцу сайта до
+     настройки (см. lib/contact.ts). */
+  .notice-warn {
+    border: 1px solid rgb(245 158 11 / 0.25);
+    border-radius: 0.6rem;
+    background: rgb(245 158 11 / 0.1);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    color: #fcd34d;
+  }
+}
+
+/* Строка о правах внизу страницы разбора. Приглушена намеренно: она обязана
+   быть, но соперничать с текстом песни ей нечем и незачем. */
+@layer components {
+  .song-copyright {
+    margin-top: 2.5rem;
+    border-top: 1px solid var(--color-line);
+    padding-top: 1rem;
+    max-width: 46rem;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--color-faint);
+  }
+  .song-copyright a {
+    color: var(--color-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .song-copyright a:hover {
+    color: var(--color-fg);
+  }
+}
+
+/* ─── Заявки на разборы ─────────────────────────────────────────────────────
+   Одна система на всю страницу, чтобы она не собиралась из кусков:
+
+     — два радиуса: --rq-radius у контейнеров (список, карточка заявки) и
+       --rq-ctl у всего, что нажимают (поле, сегменты, чипы, кнопки);
+     — одна высота строки (--rq-row) и один левый столбец (--rq-lead): в нём
+       число голосов у «Ждут разбора» и галочка у «Разобрано» — одного размера
+       и на одном месте, список не разъезжается на две сетки;
+     — один стиль подписей (.eyebrow) и один стиль заголовка (serif H1). Секции
+       «Ждут разбора» / «Уже разобрано» больше не заголовки, а вкладки;
+     — всё, что нажимают пальцем, не ниже 44px (у чипов запас даёт ::before).
+
+   Голос — «+1» справа, в зоне большого пальца, а число стоит слева как место в
+   очереди. После голоса кнопка не гаснет серым (серая читается как поломка),
+   а становится акцентным «Вы просите». */
+@layer components {
+  .rq-page {
+    max-width: 40rem;
+  }
+  .rq-head {
+    margin-bottom: 2rem;
+  }
+
+  .rq {
+    --rq-radius: 1rem;
+    --rq-ctl: 0.8rem;
+    --rq-row: 4.5rem;
+    --rq-lead: 2.5rem;
+
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Поле ── */
+  .rq-search {
+    position: relative;
+  }
+  .rq-search-ico {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 1.05rem;
+    display: flex;
+    align-items: center;
+    color: var(--color-faint);
+    pointer-events: none;
+  }
+  .rq .rq-input {
+    height: 3.5rem;
+    padding-inline: 3rem 3.2rem;
+    border-radius: var(--rq-ctl);
+    background: var(--color-surface);
+  }
+  .rq .rq-input--plain {
+    height: 3.1rem;
+    padding-inline: 1rem;
+  }
+  .rq .rq-input::-webkit-search-cancel-button {
+    display: none;
+  }
+  .rq-clear {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0.3rem;
+    margin-block: auto;
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: var(--rq-ctl);
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+  .rq-clear:hover {
+    color: var(--color-fg);
+  }
+
+  /* ── Группа: подпись + список ── */
+  .rq-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+  .rq-caption {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-muted);
+  }
+
+  /* ── Вкладки и фильтр ── */
+  .rq-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.9rem;
+  }
+  .rq .seg {
+    border-radius: var(--rq-ctl);
+  }
+  .rq .seg-item {
+    min-height: 2.75rem;
+    gap: 0.5rem;
+    border-radius: calc(var(--rq-ctl) - 0.2rem);
+    font-size: 0.95rem;
+  }
+  .rq-toolbar .seg {
+    flex: 1 1 18rem;
+    max-width: 26rem;
+  }
+  .rq-tab-n {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.6;
+  }
+  .rq-chips {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .rq-chip {
+    position: relative;
+    height: 2.4rem;
+    padding-inline: 0.95rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--rq-ctl);
+    font-size: 0.875rem;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  /* Невидимый запас: рамка в 38px, а попасть можно в 44. */
+  .rq-chip::before {
+    content: '';
+    position: absolute;
+    inset: -0.2rem -0.1rem;
+  }
+  .rq-chip:hover {
+    color: var(--color-fg);
+  }
+  .rq-chip--on {
+    color: var(--color-accent);
+    border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+  }
+
+  /* ── Список ── */
+  .rq-list {
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: var(--rq-radius);
+    background: color-mix(in oklab, var(--color-surface) 65%, transparent);
+  }
+  .rq-item + .rq-item {
+    border-top: 1px solid var(--color-line);
+  }
+  .rq-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    min-height: var(--rq-row);
+    padding: 0.8rem 0.9rem;
+    text-align: left;
+    color: inherit;
+  }
+  .rq-row--link,
+  button.rq-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .rq-row--link:hover,
+  button.rq-row:hover {
+    background: color-mix(in oklab, var(--color-fg) 3.5%, transparent);
+  }
+
+  /* Левый столбец: число голосов / галочка / плюс — один размер и форма. */
+  .rq-lead {
+    display: grid;
+    flex: 0 0 var(--rq-lead);
+    place-items: center;
+    width: var(--rq-lead);
+    height: var(--rq-lead);
+    border-radius: calc(var(--rq-ctl) - 0.1rem);
+    background: var(--color-raised);
+    color: var(--color-fg);
+  }
+  .rq-lead--num {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 500;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .rq-lead--mine,
+  .rq-lead--done,
+  .rq-lead--add {
+    background: color-mix(in oklab, var(--color-accent) 13%, transparent);
+    color: var(--color-accent);
+  }
+
+  .rq-main {
+    display: block;
+    min-width: 0;
+    flex: 1;
+  }
+  .rq-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+  /* Переносится, а не обрезается: в подписи стоит инструмент, и терять его
+     многоточием рядом с широкой кнопкой «Вы просите» нельзя. */
+  .rq-meta {
+    display: -webkit-box;
+    margin-top: 0.15rem;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.85rem;
+    line-height: 1.35;
+    color: var(--color-muted);
+  }
+
+  /* ── Голос ── */
+  .rq-vote {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-width: 3.75rem;
+    height: 2.75rem;
+    padding-inline: 1rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+    border-radius: var(--rq-ctl);
+    color: var(--color-accent);
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      transform 0.1s ease;
+  }
+  .rq-vote:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  }
+  .rq-vote:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .rq-vote.rq-vote--on {
+    border-color: transparent;
+    background: color-mix(in oklab, var(--color-accent) 13%, transparent);
+    cursor: default;
+  }
+  .rq-vote:disabled {
+    /* Состояние передаётся цветом выше; браузерное осветление не нужно. */
+    opacity: 1;
+  }
+  .rq-vote[aria-busy='true'] {
+    opacity: 0.6;
+  }
+
+  /* ── Готовое ── */
+  .rq-open {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 0.15rem;
+    font-size: 0.875rem;
+    color: var(--color-accent);
+  }
+  /* На узком экране слово уступает место названию: стрелка и так говорит, что
+     строка — ссылка. */
+  .rq-open-text {
+    display: none;
+  }
+  @media (min-width: 30rem) {
+    .rq-open-text {
+      display: inline;
+    }
+  }
+  .rq-chev {
+    flex: none;
+    color: var(--color-faint);
+  }
+  .rq-open .rq-chev {
+    color: inherit;
+  }
+
+  /* ── «Запросить …» ── */
+  .rq-cta {
+    border: 1px solid color-mix(in oklab, var(--color-accent) 30%, var(--color-line));
+    border-radius: var(--rq-radius);
+    background: color-mix(in oklab, var(--color-accent) 5%, transparent);
+  }
+  .rq-cta--lead {
+    border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 9%, transparent);
+  }
+  .rq-cta .rq-title {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Второй шаг ── */
+  .rq-compose {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    padding: 1.1rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+    border-radius: var(--rq-radius);
+    background: color-mix(in oklab, var(--color-accent) 5%, transparent);
+  }
+  .rq-compose-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .rq-compose-title {
+    margin-top: 0.3rem;
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .rq-link {
+    flex: none;
+    min-height: 2.75rem;
+    margin: -0.55rem -0.5rem 0 0;
+    padding-inline: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+  .rq-link:hover {
+    color: var(--color-fg);
+  }
+  .rq-label {
+    display: block;
+    margin-bottom: 0.45rem;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+  }
+  .rq-submit {
+    width: 100%;
+    height: 3.1rem;
+    border-radius: var(--rq-ctl);
+    font-size: 1rem;
+  }
+
+  /* ── Сообщения ── */
+  .rq-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.925rem;
+    line-height: 1.45;
+    color: var(--color-accent);
+  }
+  .rq-note svg {
+    flex: none;
+    margin-top: 0.15rem;
+  }
+  .rq-note--muted {
+    color: var(--color-muted);
+  }
+  .rq-error {
+    border: 1px solid rgb(239 68 68 / 0.25);
+    border-radius: var(--rq-ctl);
+    background: rgb(239 68 68 / 0.1);
+    padding: 0.6rem 0.8rem;
+    font-size: 0.875rem;
+    color: #fca5a5;
+  }
+  .rq-error--inline {
+    margin-top: 0.4rem;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  .rq-empty {
+    padding: 2.5rem 1.25rem;
+    border: 1px dashed var(--color-line);
+    border-radius: var(--rq-radius);
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--color-muted);
+  }
+
+  /* ── Удаление (администратор) ──
+     Отдельной строкой под подписью, а не значком справа: справа на телефоне
+     не остаётся места названию. */
+  .rq-del {
+    display: inline-flex;
+    align-items: center;
+    height: 2.25rem;
+    margin: 0.1rem 0 -0.5rem -0.5rem;
+    padding-inline: 0.5rem;
+    border-radius: calc(var(--rq-ctl) - 0.3rem);
+    color: var(--color-faint);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .rq-del:hover {
+    color: var(--color-danger);
+  }
+  .rq-del--armed {
+    color: var(--color-danger);
+    background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+  }
+
+  /* Действия администратора под подписью: «Привязать» и «Удалить» в один ряд.
+     Отрицательный отступ тот же, что был у одиночной кнопки удаления. */
+  .rq-admin {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 0.35rem;
+    margin: 0.1rem 0 -0.5rem -0.5rem;
+  }
+  .rq-admin .rq-del {
+    margin: 0;
+  }
+  .rq-del.rq-del--link:hover {
+    color: var(--color-accent);
+  }
+  /* Во вкладке «Разобрано» ряд лежит под строкой-ссылкой: выравниваем по тексту
+     (отступ строки + левый столбец + зазор, минус внутренний отступ кнопки). */
+  .rq-admin--done {
+    margin: 0;
+    padding: 0 0.9rem 0.45rem 3.75rem;
+  }
+  .rq-admin-note {
+    font-size: 0.8rem;
+    color: var(--color-faint);
+  }
+
+  /* ── Ручная привязка (администратор) ── */
+  .rq-link-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    border-top: 1px solid var(--color-line);
+    background: color-mix(in oklab, var(--color-accent) 5%, transparent);
+  }
+  .rq-link--start {
+    align-self: flex-start;
+    margin: -0.2rem 0 0 -0.5rem;
+  }
+  .rq-pick-list {
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: var(--rq-ctl);
+    background: var(--color-surface);
+  }
+  .rq-pick {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+  }
+  .rq-pick + .rq-pick {
+    border-top: 1px solid var(--color-line);
+  }
+  .rq-pick-btn {
+    flex: none;
+    height: 2.75rem;
+    padding-inline: 1rem;
+    border-radius: var(--rq-ctl);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 29.99rem) {
+    .rq-row {
+      gap: 0.7rem;
+      padding-inline: 0.75rem;
+    }
+    .rq-admin--done {
+      padding-inline: 3.45rem 0.75rem;
+    }
+  }
+}
+
+/* Английский блок на странице для правообладателей.
+   Отделён чертой и приглушён: это не второй по важности раздел, а тот же текст
+   для тех, кто не читает по-русски. Свой `> * + *` обязателен — правило
+   `.prose-page > * + *` действует только на ПРЯМЫХ детей, и внутри секции
+   абзацы остались бы без отступов. */
+@layer components {
+  .prose-page-alt {
+    margin-top: 3rem;
+    border-top: 1px solid var(--color-line);
+    padding-top: 1.75rem;
+  }
+  .prose-page-alt > * + * {
+    margin-top: 1rem;
+  }
+  .prose-page-alt h2 {
+    margin-top: 0;
+  }
+}
+
+/* ─── Аппликатуры на телефоне ───────────────────────────────────────────────
+   Чуть мельче и по центру. Масштаб задаётся множителем `--chord-scale`, а не
+   пиксельным размером: ширина диаграммы зависит от числа струн (у укулеле она
+   уже гитарной), и любое жёсткое значение сломало бы эту пропорцию. Множитель
+   читают и сама диаграмма, и карточка-заглушка «формы нет» — см.
+   components/ChordDiagram.tsx. */
+@media (max-width: 639.98px) {
+  .chord-bar {
+    --chord-scale: 0.92;
+  }
+  /* Сетка, а не центрированная строка флекса. Центрирование строк ровняло
+     каждый ряд по своей середине: четвёртый аккорд, оставшийся на втором ряду
+     один, вставал посередине под промежутком между первым и вторым — ряды
+     читались как несвязанные. Теперь карточки идут слева направо по колонкам
+     фиксированной ширины, а по центру контейнера встаёт сама сетка: ряд из трёх
+     оказывается посередине, а четвёртый начинается ровно под первым.
+
+     `auto-fit`, а не `auto-fill`: пустые колонки схлопываются, поэтому один-два
+     аккорда тоже стоят по центру, а не жмутся влево от пустого места.
+
+     Ширину колонки задаёт рендер (--chord-card-w): она зависит от числа струн,
+     у укулеле диаграмма уже гитарной. Множитель --chord-scale тот же, что у
+     самих диаграмм.
+
+     Всё это ТОЛЬКО для открепленной панели: у закреплённой строка не
+     переносится, а прокручивается по горизонтали. */
+  .chord-bar:not(.chord-bar--pinned) .chord-bar-strip {
+    display: grid;
+    grid-template-columns: repeat(
+      auto-fit,
+      calc(var(--chord-card-w, 6rem) * var(--chord-scale, 1))
+    );
+    justify-content: center;
+  }
+}
+
+/* ─── Каподастр ─────────────────────────────────────────────────────────────
+   Плашка над текстом разбора. Раньше капо стояло строчкой в ряду «92 bpm ·
+   добавлено 4 августа» и читалось как справочная мелочь — хотя это
+   единственное, что нужно сделать с гитарой ДО того, как начать играть.
+
+   В печати не скрывается (и это не забытый `print-hide`): на распечатанном
+   листе капо нужно ровно так же. Фон и акцент там заменяются на контурный
+   вид — браузеры по умолчанию не печатают заливку, и цветной текст на белом
+   вышел бы бледнее основного. */
+@layer components {
+  .song-capo {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-bottom: 1.5rem;
+    padding: 0.7rem 1rem;
+    border-radius: 0.7rem;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 35%, var(--color-line));
+    background: color-mix(in oklab, var(--color-accent) 9%, transparent);
+  }
+  .song-capo-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--color-accent);
+  }
+  .song-capo-text {
+    color: var(--color-fg);
+  }
+  .song-capo-text b {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-accent);
+  }
+
+  /* Компактный чип в строке списка: иконка и число, без слов — места на них
+     в строке каталога нет, а всплывающая подсказка объясняет. */
+  .chip-sm--capo {
+    gap: 0.25rem;
+    border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+  }
+}
+
+@media print {
+  .song-capo {
+    border-color: #999;
+    background: none;
+  }
+  .song-capo-icon,
+  .song-capo-text b {
+    color: #000;
+  }
+}

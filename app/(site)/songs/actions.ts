@@ -1,0 +1,148 @@
+'use server';
+
+import { redirect } from 'next/navigation';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { SONGS_TAG, songTag } from '@/lib/cache';
+import { requireUser } from '@/lib/session';
+import { createSong, deleteSong, updateSong, type SongInput, type SongVisibility } from '@/lib/songs';
+import { parseInstrumentId } from '@/lib/chords/instruments';
+import { parseCoverField } from '@/lib/imageInput';
+import { checkSongFields, parseBoundedField } from '@/lib/songLimits';
+import { songPath } from '@/lib/slug';
+
+export interface SongFormState {
+  error?: string;
+}
+
+const VISIBILITIES: SongVisibility[] = ['private', 'unlisted', 'public'];
+
+function parseForm(formData: FormData): SongInput | { error: string } {
+  const str = (name: string) => String(formData.get(name) ?? '');
+
+  // Длину проверяем ДО всего остального и по сырым значениям.
+  //
+  // Обязательно на сервере: `maxLength` в редакторе — подсказка человеку, а
+  // форма уходит в серверный экшен, куда можно постучаться и мимо браузера.
+  // До этой проверки `body` не был ограничен ничем, а его тащит из базы каждая
+  // строка каталога (ради чипов аккордов) и по нему строится триграммный
+  // индекс поиска — см. lib/songLimits.ts.
+  const fields = {
+    title: str('title'),
+    artist: str('artist'),
+    key: str('key'),
+    note: str('note'),
+    body: str('body'),
+    chordDefs: str('chordDefs'),
+  };
+  const tooLong = checkSongFields(fields);
+  if (tooLong) return { error: tooLong };
+
+  const title = fields.title.trim();
+  if (!title) return { error: 'Введите название' };
+
+  const v = str('visibility') || 'private';
+  const visibility = (VISIBILITIES as string[]).includes(v) ? (v as SongVisibility) : 'private';
+
+  // Темп и капо: целые в разумных границах. Границы те же, что у полей формы,
+  // поэтому расхождения быть не может.
+  //
+  // Вне границ — ОТКАЗ с объяснением, а не «считаем, что не указано», как было.
+  // Прежнее поведение молча превращало опечатку «500» в пустой темп, а капо на
+  // пятнадцатом ладу — в ноль; человек узнавал об этом, только вернувшись в
+  // разбор. Текстовые поля здесь же отказываются обрезать молча (см.
+  // checkSongFields) — числа обязаны вести себя так же.
+  const parsedTempo = parseBoundedField(str('tempo'), 'tempo');
+  if ('error' in parsedTempo) return parsedTempo;
+  const parsedCapo = parseBoundedField(str('capo'), 'capo');
+  if ('error' in parsedCapo) return parsedCapo;
+
+  const tempo = parsedTempo.value;
+  // Ноль и «не указано» у капо неразличимы по построению (см. схему).
+  const capo = parsedCapo.value ?? 0;
+
+  // Обложка: сентинел «не трогали», пустое поле «убрать», иначе новая картинка
+  // (разбор и потолок размера — в parseCoverField). Проверка обязана быть на
+  // сервере: форма уходит в серверный экшен, и клиентское сжатие обойти ничего
+  // не стоит. Не прошедшую картинку не выбрасываем молча — иначе сохранение
+  // стёрло бы её без единого слова.
+  const cover = parseCoverField(str('coverUrl'));
+  if (cover.kind === 'invalid') {
+    return { error: 'Обложка слишком большая или в неподдерживаемом формате' };
+  }
+  const coverUrl =
+    cover.kind === 'keep' ? undefined : cover.kind === 'remove' ? null : cover.dataUrl;
+
+  return {
+    title,
+    artist: fields.artist,
+    key: fields.key,
+    tempo,
+    capo,
+    body: fields.body,
+    note: fields.note,
+    coverUrl,
+    chordDefs: fields.chordDefs || null,
+    visibility,
+    instrument: parseInstrumentId(str('instrument')),
+  };
+}
+
+export async function createSongAction(_prev: SongFormState, formData: FormData): Promise<SongFormState> {
+  const user = await requireUser();
+  const parsed = parseForm(formData);
+  if ('error' in parsed) return parsed;
+
+  const song = await createSong(user.id, parsed);
+  // Каталог, блок исполнителей и «похожие» лежат в кэше данных (см. lib/cache.ts)
+  // и без сброса показывали бы прежний список до конца срока годности. Здесь
+  // это ничего не стоит: экшен всё равно заканчивается redirect'ом.
+  revalidateTag(SONGS_TAG);
+  revalidatePath('/songs');
+  // Сразу на канонический адрес с подписью — иначе первый же переход после
+  // сохранения ловил бы 308 из layout'а просмотра.
+  redirect(songPath(song));
+}
+
+export async function updateSongAction(_prev: SongFormState, formData: FormData): Promise<SongFormState> {
+  const user = await requireUser();
+  const id = String(formData.get('id') ?? '');
+  const parsed = parseForm(formData);
+  if ('error' in parsed) return parsed;
+
+  const updated = await updateSong(id, user.id, parsed);
+  if (!updated) return { error: 'Песня не найдена или нет доступа' };
+
+  // Сброс по шаблону маршрута: подпись в адресе зависит от названия, поэтому
+  // после правки собранный адрес мог измениться, и перечислять оба варианта
+  // руками — лишний способ ошибиться.
+  const path = songPath(updated);
+  // Свой тег у разбора — чтобы правка одной песни не выбрасывала из кэша весь
+  // каталог. Но списки её тоже показывают (название, исполнитель, обложка),
+  // поэтому общий тег сбрасываем следом.
+  revalidateTag(songTag(updated.id));
+  revalidateTag(SONGS_TAG);
+  revalidatePath('/songs');
+  revalidatePath('/songs/[id]', 'page');
+  redirect(path);
+}
+
+/**
+ * Удаление разбора. Кнопка есть только у владельца на своей странице, поэтому
+ * отказ `deleteSong` — это не сценарий интерфейса, а либо гонка (разбор уже
+ * удалён), либо подмена id. Раньше результат игнорировался и экшен в любом
+ * случае уводил на /songs, то есть неудавшееся удаление выглядело удавшимся.
+ */
+export async function deleteSongAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const id = String(formData.get('id') ?? '');
+
+  const deleted = await deleteSong(id, user.id);
+  if (!deleted) throw new Error('Песня не найдена или нет доступа');
+
+  // Без сброса удалённый разбор оставался бы в каталоге и в блоке «похожие» до
+  // конца срока годности — и вёл бы на 404.
+  revalidateTag(songTag(id));
+  revalidateTag(SONGS_TAG);
+  revalidatePath('/songs');
+  redirect('/songs');
+}
